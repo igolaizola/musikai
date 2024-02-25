@@ -1,0 +1,14 @@
+builds:
+  - id: musikai
+    binary: musikai
+    main: ./cmd/musikai
+    goarch:
+      - amd64
+      - arm64
+      - arm
+archives:
+  - id: musikai
+    builds:
+      - musikai
+    format: zip
+    name_template: 'musikai_{{ .Version }}_{{- if eq .Os "darwin" }}macos{{- else }}{{ .Os }}{{ end }}_{{ .Arch }}'
