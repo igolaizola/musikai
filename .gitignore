@@ -19,3 +19,4 @@ bin
 .history
 .vscode
 *.conf
+logs/

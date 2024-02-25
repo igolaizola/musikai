@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -44,8 +43,7 @@ func newCommand() *ffcli.Command {
 		},
 		Subcommands: []*ffcli.Command{
 			newVersionCommand(),
-			newServeCommand(),
-			newRunCommand(),
+			newSongCommand(),
 		},
 	}
 }
@@ -78,12 +76,21 @@ func newVersionCommand() *ffcli.Command {
 	}
 }
 
-func newServeCommand() *ffcli.Command {
-	cmd := "serve"
+func newSongCommand() *ffcli.Command {
+	cmd := "song"
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	_ = fs.String("config", "", "config file (optional)")
 
-	port := fs.Int("port", 0, "port number")
+	cfg := &musikai.Config{}
+	fs.StringVar(&cfg.Cookie, "cookie", "", "cookie file")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy")
+	fs.DurationVar(&cfg.Wait, "wait", 0, "wait time")
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+
+	var prompt string
+	fs.StringVar(&prompt, "prompt", "", "prompt to use")
+	var output string
+	fs.StringVar(&output, "output", "", "output file")
 
 	return &ffcli.Command{
 		Name:       cmd,
@@ -91,36 +98,12 @@ func newServeCommand() *ffcli.Command {
 		Options: []ff.Option{
 			ff.WithConfigFileFlag("config"),
 			ff.WithConfigFileParser(ff.PlainParser),
-			ff.WithEnvVarPrefix("MUSIKAI"),
+			ff.WithEnvVarPrefix("musikai"),
 		},
 		ShortHelp: fmt.Sprintf("musikai %s command", cmd),
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
-			if *port == 0 {
-				return errors.New("missing port")
-			}
-			return musikai.Serve(ctx, *port)
-		},
-	}
-}
-
-func newRunCommand() *ffcli.Command {
-	cmd := "run"
-	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-	_ = fs.String("config", "", "config file (optional)")
-
-	return &ffcli.Command{
-		Name:       cmd,
-		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
-		Options: []ff.Option{
-			ff.WithConfigFileFlag("config"),
-			ff.WithConfigFileParser(ff.PlainParser),
-			ff.WithEnvVarPrefix("MUSIKAI"),
-		},
-		ShortHelp: fmt.Sprintf("musikai %s command", cmd),
-		FlagSet:   fs,
-		Exec: func(ctx context.Context, args []string) error {
-			return musikai.Run(ctx)
+			return musikai.GenerateSong(ctx, cfg, prompt, output)
 		},
 	}
 }
