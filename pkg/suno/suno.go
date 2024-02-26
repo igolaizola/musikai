@@ -9,22 +9,18 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"mime/multipart"
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/igolaizola/musikai/pkg/ratelimit"
 	"github.com/igolaizola/musikai/pkg/session"
 )
 
 // TODO: obtain this version from redirect response of https://clerk.suno.ai/npm/@clerk/clerk-js@4/dist/clerk.browser.js
-const ClerkVersion = "4.70.0"
+const clerkVersion = "4.70.0"
 
 type Client struct {
 	client          *http.Client
@@ -44,35 +40,33 @@ type Config struct {
 }
 
 type cookieStore struct {
-	dir string
+	path string
 }
 
-func (c *cookieStore) GetCookie(ctx context.Context, domain string) (string, error) {
-	path := filepath.Join(c.dir, fmt.Sprintf("%s.cookie", domain))
-	b, err := os.ReadFile(path)
+func (c *cookieStore) GetCookie(ctx context.Context) (string, error) {
+	b, err := os.ReadFile(c.path)
 	if err != nil {
 		return "", fmt.Errorf("suno: couldn't read cookie: %w", err)
 	}
 	return string(b), nil
 }
 
-func (c *cookieStore) SetCookie(ctx context.Context, domain, cookie string) error {
-	path := filepath.Join(c.dir, fmt.Sprintf("%s.cookie", domain))
-	if err := os.WriteFile(path, []byte(cookie), 0644); err != nil {
+func (c *cookieStore) SetCookie(ctx context.Context, cookie string) error {
+	if err := os.WriteFile(c.path, []byte(cookie), 0644); err != nil {
 		return fmt.Errorf("suno: couldn't write cookie: %w", err)
 	}
 	return nil
 }
 
-func NewCookieStore(dir string) CookieStore {
+func NewCookieStore(path string) CookieStore {
 	return &cookieStore{
-		dir: dir,
+		path: path,
 	}
 }
 
 type CookieStore interface {
-	GetCookie(context.Context, string) (string, error)
-	SetCookie(context.Context, string, string) error
+	GetCookie(context.Context) (string, error)
+	SetCookie(context.Context, string) error
 }
 
 func New(cfg *Config) *Client {
@@ -94,21 +88,17 @@ func New(cfg *Config) *Client {
 	}
 }
 
-var domains = []string{"app.suno.ai", "clerk.suno.ai"}
-
 func (c *Client) Start(ctx context.Context) error {
 	// Get cookie
-	for _, domain := range domains {
-		cookie, err := c.cookieStore.GetCookie(ctx, domain)
-		if err != nil {
-			return err
-		}
-		if cookie == "" {
-			return fmt.Errorf("suno: cookie is empty")
-		}
-		if err := session.SetCookies(c.client, domain, cookie, nil); err != nil {
-			return fmt.Errorf("suno: couldn't set cookie: %w", err)
-		}
+	cookie, err := c.cookieStore.GetCookie(ctx)
+	if err != nil {
+		return err
+	}
+	if cookie == "" {
+		return fmt.Errorf("suno: cookie is empty")
+	}
+	if err := session.SetCookies(c.client, "https://clerk.suno.ai", cookie, nil); err != nil {
+		return fmt.Errorf("suno: couldn't set cookie: %w", err)
 	}
 
 	// Authenticate
@@ -131,7 +121,7 @@ func (c *Client) Auth(ctx context.Context) error {
 		return nil
 	}
 
-	token, expiration, err := c.sessionToken(ctx)
+	token, expiration, err := c.sessionToken(ctx, "api")
 	if err != nil {
 		return err
 	}
@@ -142,14 +132,12 @@ func (c *Client) Auth(ctx context.Context) error {
 }
 
 func (c *Client) Stop(ctx context.Context) error {
-	for _, domain := range domains {
-		cookie, err := session.GetCookies(c.client, domain)
-		if err != nil {
-			return fmt.Errorf("suno: couldn't get cookie: %w", err)
-		}
-		if err := c.cookieStore.SetCookie(ctx, domain, cookie); err != nil {
-			return err
-		}
+	cookie, err := session.GetCookies(c.client, "https://clerk.suno.ai")
+	if err != nil {
+		return fmt.Errorf("suno: couldn't get cookie: %w", err)
+	}
+	if err := c.cookieStore.SetCookie(ctx, cookie); err != nil {
+		return err
 	}
 	return nil
 }
@@ -176,47 +164,50 @@ type InitialState struct {
 	Organization   string `json:"organization"`
 }
 
+type clerkClientResponse struct {
+	Response clientResponse `json:"response"`
+	Client   any            `json:"client"`
+}
+
+type clientResponse struct {
+	Object              string          `json:"object"`
+	ID                  string          `json:"id"`
+	Sessions            []clientSession `json:"sessions"`
+	LastActiveSessionID string          `json:"last_active_session_id"`
+	CreatedAt           int64           `json:"created_at"`
+	UpdatedAt           int64           `json:"updated_at"`
+}
+
+type clientSession struct {
+	Object       string `json:"object"`
+	ID           string `json:"id"`
+	Status       string `json:"status"`
+	ExpireAt     int64  `json:"expire_at"`
+	AbandonAt    int64  `json:"abandon_at"`
+	LastActiveAt int64  `json:"last_active_at"`
+	// TODO: not needed for now
+	// LastActiveOrganizationID *string         `json:"last_active_organization_id"`
+	// Actor                    *Actor          `json:"actor"`
+	// User                     User            `json:"user"`
+	// PublicUserData           PublicUserData  `json:"public_user_data"`
+	CreatedAt       int64 `json:"created_at"`
+	UpdatedAt       int64 `json:"updated_at"`
+	LastActiveToken struct {
+		Object string `json:"object"`
+		JWT    string `json:"jwt"`
+	} `json:"last_active_token"`
+}
+
 func (c *Client) sessionID(ctx context.Context) (string, error) {
-	b, err := c.do(ctx, "GET", "https://app.suno.ai", nil, nil)
-	if err != nil {
-		return "", fmt.Errorf("suno: couldn't get session: %w", err)
+	var resp clerkClientResponse
+	u := fmt.Sprintf("https://clerk.suno.ai/v1/client?_clerk_js_version=%s", clerkVersion)
+	if _, err := c.do(ctx, "GET", u, nil, &resp); err != nil {
+		return "", fmt.Errorf("suno: couldn't get client: %w", err)
 	}
-	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(b))
-	if err != nil {
-		return "", fmt.Errorf("suno: couldn't create document from reader: %w", err)
+	if resp.Response.LastActiveSessionID == "" {
+		return "", errors.New("suno: empty session id")
 	}
-
-	// Define regex pattern to extract initialState object
-	pattern := `"initialState":(\{.*?\}),"children"`
-	re := regexp.MustCompile(pattern)
-
-	// Search json
-	var js string
-	doc.Find("script").Each(func(i int, s *goquery.Selection) {
-		t := s.Text()
-		t = strings.ReplaceAll(t, `\"`, `"`)
-
-		// Obtain a slice of strings holding the text of the leftmost match
-		matches := re.FindStringSubmatch(t)
-		if matches == nil || len(matches) < 2 {
-			return
-		}
-
-		// First is the entire match, second is the captured group
-		js = matches[1]
-	})
-	if js == "" {
-		return "", fmt.Errorf("suno: couldn't find initial state")
-	}
-
-	var state InitialState
-	if err := json.Unmarshal([]byte(js), &state); err != nil {
-		return "", fmt.Errorf("suno: couldn't unmarshal json (%s): %w", js, err)
-	}
-	if state.SessionId == "" {
-		return "", fmt.Errorf("suno: couldn't find session id")
-	}
-	return state.SessionId, nil
+	return resp.Response.LastActiveSessionID, nil
 }
 
 type clerkTokenResponse struct {
@@ -224,8 +215,11 @@ type clerkTokenResponse struct {
 	Object string `json:"object"`
 }
 
-func (c *Client) sessionToken(ctx context.Context) (string, time.Time, error) {
-	u := fmt.Sprintf("https://clerk.suno.ai/v1/client/sessions/%s/tokens?_clerk_js_version=%s", c.session, ClerkVersion)
+func (c *Client) sessionToken(ctx context.Context, path string) (string, time.Time, error) {
+	if path != "" {
+		path = fmt.Sprintf("/%s", path)
+	}
+	u := fmt.Sprintf("https://clerk.suno.ai/v1/client/sessions/%s/tokens%s?_clerk_js_version=%s", c.session, path, clerkVersion)
 	var resp clerkTokenResponse
 	if _, err := c.do(ctx, "POST", u, nil, &resp); err != nil {
 		return "", time.Time{}, fmt.Errorf("suno: couldn't get clerk token: %w", err)
@@ -289,7 +283,7 @@ type Clip struct {
 	ID                string    `json:"id"`
 	VideoURL          string    `json:"video_url"`
 	AudioURL          string    `json:"audio_url"`
-	ImageURL          *string   `json:"image_url"`
+	ImageURL          string    `json:"image_url"`
 	MajorModelVersion string    `json:"major_model_version"`
 	ModelName         string    `json:"model_name"`
 	Metadata          Metadata  `json:"metadata"`
@@ -353,6 +347,7 @@ func (c *Client) GenerateV2(ctx context.Context, prompt string) ([]Song, error) 
 	u := fmt.Sprintf("feed/?ids=%s", strings.Join(ids, ","))
 
 	var last []byte
+	var clips []Clip
 	for {
 		select {
 		case <-ctx.Done():
@@ -363,7 +358,6 @@ func (c *Client) GenerateV2(ctx context.Context, prompt string) ([]Song, error) 
 		if err := c.Auth(ctx); err != nil {
 			return nil, err
 		}
-		var clips []Clip
 		if _, err := c.do(ctx, "GET", u, nil, &clips); err != nil {
 			return nil, fmt.Errorf("suno: couldn't get clips: %w", err)
 		}
@@ -379,12 +373,12 @@ func (c *Client) GenerateV2(ctx context.Context, prompt string) ([]Song, error) 
 		}
 	}
 	var songs []Song
-	for _, clip := range resp.Clips {
+	for _, clip := range clips {
 		songs = append(songs, Song{
 			ID:       clip.ID,
 			Title:    clip.Title,
 			AudioURL: clip.AudioURL,
-			ImageURL: *clip.ImageURL,
+			ImageURL: clip.ImageURL,
 		})
 	}
 	return songs, nil
@@ -441,20 +435,6 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 				return nil, err
 			}
 		}
-
-		// Check API error
-		var errAPI errAPI
-		if errors.As(err, &errAPI) {
-			if errAPI.code == invalidJWTCode {
-				// If the JWT is invalid we should re-authenticate
-				if err := c.Auth(ctx); err != nil {
-					return nil, err
-				}
-			}
-			// Retry on any API error
-			retry = true
-		}
-
 		if !retry {
 			return nil, err
 		}
@@ -475,37 +455,10 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 	}
 }
 
-type errorResponse struct {
-	Errors []struct {
-		Message    string `json:"message"`
-		Extensions struct {
-			Code string `json:"code"`
-		} `json:"extensions"`
-	} `json:"errors"`
-}
-
-type form struct {
-	writer *multipart.Writer
-	data   *bytes.Buffer
-}
-
 type errStatusCode int
 
 func (e errStatusCode) Error() string {
 	return fmt.Sprintf("%d", e)
-}
-
-// Known error codes
-const (
-	invalidJWTCode = "invalid-jwt"
-)
-
-type errAPI struct {
-	code string
-}
-
-func (e errAPI) Error() string {
-	return e.code
 }
 
 func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any) ([]byte, error) {
@@ -558,15 +511,6 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 		return nil, fmt.Errorf("suno: %s %s returned (%s): %w", method, u, errMessage, errStatusCode(resp.StatusCode))
 	}
 	if out != nil {
-		var errResp errorResponse
-		if err := json.Unmarshal(respBody, &errResp); err == nil && len(errResp.Errors) > 0 {
-			var msgs []string
-			for _, e := range errResp.Errors {
-				msgs = append(msgs, fmt.Sprintf("%s (%s)", e.Message, e.Extensions.Code))
-			}
-			_ = os.WriteFile(fmt.Sprintf("logs/debug_%s.json", time.Now().Format("20060102_150405")), respBody, 0644)
-			return nil, fmt.Errorf("suno: %s: %w", strings.Join(msgs, ", "), errAPI{code: errResp.Errors[0].Extensions.Code})
-		}
 		if err := json.Unmarshal(respBody, out); err != nil {
 			// Write response body to file for debugging.
 			_ = os.WriteFile(fmt.Sprintf("logs/debug_%s.json", time.Now().Format("20060102_150405")), respBody, 0644)
@@ -577,58 +521,34 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 }
 
 func (c *Client) addHeaders(req *http.Request, path string) {
+	// Custom headers for different paths
+	var token string
+	var contentType string
 	switch {
-	case strings.HasPrefix(path, "https://app.suno.ai"):
-		req.Header.Set("accept", "accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
-		req.Header.Set("accept-language", "en-US,en;q=0.9")
-		req.Header.Set("sec-ch-ua", `"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"`)
-		req.Header.Set("sec-ch-ua-mobile", "?0")
-		req.Header.Set("sec-ch-ua-platform", `"Windows"`)
-		req.Header.Set("sec-fetch-dest", "document")
-		req.Header.Set("sec-fetch-mode", "navigate")
-		req.Header.Set("sec-fetch-site", "none")
-		req.Header.Set("sec-fetch-user", "?1")
-		req.Header.Set("upgrade-insecure-requests", "1")
-		req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36`)
 	case strings.HasPrefix(path, "https://clerk.suno.ai"):
-		req.Header.Set("accept", "*/*")
-		req.Header.Set("accept-language", "en-US,en;q=0.9")
-		req.Header.Set("content-type", "application/x-www-form-urlencoded")
-		req.Header.Set("origin", "https://app.suno.ai")
-		req.Header.Set("referer", "https://app.suno.ai/")
-		req.Header.Set("sec-ch-ua", `"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"`)
-		req.Header.Set("sec-ch-ua-mobile", "?0")
-		req.Header.Set("sec-ch-ua-platform", `"Windows"`)
-		req.Header.Set("sec-fetch-dest", "empty")
-		req.Header.Set("sec-fetch-mode", "cors")
-		req.Header.Set("sec-fetch-site", "same-site")
-		req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36`)
+		contentType = "application/x-www-form-urlencoded"
 	case strings.HasPrefix(path, "feed"):
-		req.Header.Set("accept", "*/*")
-		req.Header.Set("accept-language", "en-US,en;q=0.9")
-		req.Header.Set("authorization", fmt.Sprintf("Bearer %s", c.token))
-		req.Header.Set("origin", "https://app.suno.ai")
-		req.Header.Set("referer", "https://app.suno.ai/")
-		req.Header.Set("sec-ch-ua", `"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"`)
-		req.Header.Set("sec-ch-ua-mobile", "?0")
-		req.Header.Set("sec-ch-ua-platform", `"Windows"`)
-		req.Header.Set("sec-fetch-dest", "empty")
-		req.Header.Set("sec-fetch-mode", "cors")
-		req.Header.Set("sec-fetch-site", "same-site")
-		req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36`)
+		token = c.token
 	default:
-		req.Header.Set("accept", "*/*")
-		req.Header.Set("accept-language", "en-US,en;q=0.9")
-		req.Header.Set("authorization", fmt.Sprintf("Bearer %s", c.token))
-		req.Header.Set("content-type", "text/plain;charset=UTF-8")
-		req.Header.Set("origin", "https://app.suno.ai")
-		req.Header.Set("referer", "https://app.suno.ai/")
-		req.Header.Set("sec-ch-ua", `"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"`)
-		req.Header.Set("sec-ch-ua-mobile", "?0")
-		req.Header.Set("sec-ch-ua-platform", `"Windows"`)
-		req.Header.Set("sec-fetch-dest", "empty")
-		req.Header.Set("sec-fetch-mode", "cors")
-		req.Header.Set("sec-fetch-site", "same-site")
-		req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36`)
+		token = c.token
+		contentType = "text/plain;charset=UTF-8"
 	}
+	// Set headers
+	req.Header.Set("accept", "*/*")
+	req.Header.Set("accept-language", "en-US,en;q=0.9")
+	if token != "" {
+		req.Header.Set("authorization", fmt.Sprintf("Bearer %s", token))
+	}
+	if contentType != "" {
+		req.Header.Set("content-type", contentType)
+	}
+	req.Header.Set("origin", "https://app.suno.ai")
+	req.Header.Set("referer", "https://app.suno.ai/")
+	req.Header.Set("sec-ch-ua", `"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"`)
+	req.Header.Set("sec-ch-ua-mobile", "?0")
+	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
+	req.Header.Set("sec-fetch-dest", "empty")
+	req.Header.Set("sec-fetch-mode", "cors")
+	req.Header.Set("sec-fetch-site", "same-site")
+	req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36`)
 }
