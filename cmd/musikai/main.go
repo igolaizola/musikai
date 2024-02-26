@@ -87,10 +87,13 @@ func newSongCommand() *ffcli.Command {
 	fs.DurationVar(&cfg.Wait, "wait", 0, "wait time")
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
 
-	var prompt string
-	fs.StringVar(&prompt, "prompt", "", "prompt to use")
+	var prompt, title string
+	var instrumental bool
+	fs.StringVar(&prompt, "prompt", "", "describe the style of music")
+	fs.StringVar(&title, "title", "", "title for the song")
+	fs.BoolVar(&instrumental, "instrumental", false, "instrumental song")
 	var output string
-	fs.StringVar(&output, "output", "", "output file")
+	fs.StringVar(&output, "output", "", "output file or folder")
 
 	return &ffcli.Command{
 		Name:       cmd,
@@ -103,7 +106,7 @@ func newSongCommand() *ffcli.Command {
 		ShortHelp: fmt.Sprintf("musikai %s command", cmd),
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
-			return musikai.GenerateSong(ctx, cfg, prompt, output)
+			return musikai.GenerateSong(ctx, cfg, prompt, title, instrumental, output)
 		},
 	}
 }

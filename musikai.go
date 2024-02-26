@@ -2,12 +2,14 @@ package musikai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/suno"
@@ -21,7 +23,7 @@ type Config struct {
 }
 
 // GenerateSong generates a song given a prompt.
-func GenerateSong(ctx context.Context, cfg *Config, prompt string, output string) error {
+func GenerateSong(ctx context.Context, cfg *Config, prompt, title string, instrumental bool, output string) error {
 	httpClient := &http.Client{
 		Timeout: 2 * time.Minute,
 	}
@@ -48,15 +50,28 @@ func GenerateSong(ctx context.Context, cfg *Config, prompt string, output string
 			log.Printf("couldn't stop suno client: %v\n", err)
 		}
 	}()
-	songs, err := client.GenerateV2(ctx, prompt)
+	song, err := client.Generate(ctx, prompt, title, instrumental)
 	if err != nil {
 		return fmt.Errorf("couldn't generate song: %w", err)
 	}
-	for _, song := range songs {
-		log.Println("id:", song.ID)
-		log.Println("title:", song.Title)
-		log.Println("url:", song.AudioURL)
-		log.Println("image:", song.ImageURL)
+
+	// Print song info
+	js, err := json.MarshalIndent(song, "", "  ")
+	if err != nil {
+		return fmt.Errorf("couldn't marshal song: %w", err)
+	}
+	log.Printf("song: %s\n", js)
+
+	// Download song
+	if output == "" {
+		output = fmt.Sprintf("%s.mp3", song.ID)
+	}
+	// Check if output is a folder
+	if fi, err := os.Stat(output); err == nil && fi.IsDir() {
+		output = filepath.Join(output, fmt.Sprintf("%s.mp3", song.ID))
+	}
+	if err := download(ctx, httpClient, song.Audio, output); err != nil {
+		return fmt.Errorf("couldn't download song: %w", err)
 	}
 	return nil
 }

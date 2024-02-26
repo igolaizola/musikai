@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -262,31 +263,35 @@ func toClaims(token string) (*claims, error) {
 	return &c, nil
 }
 
-type GenerateV2Request struct {
-	GPTDescriptionPrompt string `json:"gpt_description_prompt"`
-	MV                   string `json:"mv"`
-	Prompt               string `json:"prompt"`
-	MakeInstrumental     bool   `json:"make_instrumental"`
+type generateRequest struct {
+	Prompt               string   `json:"prompt"`
+	Tags                 string   `json:"tags"`
+	MV                   string   `json:"mv"`
+	Title                string   `json:"title"`
+	ContinueClipID       *string  `json:"continue_clip_id"`
+	ContinueAt           *float32 `json:"continue_at"`
+	GPTDescriptionPrompt string   `json:"gpt_description_prompt,omitempty"`
+	MakeInstrumental     bool     `json:"make_instrumental,omitempty"`
 }
 
-type GenerateV2Response struct {
+type generateResponse struct {
 	ID                string    `json:"id"`
-	Clips             []Clip    `json:"clips"`
-	Metadata          Metadata  `json:"metadata"`
+	Clips             []clip    `json:"clips"`
+	Metadata          metadata  `json:"metadata"`
 	MajorModelVersion string    `json:"major_model_version"`
 	Status            string    `json:"status"`
 	CreatedAt         time.Time `json:"created_at"`
 	BatchSize         int       `json:"batch_size"`
 }
 
-type Clip struct {
+type clip struct {
 	ID                string    `json:"id"`
 	VideoURL          string    `json:"video_url"`
 	AudioURL          string    `json:"audio_url"`
 	ImageURL          string    `json:"image_url"`
 	MajorModelVersion string    `json:"major_model_version"`
 	ModelName         string    `json:"model_name"`
-	Metadata          Metadata  `json:"metadata"`
+	Metadata          metadata  `json:"metadata"`
 	IsLiked           bool      `json:"is_liked"`
 	UserID            string    `json:"user_id"`
 	IsTrashed         bool      `json:"is_trashed"`
@@ -299,89 +304,134 @@ type Clip struct {
 	IsPublic          bool      `json:"is_public"`
 }
 
-type Metadata struct {
+type metadata struct {
 	Tags                 any     `json:"tags"`
 	Prompt               string  `json:"prompt"`
 	GPTDescriptionPrompt string  `json:"gpt_description_prompt"`
 	AudioPromptID        *string `json:"audio_prompt_id"`
-	History              any     `json:"history"`
-	ConcatHistory        any     `json:"concat_history"`
-	Type                 string  `json:"type"`
-	Duration             *int    `json:"duration"`
-	RefundCredits        *int    `json:"refund_credits"`
-	Stream               bool    `json:"stream"`
-	ErrorType            *string `json:"error_type"`
-	ErrorMessage         *string `json:"error_message"`
+	History              []struct {
+		ID         string  `json:"id"`
+		ContinueAt float32 `json:"continue_at"`
+	} `json:"history"`
+	ConcatHistory []struct {
+		ID         string  `json:"id"`
+		ContinueAt float32 `json:"continue_at"`
+	} `json:"concat_history"`
+	Type          string  `json:"type"`
+	Duration      float32 `json:"duration"`
+	RefundCredits bool    `json:"refund_credits"`
+	Stream        bool    `json:"stream"`
+	ErrorType     *string `json:"error_type"`
+	ErrorMessage  *string `json:"error_message"`
+}
+
+type concatRequest struct {
+	ClipID string `json:"clip_id"`
 }
 
 type Song struct {
-	ID       string
-	Title    string
-	AudioURL string
-	ImageURL string
+	ID           string  `json:"id"`
+	Title        string  `json:"title"`
+	Audio        string  `json:"audio"`
+	Image        string  `json:"image"`
+	Video        string  `json:"video"`
+	Duration     float32 `json:"duration"`
+	Instrumental bool    `json:"instrumental"`
 }
 
-func (c *Client) GenerateV2(ctx context.Context, prompt string) ([]Song, error) {
+func (c *Client) Generate(ctx context.Context, prompt, title string, instrumental bool) (*Song, error) {
 	if err := c.Auth(ctx); err != nil {
 		return nil, err
 	}
-	req := &GenerateV2Request{
-		GPTDescriptionPrompt: prompt,
-		MV:                   "chirp-v2-xxl-alpha",
-	}
-	var resp GenerateV2Response
-	if _, err := c.do(ctx, "POST", "generate/v2/", req, &resp); err != nil {
-		return nil, fmt.Errorf("suno: couldn't generate song: %w", err)
-	}
-	if len(resp.Clips) == 0 {
-		return nil, errors.New("suno: empty clips")
-	}
-	if resp.Metadata.ErrorType != nil {
-		return nil, fmt.Errorf("suno: couldn't generate song: (%v) %s", *resp.Metadata.ErrorType, *resp.Metadata.ErrorMessage)
-	}
+	var continueClipID *string
+	var continueAt *float32
+	var duration float32
+	var finish bool
 
-	var ids []string
-	for _, clip := range resp.Clips {
-		ids = append(ids, clip.ID)
-	}
-	u := fmt.Sprintf("feed/?ids=%s", strings.Join(ids, ","))
+	var clp clip
+	for !finish {
+		var ids []string
+		if duration < 2.5*60.0 {
+			req := &generateRequest{
+				Tags:             prompt,
+				MV:               "chirp-v3-alpha",
+				Title:            title,
+				ContinueClipID:   continueClipID,
+				ContinueAt:       continueAt,
+				MakeInstrumental: instrumental,
+			}
+			var resp generateResponse
+			if _, err := c.do(ctx, "POST", "generate/v2/", req, &resp); err != nil {
+				return nil, fmt.Errorf("suno: couldn't generate song: %w", err)
+			}
+			if len(resp.Clips) == 0 {
+				return nil, errors.New("suno: empty clips")
+			}
+			if resp.Metadata.ErrorType != nil {
+				return nil, fmt.Errorf("suno: song generation error: (%v) %s", *resp.Metadata.ErrorType, *resp.Metadata.ErrorMessage)
+			}
+			for _, clip := range resp.Clips {
+				ids = append(ids, clip.ID)
+			}
+		} else {
+			finish = true
+			req := &concatRequest{
+				ClipID: clp.ID,
+			}
+			var resp clip
+			if _, err := c.do(ctx, "POST", "generate/concat/v2/", req, &resp); err != nil {
+				return nil, fmt.Errorf("suno: couldn't concat song: %w", err)
+			}
+			if resp.Metadata.ErrorType != nil {
+				return nil, fmt.Errorf("suno: song concat error: (%v) %s", *resp.Metadata.ErrorType, *resp.Metadata.ErrorMessage)
+			}
+			ids = append(ids, resp.ID)
+		}
 
-	var last []byte
-	var clips []Clip
-	for {
-		select {
-		case <-ctx.Done():
-			log.Println("suno: context done, last response:", string(last))
-			return nil, ctx.Err()
-		case <-time.After(5 * time.Second):
-		}
-		if err := c.Auth(ctx); err != nil {
-			return nil, err
-		}
-		if _, err := c.do(ctx, "GET", u, nil, &clips); err != nil {
-			return nil, fmt.Errorf("suno: couldn't get clips: %w", err)
-		}
-		var pending bool
-		for _, clip := range clips {
-			if clip.AudioURL == "" {
-				pending = true
+		u := fmt.Sprintf("feed/?ids=%s", strings.Join(ids, ","))
+		var last []byte
+		var clips []clip
+		for {
+			select {
+			case <-ctx.Done():
+				log.Println("suno: context done, last response:", string(last))
+				return nil, ctx.Err()
+			case <-time.After(5 * time.Second):
+			}
+			if err := c.Auth(ctx); err != nil {
+				return nil, err
+			}
+			if _, err := c.do(ctx, "GET", u, nil, &clips); err != nil {
+				return nil, fmt.Errorf("suno: couldn't get clips: %w", err)
+			}
+			var pending bool
+			for _, clip := range clips {
+				if clip.Status != "complete" {
+					pending = true
+					break
+				}
+			}
+			if !pending {
 				break
 			}
 		}
-		if !pending {
-			break
-		}
-	}
-	var songs []Song
-	for _, clip := range clips {
-		songs = append(songs, Song{
-			ID:       clip.ID,
-			Title:    clip.Title,
-			AudioURL: clip.AudioURL,
-			ImageURL: clip.ImageURL,
+		sort.Slice(clips, func(i, j int) bool {
+			return clips[i].Metadata.Duration > clips[j].Metadata.Duration
 		})
+		clp = clips[0]
+		duration += clp.Metadata.Duration
+		continueClipID = &clp.ID
+		continueAt = &clp.Metadata.Duration
 	}
-	return songs, nil
+	return &Song{
+		ID:           clp.ID,
+		Title:        clp.Title,
+		Audio:        clp.AudioURL,
+		Image:        clp.ImageURL,
+		Video:        clp.VideoURL,
+		Duration:     clp.Metadata.Duration,
+		Instrumental: instrumental,
+	}, nil
 }
 
 func (c *Client) log(format string, args ...interface{}) {
