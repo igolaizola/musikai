@@ -14,10 +14,12 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/ratelimit"
 	"github.com/igolaizola/musikai/pkg/session"
+	"github.com/igolaizola/musikai/pkg/sound"
 )
 
 // TODO: obtain this version from redirect response of https://clerk.suno.ai/npm/@clerk/clerk-js@4/dist/clerk.browser.js
@@ -265,9 +267,9 @@ func toClaims(token string) (*claims, error) {
 
 type generateRequest struct {
 	Prompt               string   `json:"prompt"`
-	Tags                 string   `json:"tags"`
+	Tags                 string   `json:"tags,omitempty"`
 	MV                   string   `json:"mv"`
-	Title                string   `json:"title"`
+	Title                string   `json:"title,omitempty"`
 	ContinueClipID       *string  `json:"continue_clip_id"`
 	ContinueAt           *float32 `json:"continue_at"`
 	GPTDescriptionPrompt string   `json:"gpt_description_prompt,omitempty"`
@@ -305,7 +307,7 @@ type clip struct {
 }
 
 type metadata struct {
-	Tags                 any     `json:"tags"`
+	Tags                 string  `json:"tags"`
 	Prompt               string  `json:"prompt"`
 	GPTDescriptionPrompt string  `json:"gpt_description_prompt"`
 	AudioPromptID        *string `json:"audio_prompt_id"`
@@ -339,99 +341,250 @@ type Song struct {
 	Instrumental bool    `json:"instrumental"`
 }
 
-func (c *Client) Generate(ctx context.Context, prompt, title string, instrumental bool) (*Song, error) {
+func (c *Client) Generate(ctx context.Context, prompt, title string, instrumental bool) ([]Song, error) {
 	if err := c.Auth(ctx); err != nil {
 		return nil, err
 	}
-	var continueClipID *string
-	var continueAt *float32
-	var duration float32
-	var finish bool
 
-	var clp clip
-	for !finish {
-		var ids []string
-		if duration < 2.5*60.0 {
-			req := &generateRequest{
-				Tags:             prompt,
-				MV:               "chirp-v3-alpha",
-				Title:            title,
-				ContinueClipID:   continueClipID,
-				ContinueAt:       continueAt,
-				MakeInstrumental: instrumental,
+	// Generate first fragments
+	req := &generateRequest{
+		GPTDescriptionPrompt: prompt,
+		MV:                   "chirp-v3-alpha",
+		Title:                title,
+		MakeInstrumental:     instrumental,
+	}
+	var resp generateResponse
+	if _, err := c.do(ctx, "POST", "generate/v2/", req, &resp); err != nil {
+		return nil, fmt.Errorf("suno: couldn't generate song: %w", err)
+	}
+	if len(resp.Clips) == 0 {
+		return nil, errors.New("suno: empty clips")
+	}
+	if resp.Metadata.ErrorType != nil {
+		return nil, fmt.Errorf("suno: song generation error: (%v) %s", *resp.Metadata.ErrorType, *resp.Metadata.ErrorMessage)
+	}
+	var ids []string
+	for _, clip := range resp.Clips {
+		ids = append(ids, clip.ID)
+	}
+	fragments, err := c.waitClips(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extend fragments
+	var songs []Song
+	var wg sync.WaitGroup
+	var lck sync.Mutex
+	for _, fragment := range fragments {
+		wg.Add(1)
+		f := &fragment
+		go func() {
+			defer wg.Done()
+			clp, err := c.extend(ctx, f, instrumental)
+			if err != nil {
+				log.Printf("❌ %v\n", err)
+				return
 			}
-			var resp generateResponse
-			if _, err := c.do(ctx, "POST", "generate/v2/", req, &resp); err != nil {
-				return nil, fmt.Errorf("suno: couldn't generate song: %w", err)
+			lck.Lock()
+			defer lck.Unlock()
+			songs = append(songs, Song{
+				ID:           clp.ID,
+				Title:        clp.Title,
+				Audio:        clp.AudioURL,
+				Image:        clp.ImageURL,
+				Video:        clp.VideoURL,
+				Duration:     clp.Metadata.Duration,
+				Instrumental: instrumental,
+			})
+		}()
+	}
+
+	// Wait for all fragments to be extended
+	wg.Wait()
+	if len(songs) == 0 {
+		return nil, errors.New("suno: no songs generated")
+	}
+	return songs, nil
+}
+
+const (
+	minDuration = 2.0*60.0 + 25.0
+	maxDuration = 3.0*60.0 + 55.0
+)
+
+func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*clip, error) {
+	// Initialize variables
+	clips := []clip{*clp}
+	originalTags := clp.Metadata.Tags
+	var duration float32
+	var extensions int
+
+	for {
+		// Choose the best clip
+		fadeOut := func(c clip) (bool, error) {
+			if c.Metadata.Duration < 59.0 {
+				return true, nil
 			}
-			if len(resp.Clips) == 0 {
-				return nil, errors.New("suno: empty clips")
-			}
-			if resp.Metadata.ErrorType != nil {
-				return nil, fmt.Errorf("suno: song generation error: (%v) %s", *resp.Metadata.ErrorType, *resp.Metadata.ErrorMessage)
-			}
-			for _, clip := range resp.Clips {
-				ids = append(ids, clip.ID)
-			}
-		} else {
-			finish = true
-			req := &concatRequest{
-				ClipID: clp.ID,
-			}
-			var resp clip
-			if _, err := c.do(ctx, "POST", "generate/concat/v2/", req, &resp); err != nil {
-				return nil, fmt.Errorf("suno: couldn't concat song: %w", err)
-			}
-			if resp.Metadata.ErrorType != nil {
-				return nil, fmt.Errorf("suno: song concat error: (%v) %s", *resp.Metadata.ErrorType, *resp.Metadata.ErrorMessage)
-			}
-			ids = append(ids, resp.ID)
+			return sound.FadeOut(c.AudioURL)
+		}
+		best, fadesOut, err := bestClip(clips, duration, fadeOut)
+		if err != nil {
+			return nil, err
+		}
+		clp = best
+		duration += clp.Metadata.Duration
+
+		// If the clip fades out and the duration is over the min duration, break
+		if fadesOut && duration > minDuration {
+			break
+		}
+		// If the duration is over the max duration, break
+		if duration > maxDuration {
+			log.Println("⚠️ exceeded max duration")
+			break
 		}
 
-		u := fmt.Sprintf("feed/?ids=%s", strings.Join(ids, ","))
-		var last []byte
-		var clips []clip
-		for {
-			select {
-			case <-ctx.Done():
-				log.Println("suno: context done, last response:", string(last))
-				return nil, ctx.Err()
-			case <-time.After(5 * time.Second):
+		// If the duration is over the min duration, log
+		if duration > minDuration && extensions > 0 {
+			for _, c := range clips {
+				log.Printf("⚠️ didn't fade out %s\n", c.AudioURL)
 			}
-			if err := c.Auth(ctx); err != nil {
-				return nil, err
-			}
-			if _, err := c.do(ctx, "GET", u, nil, &clips); err != nil {
-				return nil, fmt.Errorf("suno: couldn't get clips: %w", err)
-			}
-			var pending bool
-			for _, clip := range clips {
-				if clip.Status != "complete" {
-					pending = true
-					break
-				}
-			}
-			if !pending {
+		}
+
+		// Generate next fragment
+		extensions++
+
+		// If the duration is over the max duration, add prompt to make it end
+		var prompt string
+		tags := originalTags
+		if duration+30.0 > minDuration {
+			prompt = "[Fade Out]\n[End]"
+			tags += ", fade out and end"
+		}
+		req := &generateRequest{
+			Prompt:         prompt,
+			Tags:           tags,
+			MV:             "chirp-v3-alpha",
+			Title:          clp.Title,
+			ContinueClipID: &clp.ID,
+			ContinueAt:     &clp.Metadata.Duration,
+			// TODO: check if we need to set this on extensions
+			// MakeInstrumental: instrumental,
+		}
+		var resp generateResponse
+		if _, err := c.do(ctx, "POST", "generate/v2/", req, &resp); err != nil {
+			return nil, fmt.Errorf("suno: couldn't generate song: %w", err)
+		}
+		if len(resp.Clips) == 0 {
+			return nil, errors.New("suno: empty clips")
+		}
+		if resp.Metadata.ErrorType != nil {
+			return nil, fmt.Errorf("suno: song generation error: (%v) %s", *resp.Metadata.ErrorType, *resp.Metadata.ErrorMessage)
+		}
+		var ids []string
+		for _, c := range resp.Clips {
+			ids = append(ids, c.ID)
+		}
+		candidates, err := c.waitClips(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		clips = candidates
+	}
+
+	// If there are no extensions, return the original clip
+	if extensions == 0 {
+		return clp, nil
+	}
+
+	// Concatenate clips
+	req := &concatRequest{
+		ClipID: clp.ID,
+	}
+	var resp clip
+	if _, err := c.do(ctx, "POST", "generate/concat/v2/", req, &resp); err != nil {
+		return nil, fmt.Errorf("suno: couldn't concat song: %w", err)
+	}
+	if resp.Metadata.ErrorType != nil {
+		return nil, fmt.Errorf("suno: song concat error: (%v) %s", *resp.Metadata.ErrorType, *resp.Metadata.ErrorMessage)
+	}
+	clips, err := c.waitClips(ctx, []string{resp.ID})
+	if err != nil {
+		return nil, err
+	}
+	return &clips[0], nil
+}
+
+func bestClip(clips []clip, duration float32, fadeOut func(clip) (bool, error)) (*clip, bool, error) {
+	// Check if the clip fades out
+	var infos []clipInfo
+	for _, c := range clips {
+		fout, err := fadeOut(c)
+		if err != nil {
+			return nil, false, fmt.Errorf("suno: couldn't check song fade out: %w", err)
+		}
+		d := duration + c.Metadata.Duration
+		infos = append(infos, clipInfo{
+			fadesOut: fout,
+			timeOK:   d >= minDuration,
+			clip:     &c,
+		})
+	}
+
+	// Choose the best clip
+	sort.Slice(infos, func(i, j int) bool {
+		switch {
+		// If both fade out, choose the one with the longest duration
+		case infos[i].fadesOut == infos[j].fadesOut:
+		// If both over the min duration, choose the one that doesn't fade out
+		case infos[i].timeOK == infos[j].timeOK && infos[i].timeOK:
+			return !infos[i].fadesOut
+		// If both under the min duration, choose the one that doesn't fade out
+		case infos[i].timeOK == infos[j].timeOK && !infos[i].timeOK:
+			return infos[i].fadesOut
+		}
+		return clips[i].Metadata.Duration > clips[j].Metadata.Duration
+	})
+	best := infos[0]
+	return best.clip, best.fadesOut, nil
+}
+
+type clipInfo struct {
+	fadesOut bool
+	timeOK   bool
+	clip     *clip
+}
+
+func (c *Client) waitClips(ctx context.Context, ids []string) ([]clip, error) {
+	u := fmt.Sprintf("feed/?ids=%s", strings.Join(ids, ","))
+	var last []byte
+	var clips []clip
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("suno: context done, last response:", string(last))
+			return nil, ctx.Err()
+		case <-time.After(5 * time.Second):
+		}
+		if err := c.Auth(ctx); err != nil {
+			return nil, err
+		}
+		if _, err := c.do(ctx, "GET", u, nil, &clips); err != nil {
+			return nil, fmt.Errorf("suno: couldn't get clips: %w", err)
+		}
+		var pending bool
+		for _, clip := range clips {
+			if clip.Status != "complete" {
+				pending = true
 				break
 			}
 		}
-		sort.Slice(clips, func(i, j int) bool {
-			return clips[i].Metadata.Duration > clips[j].Metadata.Duration
-		})
-		clp = clips[0]
-		duration += clp.Metadata.Duration
-		continueClipID = &clp.ID
-		continueAt = &clp.Metadata.Duration
+		if !pending {
+			break
+		}
 	}
-	return &Song{
-		ID:           clp.ID,
-		Title:        clp.Title,
-		Audio:        clp.AudioURL,
-		Image:        clp.ImageURL,
-		Video:        clp.VideoURL,
-		Duration:     clp.Metadata.Duration,
-		Instrumental: instrumental,
-	}, nil
+	return clips, nil
 }
 
 func (c *Client) log(format string, args ...interface{}) {
@@ -473,13 +626,21 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 
 		// Check if we should retry after waiting
 		var retry bool
+		var wait bool
 
 		// Check status code
 		var errStatus errStatusCode
 		if errors.As(err, &errStatus) {
 			switch int(errStatus) {
-			case http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusTooManyRequests:
+			case http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusTooManyRequests, 520:
 				// Retry on these status codes
+				retry = true
+				wait = true
+			case http.StatusUnauthorized:
+				// Retry on unauthorized
+				if err := c.Auth(ctx); err != nil {
+					return nil, err
+				}
 				retry = true
 			default:
 				return nil, err
@@ -490,17 +651,19 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 		}
 
 		// Wait before retrying
-		idx := attempts - 1
-		if idx >= len(backoff) {
-			idx = len(backoff) - 1
-		}
-		wait := backoff[idx]
-		c.log("server seems to be down, waiting %s before retrying\n", wait)
-		t := time.NewTimer(wait)
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-t.C:
+		if wait {
+			idx := attempts - 1
+			if idx >= len(backoff) {
+				idx = len(backoff) - 1
+			}
+			waitTime := backoff[idx]
+			c.log("server seems to be down, waiting %s before retrying\n", wait)
+			t := time.NewTimer(waitTime)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-t.C:
+			}
 		}
 	}
 }

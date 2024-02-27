@@ -8,7 +8,9 @@ func TestFadeOut(t *testing.T) {
 		want bool
 	}{
 		{"data/not-finish.mp3", false},
+		{"data/almost-finish.mp3", false},
 		{"data/finish.mp3", true},
+		{"data/finish-2.mp3", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.file, func(t *testing.T) {

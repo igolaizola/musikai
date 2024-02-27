@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/igolaizola/musikai"
 	"github.com/peterbourgon/ff/v3"
@@ -84,7 +85,7 @@ func newSongCommand() *ffcli.Command {
 	cfg := &musikai.Config{}
 	fs.StringVar(&cfg.Cookie, "cookie", "", "cookie file")
 	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy")
-	fs.DurationVar(&cfg.Wait, "wait", 0, "wait time")
+	fs.DurationVar(&cfg.Wait, "wait", 4*time.Second, "wait time")
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
 
 	var prompt, title string

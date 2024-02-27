@@ -24,6 +24,11 @@ type Config struct {
 
 // GenerateSong generates a song given a prompt.
 func GenerateSong(ctx context.Context, cfg *Config, prompt, title string, instrumental bool, output string) error {
+	log.Println("generating songs...")
+	start := time.Now()
+	defer func() {
+		log.Printf("elapsed time: %v\n", time.Since(start))
+	}()
 	httpClient := &http.Client{
 		Timeout: 2 * time.Minute,
 	}
@@ -50,28 +55,24 @@ func GenerateSong(ctx context.Context, cfg *Config, prompt, title string, instru
 			log.Printf("couldn't stop suno client: %v\n", err)
 		}
 	}()
-	song, err := client.Generate(ctx, prompt, title, instrumental)
+	songs, err := client.Generate(ctx, prompt, title, instrumental)
 	if err != nil {
 		return fmt.Errorf("couldn't generate song: %w", err)
 	}
 
 	// Print song info
-	js, err := json.MarshalIndent(song, "", "  ")
+	js, err := json.MarshalIndent(songs, "", "  ")
 	if err != nil {
 		return fmt.Errorf("couldn't marshal song: %w", err)
 	}
 	log.Printf("song: %s\n", js)
 
-	// Download song
-	if output == "" {
-		output = fmt.Sprintf("%s.mp3", song.ID)
-	}
-	// Check if output is a folder
-	if fi, err := os.Stat(output); err == nil && fi.IsDir() {
-		output = filepath.Join(output, fmt.Sprintf("%s.mp3", song.ID))
-	}
-	if err := download(ctx, httpClient, song.Audio, output); err != nil {
-		return fmt.Errorf("couldn't download song: %w", err)
+	// Download songs
+	for _, song := range songs {
+		path := filepath.Join(output, fmt.Sprintf("%s.mp3", song.ID))
+		if err := download(ctx, httpClient, song.Audio, path); err != nil {
+			return fmt.Errorf("couldn't download song: %w", err)
+		}
 	}
 	return nil
 }

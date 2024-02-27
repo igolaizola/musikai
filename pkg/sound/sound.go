@@ -23,7 +23,6 @@ func calculateRMS(samples []float64) float64 {
 }
 
 func FadeOut(f string) (bool, error) {
-	fmt.Println(f)
 	var reader io.ReadCloser
 	if strings.HasPrefix(f, "http") {
 		// Download MP3 file
@@ -108,7 +107,9 @@ func detectFadeOut(samples []float64) bool {
 	// Check for a consistent decrease in RMS values
 	var count int
 	for i := 1; i < len(rmsValues); i++ {
-		if rmsValues[i] > rmsValues[i-1] {
+		// Calculate the increment
+		inc := rmsValues[i] - rmsValues[i-1]
+		if inc < 0 && inc*-1.0 > 0.001 {
 			// If any window is louder than the previous, it's not a consistent fade out
 			count++
 		}
