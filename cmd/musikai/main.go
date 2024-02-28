@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/igolaizola/musikai"
+	"github.com/igolaizola/musikai/pkg/cmd/analyze"
 	"github.com/peterbourgon/ff/v3"
 	"github.com/peterbourgon/ff/v3/ffcli"
 )
@@ -45,6 +46,7 @@ func newCommand() *ffcli.Command {
 		Subcommands: []*ffcli.Command{
 			newVersionCommand(),
 			newSongCommand(),
+			newAnalyzeCommand(),
 		},
 	}
 }
@@ -108,6 +110,31 @@ func newSongCommand() *ffcli.Command {
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
 			return musikai.GenerateSong(ctx, cfg, prompt, title, instrumental, output)
+		},
+	}
+}
+
+func newAnalyzeCommand() *ffcli.Command {
+	cmd := "analyze"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &analyze.Config{}
+	fs.StringVar(&cfg.Input, "input", "", "input file")
+	fs.StringVar(&cfg.Output, "output", "", "output folder")
+	
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ff.PlainParser),
+			ff.WithEnvVarPrefix("musikai"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s command", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return analyze.Run(ctx, cfg)
 		},
 	}
 }

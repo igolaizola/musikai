@@ -426,7 +426,12 @@ func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*cli
 			if c.Metadata.Duration < 59.0 {
 				return true, nil
 			}
-			return sound.FadeOut(c.AudioURL)
+			a, err := sound.NewAnalyzer(c.AudioURL)
+			if err != nil {
+				return false, fmt.Errorf("suno: couldn't create analyzer: %w", err)
+			}
+			d, _ := a.EndSilence()
+			return d > 500*time.Millisecond || a.HasFadeOut(), nil
 		}
 		best, fadesOut, err := bestClip(clips, duration, fadeOut)
 		if err != nil {

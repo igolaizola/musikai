@@ -1,6 +1,8 @@
 package sound
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestFadeOut(t *testing.T) {
 	tests := []struct {
@@ -15,10 +17,11 @@ func TestFadeOut(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.file, func(t *testing.T) {
-			got, err := FadeOut(tt.file)
+			a, err := NewAnalyzer(tt.file)
 			if err != nil {
-				t.Fatalf("FadeOut(%q) err = %v; want nil", tt.file, err)
+				t.Fatalf("NewAnalyzer(%q) err = %v; want nil", tt.file, err)
 			}
+			got := a.HasFadeOut()
 			if got != tt.want {
 				t.Fatalf("FadeOut(%q) = %v; want %v", tt.file, got, tt.want)
 			}
