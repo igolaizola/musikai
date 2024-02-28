@@ -1,6 +1,9 @@
 package suno
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestBestClip(t *testing.T) {
 	tests := []struct {
@@ -25,6 +28,26 @@ func TestBestClip(t *testing.T) {
 				},
 			},
 			wantID:      "2",
+			wantFadeOut: true,
+		},
+		{
+			clips: []clip{
+				{
+					ID:       "1",
+					AudioURL: "f",
+					Metadata: metadata{
+						Duration: 35.0,
+					},
+				},
+				{
+					ID:       "2",
+					AudioURL: "",
+					Metadata: metadata{
+						Duration: 30.0,
+					},
+				},
+			},
+			wantID:      "1",
 			wantFadeOut: true,
 		},
 		{
@@ -67,12 +90,12 @@ func TestBestClip(t *testing.T) {
 		},
 	}
 
-	fadeOut := func(c clip) (bool, error) {
-		return c.AudioURL == "f", nil
+	info := func(c clip) (bool, time.Duration, error) {
+		return c.AudioURL == "f", 0, nil
 	}
 	for _, tt := range tests {
 		t.Run(tt.clips[0].ID, func(t *testing.T) {
-			got, gotFadeOut, err := bestClip(tt.clips, 2.00, fadeOut)
+			got, gotFadeOut, _, err := bestClip(tt.clips, 2.00, info)
 			if err != nil {
 				t.Fatalf("bestClip() err = %v; want nil", err)
 			}

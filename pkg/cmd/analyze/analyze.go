@@ -20,8 +20,11 @@ func Run(ctx context.Context, cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	d, p := a.EndSilence()
-	fmt.Printf("Silence: duration: %s, position %s\n", d, p)
+	d, p := a.FirstSilence()
+	fmt.Printf("First silence: duration: %s, position %s\n", d, p)
+
+	d, p = a.EndSilence()
+	fmt.Printf("End silence: duration: %s, position %s\n", d, p)
 
 	name := filepath.Base(cfg.Input)
 	name = strings.TrimSuffix(name, filepath.Ext(name))

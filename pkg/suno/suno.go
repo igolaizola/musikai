@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -341,7 +342,7 @@ type Song struct {
 	Instrumental bool    `json:"instrumental"`
 }
 
-func (c *Client) Generate(ctx context.Context, prompt, title string, instrumental bool) ([]Song, error) {
+func (c *Client) Generate(ctx context.Context, prompt, style, title string, instrumental bool) ([]Song, error) {
 	if err := c.Auth(ctx); err != nil {
 		return nil, err
 	}
@@ -350,6 +351,7 @@ func (c *Client) Generate(ctx context.Context, prompt, title string, instrumenta
 	req := &generateRequest{
 		GPTDescriptionPrompt: prompt,
 		MV:                   "chirp-v3-alpha",
+		Tags:                 style,
 		Title:                title,
 		MakeInstrumental:     instrumental,
 	}
@@ -409,7 +411,7 @@ func (c *Client) Generate(ctx context.Context, prompt, title string, instrumenta
 }
 
 const (
-	minDuration = 2.0*60.0 + 25.0
+	minDuration = 2.0*60.0 + 5.0
 	maxDuration = 3.0*60.0 + 55.0
 )
 
@@ -422,39 +424,69 @@ func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*cli
 
 	for {
 		// Choose the best clip
-		fadeOut := func(c clip) (bool, error) {
-			if c.Metadata.Duration < 59.0 {
-				return true, nil
-			}
+		var best string
+		lookup := map[string]struct {
+			firstSilence time.Duration
+			clip         *clip
+		}{}
+
+		for _, c := range clips {
 			a, err := sound.NewAnalyzer(c.AudioURL)
 			if err != nil {
-				return false, fmt.Errorf("suno: couldn't create analyzer: %w", err)
+				return nil, fmt.Errorf("suno: couldn't create analyzer: %w", err)
 			}
-			d, _ := a.EndSilence()
-			return d > 500*time.Millisecond || a.HasFadeOut(), nil
+			// Add to lookup
+			_, firstPos := a.FirstSilence()
+			lookup[c.ID] = struct {
+				firstSilence time.Duration
+				clip         *clip
+			}{
+				firstSilence: firstPos,
+				clip:         &c,
+			}
+
+			// Check if the clip ends
+			if c.Metadata.Duration < 59.0 {
+				best = c.ID
+				break
+			}
+			if a.HasFadeOut() {
+				best = c.ID
+				break
+			}
+			if d, _ := a.EndSilence(); d > 500*time.Millisecond {
+				best = c.ID
+				break
+			}
 		}
-		best, fadesOut, err := bestClip(clips, duration, fadeOut)
-		if err != nil {
-			return nil, err
+
+		ends := true
+		var firstSilence time.Duration
+		if best == "" {
+			ends = false
+			// Choose random clip
+			rnd := rand.Intn(len(clips))
+			clp = &clips[rnd]
+		} else {
+			clp = lookup[best].clip
 		}
-		clp = best
+
 		duration += clp.Metadata.Duration
 
-		// If the clip fades out and the duration is over the min duration, break
-		if fadesOut && duration > minDuration {
-			break
-		}
-		// If the duration is over the max duration, break
-		if duration > maxDuration {
-			log.Println("⚠️ exceeded max duration")
-			break
-		}
-
 		// If the duration is over the min duration, log
-		if duration > minDuration && extensions > 0 {
+		if duration > minDuration && extensions > 0 && !ends {
 			for _, c := range clips {
 				log.Printf("⚠️ didn't fade out %s\n", c.AudioURL)
 			}
+		}
+		if duration > minDuration {
+			break
+		}
+
+		continueAt := clp.Metadata.Duration
+		firstSilence = lookup[clp.ID].firstSilence
+		if firstSilence > 0 {
+			continueAt = float32(firstSilence.Seconds())
 		}
 
 		// Generate next fragment
@@ -464,8 +496,8 @@ func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*cli
 		var prompt string
 		tags := originalTags
 		if duration+30.0 > minDuration {
-			prompt = "[Fade Out]"
-			tags += ", fade out and end"
+			prompt = "[refrain]"
+			tags = "end"
 		}
 		req := &generateRequest{
 			Prompt:         prompt,
@@ -473,7 +505,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*cli
 			MV:             "chirp-v3-alpha",
 			Title:          clp.Title,
 			ContinueClipID: &clp.ID,
-			ContinueAt:     &clp.Metadata.Duration,
+			ContinueAt:     &continueAt,
 			// TODO: check if we need to set this on extensions
 			// MakeInstrumental: instrumental,
 		}
@@ -521,19 +553,20 @@ func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*cli
 	return &clips[0], nil
 }
 
-func bestClip(clips []clip, duration float32, fadeOut func(clip) (bool, error)) (*clip, bool, error) {
+func bestClip(clips []clip, duration float32, info func(clip) (bool, time.Duration, error)) (*clip, bool, time.Duration, error) {
 	// Check if the clip fades out
 	var infos []clipInfo
 	for _, c := range clips {
-		fout, err := fadeOut(c)
+		fadeOut, firstSilence, err := info(c)
 		if err != nil {
-			return nil, false, fmt.Errorf("suno: couldn't check song fade out: %w", err)
+			return nil, false, 0, fmt.Errorf("suno: couldn't check song fade out: %w", err)
 		}
 		d := duration + c.Metadata.Duration
 		infos = append(infos, clipInfo{
-			fadesOut: fout,
-			timeOK:   d >= minDuration,
-			clip:     &c,
+			fadesOut:     fadeOut,
+			firstSilence: firstSilence,
+			timeOK:       d >= minDuration,
+			clip:         &c,
 		})
 	}
 
@@ -552,13 +585,14 @@ func bestClip(clips []clip, duration float32, fadeOut func(clip) (bool, error)) 
 		return clips[i].Metadata.Duration > clips[j].Metadata.Duration
 	})
 	best := infos[0]
-	return best.clip, best.fadesOut, nil
+	return best.clip, best.fadesOut, best.firstSilence, nil
 }
 
 type clipInfo struct {
-	fadesOut bool
-	timeOK   bool
-	clip     *clip
+	fadesOut     bool
+	timeOK       bool
+	firstSilence time.Duration
+	clip         *clip
 }
 
 func (c *Client) waitClips(ctx context.Context, ids []string) ([]clip, error) {

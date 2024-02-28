@@ -90,9 +90,10 @@ func newSongCommand() *ffcli.Command {
 	fs.DurationVar(&cfg.Wait, "wait", 4*time.Second, "wait time")
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
 
-	var prompt, title string
+	var prompt, style, title string
 	var instrumental bool
-	fs.StringVar(&prompt, "prompt", "", "describe the style of music")
+	fs.StringVar(&prompt, "prompt", "", "prompt to autogenerate the song")
+	fs.StringVar(&style, "style", "", "style of the song")
 	fs.StringVar(&title, "title", "", "title for the song")
 	fs.BoolVar(&instrumental, "instrumental", false, "instrumental song")
 	var output string
@@ -109,7 +110,7 @@ func newSongCommand() *ffcli.Command {
 		ShortHelp: fmt.Sprintf("musikai %s command", cmd),
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
-			return musikai.GenerateSong(ctx, cfg, prompt, title, instrumental, output)
+			return musikai.GenerateSong(ctx, cfg, prompt, style, title, instrumental, output)
 		},
 	}
 }
@@ -122,7 +123,7 @@ func newAnalyzeCommand() *ffcli.Command {
 	cfg := &analyze.Config{}
 	fs.StringVar(&cfg.Input, "input", "", "input file")
 	fs.StringVar(&cfg.Output, "output", "", "output folder")
-	
+
 	return &ffcli.Command{
 		Name:       cmd,
 		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),

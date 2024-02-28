@@ -23,7 +23,10 @@ type Config struct {
 }
 
 // GenerateSong generates a song given a prompt.
-func GenerateSong(ctx context.Context, cfg *Config, prompt, title string, instrumental bool, output string) error {
+func GenerateSong(ctx context.Context, cfg *Config, prompt, style, title string, instrumental bool, output string) error {
+	if prompt != "" && style != "" {
+		return fmt.Errorf("prompt and style are mutually exclusive")
+	}
 	log.Println("generating songs...")
 	start := time.Now()
 	defer func() {
@@ -55,7 +58,7 @@ func GenerateSong(ctx context.Context, cfg *Config, prompt, title string, instru
 			log.Printf("couldn't stop suno client: %v\n", err)
 		}
 	}()
-	songs, err := client.Generate(ctx, prompt, title, instrumental)
+	songs, err := client.Generate(ctx, prompt, style, title, instrumental)
 	if err != nil {
 		return fmt.Errorf("couldn't generate song: %w", err)
 	}

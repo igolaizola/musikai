@@ -116,6 +116,42 @@ func calculateRMS(samples []float64) float64 {
 
 const silenceThreshold = 0.002
 
+func (a *Analyzer) FirstSilence() (time.Duration, time.Duration) {
+	windowSize := 50 * time.Millisecond
+	rms := a.RMS(windowSize)
+	inSilence := false
+	position := -1
+	duration := 0
+
+	silenceDurationThreshold := int((1 * time.Second).Seconds() / windowSize.Seconds())
+
+	for i, v := range rms {
+		if v < silenceThreshold {
+			if !inSilence {
+				inSilence = true
+				position = i
+				duration = 1
+				continue
+			} else {
+				duration++
+			}
+		} else {
+			if inSilence && duration >= silenceDurationThreshold {
+				break
+			}
+			inSilence = false
+			duration = 0
+		}
+	}
+
+	if inSilence && duration >= 10 {
+		dur := time.Duration(duration) * windowSize
+		pos := time.Duration(position) * windowSize
+		return dur, pos
+	}
+	return 0, 0
+}
+
 func (a *Analyzer) EndSilence() (time.Duration, time.Duration) {
 	rms := a.RMS(50 * time.Millisecond)
 	// Reverse the slice
