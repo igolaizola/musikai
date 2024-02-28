@@ -11,6 +11,7 @@ func TestFadeOut(t *testing.T) {
 		{"data/almost-finish.mp3", false},
 		{"data/finish.mp3", true},
 		{"data/finish-2.mp3", true},
+		{"data/finish-3.mp3", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.file, func(t *testing.T) {

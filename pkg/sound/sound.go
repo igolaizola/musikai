@@ -75,8 +75,8 @@ func FadeOut(f string) (bool, error) {
 // and checks for a consistent decrease.
 func detectFadeOut(samples []float64) bool {
 	const (
-		endFraction = 0.10 // Analyze the last 10% of the samples
-		numWindows  = 10   // Divide this segment into 10 windows
+		endFraction = 0.025 // Analyze the last 10% of the samples
+		numWindows  = 10    // Divide this segment into 10 windows
 	)
 
 	// Calculate the start index for the end portion
@@ -109,6 +109,7 @@ func detectFadeOut(samples []float64) bool {
 	for i := 1; i < len(rmsValues); i++ {
 		// Calculate the increment
 		inc := rmsValues[i] - rmsValues[i-1]
+		fmt.Println(inc)
 		if inc < 0 && inc*-1.0 > 0.001 {
 			// If any window is louder than the previous, it's not a consistent fade out
 			count++

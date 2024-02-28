@@ -459,7 +459,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*cli
 		var prompt string
 		tags := originalTags
 		if duration+30.0 > minDuration {
-			prompt = "[Fade Out]\n[End]"
+			prompt = "[Fade Out]"
 			tags += ", fade out and end"
 		}
 		req := &generateRequest{
