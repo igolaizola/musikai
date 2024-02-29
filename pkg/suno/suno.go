@@ -510,6 +510,7 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 			clp = lookup[best].clip
 		}
 
+		prevDuration := duration
 		duration += clp.Metadata.Duration
 
 		continueAt := clp.Metadata.Duration
@@ -529,6 +530,9 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 		if duration > minDuration {
 			break
 		}
+
+		// If we are extending the song, recalculate duration
+		duration = prevDuration + continueAt
 
 		// Generate next fragment
 		extensions++
