@@ -328,18 +328,24 @@ type metadata struct {
 	ErrorMessage  *string `json:"error_message"`
 }
 
+type Fragment struct {
+	ID         string  `json:"id"`
+	ContinueAt float32 `json:"continue_at"`
+}
+
 type concatRequest struct {
 	ClipID string `json:"clip_id"`
 }
 
 type Song struct {
-	ID           string  `json:"id"`
-	Title        string  `json:"title"`
-	Audio        string  `json:"audio"`
-	Image        string  `json:"image"`
-	Video        string  `json:"video"`
-	Duration     float32 `json:"duration"`
-	Instrumental bool    `json:"instrumental"`
+	ID           string     `json:"id"`
+	Title        string     `json:"title"`
+	Audio        string     `json:"audio"`
+	Image        string     `json:"image"`
+	Video        string     `json:"video"`
+	Duration     float32    `json:"duration"`
+	Instrumental bool       `json:"instrumental"`
+	History      []Fragment `json:"history"`
 }
 
 func (c *Client) Generate(ctx context.Context, prompt, style, title string, instrumental bool) ([]Song, error) {
@@ -383,10 +389,17 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 		f := &fragment
 		go func() {
 			defer wg.Done()
-			clp, err := c.extend(ctx, f, instrumental)
+			clp, err := c.extend(ctx, f)
 			if err != nil {
 				log.Printf("❌ %v\n", err)
 				return
+			}
+			var history []Fragment
+			for _, h := range clp.Metadata.ConcatHistory {
+				history = append(history, Fragment{
+					ID:         h.ID,
+					ContinueAt: h.ContinueAt,
+				})
 			}
 			lck.Lock()
 			defer lck.Unlock()
@@ -398,6 +411,7 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 				Video:        clp.VideoURL,
 				Duration:     clp.Metadata.Duration,
 				Instrumental: instrumental,
+				History:      history,
 			})
 		}()
 	}
@@ -415,7 +429,7 @@ const (
 	maxDuration = 3.0*60.0 + 55.0
 )
 
-func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*clip, error) {
+func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 	// Initialize variables
 	clips := []clip{*clp}
 	originalTags := clp.Metadata.Tags
@@ -427,6 +441,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*cli
 		var best string
 		lookup := map[string]struct {
 			firstSilence time.Duration
+			endSilence   time.Duration
 			clip         *clip
 		}{}
 
@@ -437,11 +452,14 @@ func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*cli
 			}
 			// Add to lookup
 			_, firstPos := a.FirstSilence()
+			endSilence, _ := a.EndSilence()
 			lookup[c.ID] = struct {
 				firstSilence time.Duration
+				endSilence   time.Duration
 				clip         *clip
 			}{
 				firstSilence: firstPos,
+				endSilence:   endSilence,
 				clip:         &c,
 			}
 
@@ -454,7 +472,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*cli
 				best = c.ID
 				break
 			}
-			if d, _ := a.EndSilence(); d > 500*time.Millisecond {
+			if endSilence > 500*time.Millisecond {
 				best = c.ID
 				break
 			}
@@ -473,6 +491,14 @@ func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*cli
 
 		duration += clp.Metadata.Duration
 
+		continueAt := clp.Metadata.Duration
+		firstSilence = lookup[clp.ID].firstSilence
+		endSilence := lookup[clp.ID].endSilence
+		if firstSilence > 0 {
+			continueAt = float32(firstSilence.Seconds())
+		}
+		log.Println("🔊", clp.Title, clp.AudioURL, "fragment:", clp.Metadata.Duration, "continue at:", continueAt, "first silence:", firstSilence, "end silence:", endSilence, "ends:", ends, "duration:", duration, "extensions:", extensions)
+
 		// If the duration is over the min duration, log
 		if duration > minDuration && extensions > 0 && !ends {
 			for _, c := range clips {
@@ -481,12 +507,6 @@ func (c *Client) extend(ctx context.Context, clp *clip, instrumental bool) (*cli
 		}
 		if duration > minDuration {
 			break
-		}
-
-		continueAt := clp.Metadata.Duration
-		firstSilence = lookup[clp.ID].firstSilence
-		if firstSilence > 0 {
-			continueAt = float32(firstSilence.Seconds())
 		}
 
 		// Generate next fragment

@@ -65,18 +65,26 @@ func GenerateSong(ctx context.Context, cfg *Config, prompt, style, title string,
 		return fmt.Errorf("couldn't generate song: %w", err)
 	}
 
-	// Print song info
-	js, err := json.MarshalIndent(songs, "", "  ")
-	if err != nil {
-		return fmt.Errorf("couldn't marshal song: %w", err)
-	}
-	log.Printf("song: %s\n", js)
-
 	ffm := ffmpeg.New("ffmpeg")
 
-	// Download songs
+	// Save songs
 	for _, song := range songs {
-		path := filepath.Join(output, fmt.Sprintf("%s.mp3", song.ID))
+		name := song.Title
+		if name == "" {
+			name = song.ID
+		}
+		// Save song data
+		js, err := json.MarshalIndent(song, "", "  ")
+		if err != nil {
+			return fmt.Errorf("couldn't marshal song: %w", err)
+		}
+		fmt.Println(string(js))
+		path := filepath.Join(output, fmt.Sprintf("%s.json", name))
+		if err := os.WriteFile(path, js, 0644); err != nil {
+			return fmt.Errorf("couldn't write song data: %w", err)
+		}
+		// Save song audio
+		path = filepath.Join(output, fmt.Sprintf("%s.mp3", name))
 		if err := download(ctx, httpClient, song.Audio, path); err != nil {
 			return fmt.Errorf("couldn't download song: %w", err)
 		}

@@ -19,4 +19,5 @@ bin
 .history
 .vscode
 *.conf
+*.yaml
 logs/
