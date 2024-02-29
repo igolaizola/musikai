@@ -26,10 +26,11 @@ type Config struct {
 	Limit       int
 	Proxy       string
 
-	Account string
-	Type    string
-	Prompt  string
-	Style   string
+	Account      string
+	Type         string
+	Prompt       string
+	Style        string
+	Instrumental bool
 }
 
 // Run launches the song generation process.
@@ -73,6 +74,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		Debug:       cfg.Debug,
 		Client:      http.DefaultClient,
 		CookieStore: store.NewCookieStore("suno", cfg.Account),
+		Parallel:    cfg.Limit == 1,
 	})
 	if err := generator.Start(ctx); err != nil {
 		return fmt.Errorf("generate: couldn't start suno generator: %w", err)
@@ -145,9 +147,10 @@ func Run(ctx context.Context, cfg *Config) error {
 
 			// Get a template
 			tmpl := template{
-				Type:   cfg.Type,
-				Prompt: cfg.Prompt,
-				Style:  cfg.Style,
+				Type:         cfg.Type,
+				Prompt:       cfg.Prompt,
+				Style:        cfg.Style,
+				Instrumental: cfg.Instrumental,
 			}
 			if tmpl.Prompt == "" && tmpl.Style == "" {
 				tmpl = nextTemplate()

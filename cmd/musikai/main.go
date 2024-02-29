@@ -191,6 +191,7 @@ func newGenerateCommand() *ffcli.Command {
 	fs.StringVar(&cfg.Account, "account", "", "account to use")
 	fs.StringVar(&cfg.Prompt, "prompt", "", "prompt to use")
 	fs.StringVar(&cfg.Style, "style", "", "style to use")
+	fs.BoolVar(&cfg.Instrumental, "instrumental", true, "instrumental song")
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
 
 	return &ffcli.Command{

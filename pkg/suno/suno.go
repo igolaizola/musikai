@@ -34,6 +34,7 @@ type Client struct {
 	token           string
 	tokenExpiration time.Time
 	cookieStore     CookieStore
+	parallel        bool
 }
 
 type Config struct {
@@ -41,6 +42,7 @@ type Config struct {
 	Debug       bool
 	Client      *http.Client
 	CookieStore CookieStore
+	Parallel    bool
 }
 
 type cookieStore struct {
@@ -89,6 +91,7 @@ func New(cfg *Config) *Client {
 		ratelimit:   ratelimit.New(wait),
 		debug:       cfg.Debug,
 		cookieStore: cfg.CookieStore,
+		parallel:    cfg.Parallel,
 	}
 }
 
@@ -380,15 +383,33 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 		return nil, err
 	}
 
+	// Create a semaphore to limit concurrency
+	concurrency := 1
+	if c.parallel {
+		concurrency = len(fragments)
+	}
+	sem := make(chan struct{}, concurrency)
+
 	// Extend fragments
 	var songs []Song
 	var wg sync.WaitGroup
 	var lck sync.Mutex
 	for _, fragment := range fragments {
-		wg.Add(1)
 		f := &fragment
+
+		// Wait for semaphore
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("suno: %w", ctx.Err())
+		case sem <- struct{}{}:
+		}
+		wg.Add(1)
+
 		go func() {
+			// Defer wait group and semaphore
 			defer wg.Done()
+			defer func() { <-sem }()
+
 			clp, err := c.extend(ctx, f)
 			if err != nil {
 				log.Printf("❌ %v\n", err)
@@ -495,7 +516,7 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 		firstSilence = lookup[clp.ID].firstSilence
 		endSilence := lookup[clp.ID].endSilence
 		if firstSilence > 0 {
-			continueAt = float32(firstSilence.Seconds())
+			continueAt = float32(firstSilence.Seconds() - 1.0)
 		}
 		log.Println("🔊", clp.Title, clp.AudioURL, "fragment:", clp.Metadata.Duration, "continue at:", continueAt, "first silence:", firstSilence, "end silence:", endSilence, "ends:", ends, "duration:", duration, "extensions:", extensions)
 

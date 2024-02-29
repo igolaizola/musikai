@@ -51,6 +51,7 @@ func GenerateSong(ctx context.Context, cfg *Config, prompt, style, title string,
 		Debug:       cfg.Debug,
 		Client:      httpClient,
 		CookieStore: suno.NewCookieStore(cfg.Cookie),
+		Parallel:    true,
 	})
 	if err := client.Start(ctx); err != nil {
 		return fmt.Errorf("couldn't start suno client: %w", err)

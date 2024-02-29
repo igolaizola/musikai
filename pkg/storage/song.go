@@ -16,9 +16,10 @@ type Song struct {
 
 	Type string
 
-	Prompt string
-	Style  string
-	Title  string
+	Prompt       string
+	Style        string
+	Title        string
+	Instrumental bool `gorm:"not null;default:false"`
 
 	SunoID    string
 	SunoAudio string

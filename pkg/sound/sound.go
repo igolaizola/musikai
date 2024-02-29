@@ -151,7 +151,7 @@ func (a *Analyzer) FirstSilence() (time.Duration, time.Duration) {
 		}
 	}
 
-	if inSilence && duration >= 10 {
+	if inSilence && duration >= silenceDurationThreshold {
 		dur := time.Duration(duration) * windowSize
 		pos := time.Duration(position) * windowSize
 		return dur, pos
