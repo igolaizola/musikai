@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/igolaizola/musikai/pkg/ffmpeg"
+	"github.com/igolaizola/musikai/pkg/sound"
 	"github.com/igolaizola/musikai/pkg/suno"
 )
 
@@ -70,11 +72,36 @@ func GenerateSong(ctx context.Context, cfg *Config, prompt, style, title string,
 	}
 	log.Printf("song: %s\n", js)
 
+	ffm := ffmpeg.New("ffmpeg")
+
 	// Download songs
 	for _, song := range songs {
 		path := filepath.Join(output, fmt.Sprintf("%s.mp3", song.ID))
 		if err := download(ctx, httpClient, song.Audio, path); err != nil {
 			return fmt.Errorf("couldn't download song: %w", err)
+		}
+		a, err := sound.NewAnalyzer(path)
+		if err != nil {
+			return fmt.Errorf("couldn't create analyzer: %w", err)
+		}
+		d, p := a.FirstSilence()
+		if d > 0 {
+			log.Println("cutting song...")
+			p = p + 1*time.Second
+			if err := ffm.Cut(ctx, path, path, p); err != nil {
+				return fmt.Errorf("couldn't cut song: %w", err)
+			}
+			a, err = sound.NewAnalyzer(path)
+			if err != nil {
+				return fmt.Errorf("couldn't create analyzer: %w", err)
+			}
+		}
+		if !a.HasFadeOut() {
+			log.Println("fading out song...")
+			pos := a.Duration() - 2*time.Second
+			if err := ffm.FadeOut(ctx, path, path, pos); err != nil {
+				return fmt.Errorf("couldn't fade out song: %w", err)
+			}
 		}
 	}
 	return nil

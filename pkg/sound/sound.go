@@ -19,9 +19,10 @@ import (
 )
 
 type Analyzer struct {
-	stereo [2][]float64
-	mono   []float64
-	rate   int
+	stereo   [2][]float64
+	mono     []float64
+	rate     int
+	duration time.Duration
 }
 
 func NewAnalyzer(u string) (*Analyzer, error) {
@@ -56,11 +57,17 @@ func NewAnalyzer(u string) (*Analyzer, error) {
 		mono = append(mono, (left+right)/2.0)
 	}
 
+	duration := time.Duration(float64(len(mono)) / float64(decoder.SampleRate()) * float64(time.Second))
 	return &Analyzer{
-		stereo: stereo,
-		mono:   mono,
-		rate:   decoder.SampleRate(),
+		stereo:   stereo,
+		mono:     mono,
+		rate:     decoder.SampleRate(),
+		duration: duration,
 	}, nil
+}
+
+func (a *Analyzer) Duration() time.Duration {
+	return a.duration
 }
 
 func (a *Analyzer) Resample(windowSize time.Duration) []float64 {

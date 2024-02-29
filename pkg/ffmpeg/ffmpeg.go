@@ -15,8 +15,8 @@ func New(bin string) *ffmpeg {
 	return &ffmpeg{bin: bin}
 }
 
-func (f *ffmpeg) FadeOut(input, output string, duration time.Duration) error {
-	cmd := exec.Command(f.bin, "-i", input, "-af", "afade=t=out:st=0:d="+toText(duration), output)
+func (f *ffmpeg) FadeOut(ctx context.Context, input, output string, duration time.Duration) error {
+	cmd := exec.CommandContext(ctx, f.bin, "-y", "-i", input, "-af", fmt.Sprintf("afade=t=out:st=0:d=%d", +int(duration.Seconds())), output)
 	data, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := string(data)
@@ -25,8 +25,8 @@ func (f *ffmpeg) FadeOut(input, output string, duration time.Duration) error {
 	return nil
 }
 
-func (f *ffmpeg) Cut(ctx context.Context, input, output string, start, duration time.Duration) error {
-	cmd := exec.CommandContext(ctx, f.bin, "-i", input, "-ss", toText(start), "-t", toText(duration), output)
+func (f *ffmpeg) Cut(ctx context.Context, input, output string, end time.Duration) error {
+	cmd := exec.CommandContext(ctx, f.bin, "-y", "-i", input, "-to", toText(end), "-acodec", "copy", output)
 	data, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := string(data)
