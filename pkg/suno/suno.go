@@ -35,6 +35,7 @@ type Client struct {
 	tokenExpiration time.Time
 	cookieStore     CookieStore
 	parallel        bool
+	lck             sync.Mutex
 }
 
 type Config struct {
@@ -96,6 +97,13 @@ func New(cfg *Config) *Client {
 }
 
 func (c *Client) Start(ctx context.Context) error {
+	// Create log folder if it doesn't exist
+	if _, err := os.Stat("logs"); os.IsNotExist(err) {
+		if err := os.Mkdir("logs", 0755); err != nil {
+			return fmt.Errorf("suno: couldn't create logs folder: %w", err)
+		}
+	}
+
 	// Get cookie
 	cookie, err := c.cookieStore.GetCookie(ctx)
 	if err != nil {
@@ -446,8 +454,9 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 }
 
 const (
-	minDuration = 2.0*60.0 + 5.0
-	maxDuration = 3.0*60.0 + 55.0
+	minDuration   = 2.0*60.0 + 5.0
+	maxDuration   = 3.0*60.0 + 55.0
+	maxExtensions = 1
 )
 
 func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
@@ -515,18 +524,29 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 
 		continueAt := clp.Metadata.Duration
 		firstSilence = lookup[clp.ID].firstSilence
-		endSilence := lookup[clp.ID].endSilence
 		if firstSilence > 0 {
 			continueAt = float32(firstSilence.Seconds() - 1.0)
 		}
-		log.Println("🔊", clp.Title, clp.AudioURL, "fragment:", clp.Metadata.Duration, "continue at:", continueAt, "first silence:", firstSilence, "end silence:", endSilence, "ends:", ends, "duration:", duration, "extensions:", extensions)
+		if firstSilence > 0 && firstSilence.Seconds() < float64(clp.Metadata.Duration*0.5) && extensions == 0 {
+			err := fmt.Errorf("suno: first silence too short: (%s, %s)", firstSilence, clp.AudioURL)
+			c.err("%v", err)
+			return nil, err
+		}
 
 		// If the duration is over the min duration, log
 		if duration > minDuration && extensions > 0 && !ends {
+			var urls []string
 			for _, c := range clips {
-				log.Printf("⚠️ didn't fade out %s\n", c.AudioURL)
+				urls = append(urls, c.AudioURL)
 			}
+			c.err("suno: didn't end: (%s)", strings.Join(urls, ", "))
 		}
+
+		// TODO: check if this is too much
+		if extensions >= maxExtensions {
+			break
+		}
+
 		if duration > minDuration {
 			break
 		}
@@ -675,6 +695,21 @@ func (c *Client) log(format string, args ...interface{}) {
 	if c.debug {
 		format += "\n"
 		log.Printf(format, args...)
+	}
+}
+
+func (c *Client) err(format string, args ...interface{}) {
+	text := fmt.Sprintf(format, args...)
+	log.Println("❌", text)
+	c.lck.Lock()
+	defer c.lck.Unlock()
+	f, err := os.OpenFile("errors.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(fmt.Errorf("suno: couldn't open errors file: %w", err))
+	}
+	defer f.Close()
+	if _, err := f.WriteString(fmt.Sprintf("%s\n", text)); err != nil {
+		panic(fmt.Errorf("suno: couldn't write to errors file: %w", err))
 	}
 }
 

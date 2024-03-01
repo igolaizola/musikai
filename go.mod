@@ -8,6 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.4
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.51.1
 	github.com/glebarez/sqlite v1.10.0
+	github.com/go-chi/chi/v5 v5.0.12
 	github.com/hajimehoshi/go-mp3 v0.3.4
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/peterbourgon/ff v1.7.1
@@ -38,7 +39,6 @@ require (
 	github.com/campoy/embedmd v1.0.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/glebarez/go-sqlite v1.21.2 // indirect
-	github.com/go-chi/chi/v5 v5.0.12 // indirect
 	github.com/go-fonts/liberation v0.3.1 // indirect
 	github.com/go-latex/latex v0.0.0-20230307184459-12ec69307ad9 // indirect
 	github.com/go-pdf/fpdf v0.8.0 // indirect
