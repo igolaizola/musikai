@@ -16,12 +16,13 @@ import (
 )
 
 // New returns a new S3 image store.
-func New(key, secret, region, bucket string) *Store {
+func New(key, secret, region, bucket string, debug bool) *Store {
 	return &Store{
 		key:    key,
 		secret: secret,
 		region: region,
 		bucket: bucket,
+		debug:  debug,
 	}
 }
 
@@ -30,6 +31,7 @@ type Store struct {
 	secret string
 	region string
 	bucket string
+	debug  bool
 	client *s3.Client
 }
 
@@ -116,8 +118,10 @@ func (s *Store) SetImage(ctx context.Context, key string, value []byte) error {
 	if err != nil {
 		return fmt.Errorf("s3: couldn't put object %s: %w", key, err)
 	}
-	js, _ := json.Marshal(out)
-	log.Println("s3: put object", key, string(js))
+	if s.debug {
+		js, _ := json.Marshal(out)
+		log.Println("s3: put object", key, string(js))
+	}
 	return nil
 }
 
@@ -132,7 +136,9 @@ func (s *Store) DeleteImage(ctx context.Context, key string) error {
 		return fmt.Errorf("s3: couldn't delete object %s: %w", key, err)
 	}
 
-	js, _ := json.Marshal(out)
-	log.Println("s3: delete object", key, string(js))
+	if s.debug {
+		js, _ := json.Marshal(out)
+		log.Println("s3: delete object", key, string(js))
+	}
 	return nil
 }

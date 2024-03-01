@@ -28,7 +28,8 @@ func (s *Store) GetSetting(ctx context.Context, id string) (*Setting, error) {
 }
 
 func (s *Store) SetSetting(ctx context.Context, v *Setting) error {
-	if err := s.db.Save(v).Error; err != nil {
+	err := s.db.Model(&Setting{}).Where("id = ?", v.ID).Update("value", v.Value).Error
+	if err != nil {
 		return fmt.Errorf("storage: failed to set setting %s: %w", v.ID, err)
 	}
 	return nil

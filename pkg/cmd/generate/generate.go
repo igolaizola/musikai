@@ -73,7 +73,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		}
 	}
 
-	fstore := s3.New(cfg.S3Key, cfg.S3Secret, cfg.S3Region, cfg.S3Bucket)
+	fstore := s3.New(cfg.S3Key, cfg.S3Secret, cfg.S3Region, cfg.S3Bucket, cfg.Debug)
 	if err := fstore.Start(ctx); err != nil {
 		return fmt.Errorf("generate: couldn't start s3 store: %w", err)
 	}
