@@ -187,12 +187,18 @@ func newGenerateCommand() *ffcli.Command {
 	fs.DurationVar(&cfg.WaitMin, "wait-min", 3*time.Second, "minimum wait time between songs")
 	fs.DurationVar(&cfg.WaitMax, "wait-max", 1*time.Minute, "maximum wait time between songs")
 	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+	fs.StringVar(&cfg.Output, "output", "", "output folder to download the songs (optional)")
 
 	fs.StringVar(&cfg.Account, "account", "", "account to use")
 	fs.StringVar(&cfg.Prompt, "prompt", "", "prompt to use")
 	fs.StringVar(&cfg.Style, "style", "", "style to use")
 	fs.BoolVar(&cfg.Instrumental, "instrumental", true, "instrumental song")
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
+
+	fs.StringVar(&cfg.S3Bucket, "s3-bucket", "", "s3 bucket")
+	fs.StringVar(&cfg.S3Region, "s3-region", "", "s3 region")
+	fs.StringVar(&cfg.S3Key, "s3-key", "", "s3 key")
+	fs.StringVar(&cfg.S3Secret, "s3-secret", "", "s3 secret")
 
 	return &ffcli.Command{
 		Name:       cmd,

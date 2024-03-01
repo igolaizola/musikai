@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -34,10 +35,19 @@ func Run(ctx context.Context, cfg *Config) error {
 
 	out := filepath.Join(cfg.Output, name)
 
-	if err := a.PlotRMS(out + "-rms.png"); err != nil {
+	b, err := a.PlotRMS()
+	if err != nil {
 		return err
 	}
-	if err := a.PlotWave(out + "-wave.png"); err != nil {
+	if err := os.WriteFile(out+"-rms.jpg", b, 0644); err != nil {
+		return err
+	}
+
+	b, err = a.PlotWave()
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(out+"-wave.jpg", b, 0644); err != nil {
 		return err
 	}
 

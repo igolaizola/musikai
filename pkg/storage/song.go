@@ -25,6 +25,9 @@ type Song struct {
 	SunoAudio string
 	SunoImage string
 
+	Duration float32 `gorm:"not null;default:0"`
+	Wave     string  `gorm:"not null;default:''"`
+
 	Disabled bool `gorm:"index"`
 }
 

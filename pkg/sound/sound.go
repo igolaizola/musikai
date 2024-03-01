@@ -25,12 +25,24 @@ type Analyzer struct {
 	duration time.Duration
 }
 
+func NewAnalyzerBytes(b []byte) (*Analyzer, error) {
+	// Decode MP3 to PCM
+	decoder, err := mp3.NewDecoder(bytes.NewReader(b))
+	if err != nil {
+		return nil, fmt.Errorf("sound: couldn't decode mp3: %w", err)
+	}
+	return newAnalyzer(decoder)
+}
+
 func NewAnalyzer(u string) (*Analyzer, error) {
 	decoder, err := toDecoder(u)
 	if err != nil {
 		return nil, fmt.Errorf("sound: couldn't create decoder: %w", err)
 	}
+	return newAnalyzer(decoder)
+}
 
+func newAnalyzer(decoder *mp3.Decoder) (*Analyzer, error) {
 	var stereo [2][]float64 // Assume stereo audio
 	buf := make([]byte, 2)  // 2 bytes per sample for 16-bit audio
 	var i int
@@ -177,17 +189,17 @@ func (a *Analyzer) EndSilence() (time.Duration, time.Duration) {
 	return duration, position
 }
 
-func (a *Analyzer) PlotRMS(output string) error {
+func (a *Analyzer) PlotRMS() ([]byte, error) {
 	rms := a.RMS(50 * time.Millisecond)
-	return createPlot("rms", output, rms, 0, 1, 0.01)
+	return createPlot("rms", rms, 0, 1, 0.01)
 }
 
-func (a *Analyzer) PlotWave(output string) error {
+func (a *Analyzer) PlotWave() ([]byte, error) {
 	resampled := a.Resample(50 * time.Millisecond)
-	return createPlot("samples", output, resampled, -1, 1, 0.00)
+	return createPlot("wave", resampled, -1, 1, 0.00)
 }
 
-func createPlot(name, output string, data []float64, min, max float64, line float64) error {
+func createPlot(name string, data []float64, min, max float64, line float64) ([]byte, error) {
 	// Create a new plot
 	p := plot.New()
 
@@ -207,7 +219,7 @@ func createPlot(name, output string, data []float64, min, max float64, line floa
 	}
 	l, err := plotter.NewLine(makePoints(data))
 	if err != nil {
-		return fmt.Errorf("sound: couldn't create line plotter: %w", err)
+		return nil, fmt.Errorf("sound: couldn't create line plotter: %w", err)
 	}
 	l.LineStyle.Width = vg.Points(1)
 
@@ -222,11 +234,16 @@ func createPlot(name, output string, data []float64, min, max float64, line floa
 		p.Add(hLine)
 	}
 
-	// Save the plot to a PNG file.
-	if err := p.Save(4*vg.Inch, 4*vg.Inch, output); err != nil {
-		return fmt.Errorf("sound: couldn't save plot: %w", err)
+	// Save the plot
+	c, err := p.WriterTo(4*vg.Inch, 4*vg.Inch, "jpeg")
+	if err != nil {
+		return nil, fmt.Errorf("sound: couldn't create plot: %w", err)
 	}
-	return nil
+	var buf bytes.Buffer
+	if _, err := c.WriteTo(&buf); err != nil {
+		return nil, fmt.Errorf("sound: couldn't write plot: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 // makePoints converts a slice of float32 to plotter.XYs
