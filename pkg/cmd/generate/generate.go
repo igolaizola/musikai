@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/igolaizola/musikai/pkg/aubio"
 	"github.com/igolaizola/musikai/pkg/s3"
 	"github.com/igolaizola/musikai/pkg/sound"
 	"github.com/igolaizola/musikai/pkg/storage"
@@ -58,6 +59,11 @@ func Run(ctx context.Context, cfg *Config) error {
 		}
 		format += "\n"
 		log.Printf(format, args...)
+	}
+
+	aub := aubio.New("aubio")
+	if _, err := aub.Version(ctx); err != nil {
+		return fmt.Errorf("generate: couldn't get aubio version: %w", err)
 	}
 
 	if cfg.Output != "" {
@@ -184,7 +190,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			go func() {
 				defer wg.Done()
 				debug("generate: start %s", tmpl)
-				err := generate(ctx, generator, store, fstore, httpClient, cfg.Output, tmpl)
+				err := generate(ctx, generator, store, fstore, aub, httpClient, cfg.Output, tmpl)
 				if err != nil {
 					log.Println(err)
 				}
@@ -195,7 +201,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func generate(ctx context.Context, generator *suno.Client, store *storage.Store, fstore *s3.Store, client *http.Client, output string, t template) error {
+func generate(ctx context.Context, generator *suno.Client, store *storage.Store, fstore *s3.Store, aub *aubio.App, client *http.Client, output string, t template) error {
 	// Generate the songs.
 	songs, err := generator.Generate(ctx, t.Prompt, t.Style, t.Title, t.Instrumental)
 	if err != nil {
@@ -231,6 +237,12 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 		}
 		waveURL := fstore.URL(waveName)
 
+		// Get the tempo
+		tempo, err := aub.Tempo(ctx, s.Audio)
+		if err != nil {
+			return fmt.Errorf("generate: couldn't get tempo: %w", err)
+		}
+
 		if err := store.SetSong(ctx, &storage.Song{
 			ID:        ulid.Make().String(),
 			Type:      t.Type,
@@ -242,6 +254,7 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 			SunoAudio: s.Audio,
 			SunoImage: s.Image,
 			Wave:      waveURL,
+			Tempo:     float32(tempo),
 		}); err != nil {
 			return fmt.Errorf("generate: couldn't save song to database: %w", err)
 		}

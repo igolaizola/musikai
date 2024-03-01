@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/igolaizola/musikai/pkg/aubio"
 	"github.com/igolaizola/musikai/pkg/ffmpeg"
 	"github.com/igolaizola/musikai/pkg/sound"
 )
@@ -20,6 +21,13 @@ type Config struct {
 }
 
 func Run(ctx context.Context, cfg *Config) error {
+	aub := aubio.New("aubio")
+	tempo, err := aub.Tempo(ctx, cfg.Input)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Tempo:", tempo)
+
 	a, err := sound.NewAnalyzer(cfg.Input)
 	if err != nil {
 		return err
