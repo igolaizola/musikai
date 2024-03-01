@@ -13,6 +13,7 @@ import (
 
 	"github.com/igolaizola/musikai"
 	"github.com/igolaizola/musikai/pkg/cmd/analyze"
+	"github.com/igolaizola/musikai/pkg/cmd/filter"
 	"github.com/igolaizola/musikai/pkg/cmd/generate"
 	"github.com/igolaizola/musikai/pkg/cmd/migrate"
 	"github.com/peterbourgon/ff/ffyaml"
@@ -52,6 +53,7 @@ func newCommand() *ffcli.Command {
 			newAnalyzeCommand(),
 			newGenerateCommand(),
 			newMigrateCommand(),
+			newFilterCommand(),
 		},
 	}
 }
@@ -212,6 +214,34 @@ func newGenerateCommand() *ffcli.Command {
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
 			return generate.Run(ctx, cfg)
+		},
+	}
+}
+
+func newFilterCommand() *ffcli.Command {
+	cmd := "filter"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &filter.Config{}
+
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.IntVar(&cfg.Port, "port", 1337, "port to listen on")
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return filter.Serve(ctx, cfg)
 		},
 	}
 }

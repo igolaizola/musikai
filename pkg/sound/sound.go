@@ -190,16 +190,18 @@ func (a *Analyzer) EndSilence() (time.Duration, time.Duration) {
 }
 
 func (a *Analyzer) PlotRMS() ([]byte, error) {
-	rms := a.RMS(50 * time.Millisecond)
-	return createPlot("rms", rms, 0, 1, 0.01)
+	window := 50 * time.Millisecond
+	rms := a.RMS(window)
+	return createPlot("rms", rms, 0, 1, window.Seconds(), 0.01)
 }
 
 func (a *Analyzer) PlotWave() ([]byte, error) {
-	resampled := a.Resample(50 * time.Millisecond)
-	return createPlot("wave", resampled, -1, 1, 0.00)
+	window := 50 * time.Millisecond
+	resampled := a.Resample(window)
+	return createPlot("wave", resampled, -1, 1, window.Seconds(), 0.00)
 }
 
-func createPlot(name string, data []float64, min, max float64, line float64) ([]byte, error) {
+func createPlot(name string, data []float64, min, max float64, window float64, line float64) ([]byte, error) {
 	// Create a new plot
 	p := plot.New()
 
@@ -207,14 +209,15 @@ func createPlot(name string, data []float64, min, max float64, line float64) ([]
 	p.Y.Min = min
 	p.Y.Max = max
 
-	p.Title.Text = name
+	d := time.Duration(float64(len(data))*window) * time.Second
+	p.Title.Text = fmt.Sprintf("%s %s", name, d)
 	p.X.Label.Text = "time"
 	p.Y.Label.Text = "data"
 
 	// Make a line plotter and set its style.
 	pts := make(plotter.XYs, len(data))
 	for i, d := range data {
-		pts[i].X = float64(i)
+		pts[i].X = float64(i) * window
 		pts[i].Y = float64(d)
 	}
 	l, err := plotter.NewLine(makePoints(data))
