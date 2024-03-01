@@ -117,28 +117,6 @@ func (c *Client) Start(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) Auth(ctx context.Context) error {
-	if c.session == "" {
-		id, err := c.sessionID(ctx)
-		if err != nil {
-			return err
-		}
-		c.session = id
-	}
-	if c.token != "" && time.Now().Before(c.tokenExpiration) {
-		return nil
-	}
-
-	token, expiration, err := c.sessionToken(ctx, "api")
-	if err != nil {
-		return err
-	}
-	c.token = token
-	// Set token expiration to 90% of the actual expiration
-	c.tokenExpiration = time.Now().Add(expiration.Sub(time.Now().UTC()) * 90 / 100).UTC()
-	return nil
-}
-
 func (c *Client) Stop(ctx context.Context) error {
 	cookie, err := session.GetCookies(c.client, "https://clerk.suno.ai")
 	if err != nil {

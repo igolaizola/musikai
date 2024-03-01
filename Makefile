@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SHELL             = /bin/bash
-PLATFORMS        ?= linux/amd64 darwin/amd64 windows/amd64
+PLATFORMS        ?= linux/amd64 darwin/amd64 darwin/arm64 windows/amd64
 IMAGE_PREFIX     ?= igolaizola
 REPO_NAME		 ?= musikai
 COMMIT_SHORT     ?= $(shell git rev-parse --verify --short HEAD)
@@ -33,8 +33,9 @@ app-build:
 		go build \
 			-a -x -tags netgo,timetzdata -installsuffix cgo -installsuffix netgo \
 			-ldflags " \
-				-X main.Version=$(VERSION_NOPREFIX) \
-				-X main.GitRev=$(COMMIT_SHORT) \
+				-X main.version=$(VERSION_NOPREFIX) \
+				-X main.commit=$(COMMIT_SHORT) \
+				-X main.date=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ') \
 			" \
 			-o $$file \
 			./cmd/$(REPO_NAME); \
