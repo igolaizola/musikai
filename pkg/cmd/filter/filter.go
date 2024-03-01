@@ -110,11 +110,22 @@ func Serve(ctx context.Context, cfg *Config) error {
 		var assets []*Asset
 		for _, s := range songs {
 			d := time.Duration(int(s.Duration)) * time.Second
+			p := fmt.Sprintf("%s %.f BPM %s", d, s.Tempo, s.Type)
+			if s.Prompt != "" {
+				p += " " + s.Prompt
+			}
+			if s.Style != "" {
+				p += " " + s.Style
+			}
+			if s.Title != "" {
+				p += " (" + s.Title + ")"
+			}
+
 			assets = append(assets, &Asset{
 				ID:           s.ID,
 				URL:          s.SunoAudio,
 				ThumbnailURL: s.Wave,
-				Prompt:       fmt.Sprintf("%s %.f BPM %s %s %s", d, s.Tempo, s.Type, s.Prompt, s.Style),
+				Prompt:       p,
 			})
 		}
 		if err := json.NewEncoder(w).Encode(assets); err != nil {
