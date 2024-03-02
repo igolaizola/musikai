@@ -112,13 +112,10 @@ func Serve(ctx context.Context, cfg *Config) error {
 			d := time.Duration(int(s.Duration)) * time.Second
 			p := fmt.Sprintf("%s %.f BPM %s", d, s.Tempo, s.Type)
 			if s.Prompt != "" {
-				p += " " + s.Prompt
+				p += ", " + s.Prompt
 			}
 			if s.Style != "" {
-				p += " " + s.Style
-			}
-			if s.Title != "" {
-				p += " (" + s.Title + ")"
+				p += ", " + s.Style
 			}
 
 			assets = append(assets, &Asset{

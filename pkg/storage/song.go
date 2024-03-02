@@ -14,16 +14,16 @@ type Song struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
-	Type string
+	Type string `gorm:"not null;default:''"`
 
-	Prompt       string
-	Style        string
-	Title        string
-	Instrumental bool `gorm:"not null;default:false"`
+	Prompt       string `gorm:"not null;default:''"`
+	Style        string `gorm:"not null;default:''"`
+	Instrumental bool   `gorm:"not null;default:false"`
 
-	SunoID    string
-	SunoAudio string
-	SunoImage string
+	SunoID    string `gorm:"not null;default:''"`
+	SunoAudio string `gorm:"not null;default:''"`
+	SunoImage string `gorm:"not null;default:''"`
+	SunoTitle string `gorm:"not null;default:''"`
 
 	Duration float32 `gorm:"not null;default:0"`
 	Wave     string  `gorm:"not null;default:''"`
