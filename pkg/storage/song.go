@@ -28,6 +28,7 @@ type Song struct {
 	Duration float32 `gorm:"not null;default:0"`
 	Wave     string  `gorm:"not null;default:''"`
 	Tempo    float32 `gorm:"not null;default:0"`
+	Flags    string  `gorm:"not null;default:''"`
 
 	AlbumID string `gorm:"index,not null;default:''"`
 
