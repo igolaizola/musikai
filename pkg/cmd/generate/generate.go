@@ -38,13 +38,16 @@ type Config struct {
 	S3Key    string
 	S3Secret string
 
-	Account      string
-	Type         string
-	Prompt       string
-	Style        string
-	Instrumental bool
-	EndPrompt    string
-	EndStyle     string
+	Account       string
+	Type          string
+	Prompt        string
+	Style         string
+	Instrumental  bool
+	EndPrompt     string
+	EndStyle      string
+	MinDuration   time.Duration
+	MaxDuration   time.Duration
+	MaxExtensions int
 }
 
 // Run launches the song generation process.
@@ -101,13 +104,16 @@ func Run(ctx context.Context, cfg *Config) error {
 		}
 	}
 	generator := suno.New(&suno.Config{
-		Wait:        4 * time.Second,
-		Debug:       cfg.Debug,
-		Client:      http.DefaultClient,
-		CookieStore: store.NewCookieStore("suno", cfg.Account),
-		Parallel:    cfg.Limit == 1,
-		EndPrompt:   cfg.EndPrompt,
-		EndStyle:    cfg.EndStyle,
+		Wait:          4 * time.Second,
+		Debug:         cfg.Debug,
+		Client:        http.DefaultClient,
+		CookieStore:   store.NewCookieStore("suno", cfg.Account),
+		Parallel:      cfg.Limit == 1,
+		EndPrompt:     cfg.EndPrompt,
+		EndStyle:      cfg.EndStyle,
+		MinDuration:   cfg.MinDuration,
+		MaxDuration:   cfg.MaxDuration,
+		MaxExtensions: cfg.MaxExtensions,
 	})
 	if err := generator.Start(ctx); err != nil {
 		return fmt.Errorf("generate: couldn't start suno generator: %w", err)

@@ -31,16 +31,22 @@ type Client struct {
 	lck             sync.Mutex
 	endPrompt       string
 	endStyle        string
+	minDuration     float32
+	maxDuration     float32
+	maxExtensions   int
 }
 
 type Config struct {
-	Wait        time.Duration
-	Debug       bool
-	Client      *http.Client
-	CookieStore CookieStore
-	Parallel    bool
-	EndPrompt   string
-	EndStyle    string
+	Wait          time.Duration
+	Debug         bool
+	Client        *http.Client
+	CookieStore   CookieStore
+	Parallel      bool
+	EndPrompt     string
+	EndStyle      string
+	MinDuration   time.Duration
+	MaxDuration   time.Duration
+	MaxExtensions int
 }
 
 type cookieStore struct {
@@ -84,14 +90,30 @@ func New(cfg *Config) *Client {
 			Timeout: 2 * time.Minute,
 		}
 	}
+	minDuration := defaultMinDuration
+	if cfg.MinDuration > 0 {
+		minDuration = cfg.MinDuration
+	}
+	maxDuration := defaultMaxDuration
+	if cfg.MaxDuration > 0 {
+		maxDuration = cfg.MaxDuration
+	}
+	maxExtensions := defaultMaxExtensions
+	if cfg.MaxExtensions > 0 {
+		maxExtensions = cfg.MaxExtensions
+	}
+
 	return &Client{
-		client:      client,
-		ratelimit:   ratelimit.New(wait),
-		debug:       cfg.Debug,
-		cookieStore: cfg.CookieStore,
-		parallel:    cfg.Parallel,
-		endPrompt:   cfg.EndPrompt,
-		endStyle:    cfg.EndStyle,
+		client:        client,
+		ratelimit:     ratelimit.New(wait),
+		debug:         cfg.Debug,
+		cookieStore:   cfg.CookieStore,
+		parallel:      cfg.Parallel,
+		endPrompt:     cfg.EndPrompt,
+		endStyle:      cfg.EndStyle,
+		minDuration:   float32(minDuration.Seconds()),
+		maxDuration:   float32(maxDuration.Seconds()),
+		maxExtensions: maxExtensions,
 	}
 }
 

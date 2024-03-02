@@ -198,6 +198,9 @@ func newGenerateCommand() *ffcli.Command {
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
 	fs.StringVar(&cfg.EndPrompt, "end-prompt", "[refrain]", "end prompt to use")
 	fs.StringVar(&cfg.EndStyle, "end-style", "", "end style to use")
+	fs.DurationVar(&cfg.MinDuration, "min-duration", 0, "minimum duration for the song")
+	fs.DurationVar(&cfg.MaxDuration, "max-duration", 0, "maximum duration for the song")
+	fs.IntVar(&cfg.MaxExtensions, "max-extensions", 0, "maximum number of extensions for the song")
 
 	fs.StringVar(&cfg.S3Bucket, "s3-bucket", "", "s3 bucket")
 	fs.StringVar(&cfg.S3Region, "s3-region", "", "s3 region")

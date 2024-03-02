@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/sound"
+)
+
+const (
+	defaultMinDuration   = 2*time.Minute + 5*time.Second
+	defaultMaxDuration   = 3*time.Minute + 55*time.Second
+	defaultMaxExtensions = 1
 )
 
 type generateRequest struct {
@@ -192,12 +197,6 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 	return songs, nil
 }
 
-const (
-	minDuration   = 2.0*60.0 + 5.0
-	maxDuration   = 3.0*60.0 + 55.0
-	maxExtensions = 1
-)
-
 func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 	// Initialize variables
 	clips := []clip{*clp}
@@ -273,7 +272,7 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 		}
 
 		// If the duration is over the min duration, log
-		if duration > minDuration && extensions > 0 && !ends {
+		if duration > c.minDuration && extensions > 0 && !ends {
 			var urls []string
 			for _, c := range clips {
 				urls = append(urls, c.AudioURL)
@@ -281,7 +280,7 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 			c.err("suno: didn't end: (%s)", strings.Join(urls, ", "))
 		}
 
-		if duration > minDuration {
+		if duration > c.minDuration {
 			break
 		}
 
@@ -294,7 +293,7 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 		// If the duration is over the max duration, add prompt to make it end
 		var prompt string
 		tags := originalTags
-		if duration+30.0 > minDuration {
+		if duration+30.0 > c.minDuration {
 			prompt = c.endPrompt
 			if c.endStyle != "" {
 				tags = c.endStyle
@@ -352,48 +351,6 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 		return nil, err
 	}
 	return &clips[0], nil
-}
-
-func bestClip(clips []clip, duration float32, info func(clip) (bool, time.Duration, error)) (*clip, bool, time.Duration, error) {
-	// Check if the clip fades out
-	var infos []clipInfo
-	for _, c := range clips {
-		fadeOut, firstSilence, err := info(c)
-		if err != nil {
-			return nil, false, 0, fmt.Errorf("suno: couldn't check song fade out: %w", err)
-		}
-		d := duration + c.Metadata.Duration
-		infos = append(infos, clipInfo{
-			fadesOut:     fadeOut,
-			firstSilence: firstSilence,
-			timeOK:       d >= minDuration,
-			clip:         &c,
-		})
-	}
-
-	// Choose the best clip
-	sort.Slice(infos, func(i, j int) bool {
-		switch {
-		// If both fade out, choose the one with the longest duration
-		case infos[i].fadesOut == infos[j].fadesOut:
-		// If both over the min duration, choose the one that doesn't fade out
-		case infos[i].timeOK == infos[j].timeOK && infos[i].timeOK:
-			return !infos[i].fadesOut
-		// If both under the min duration, choose the one that doesn't fade out
-		case infos[i].timeOK == infos[j].timeOK && !infos[i].timeOK:
-			return infos[i].fadesOut
-		}
-		return clips[i].Metadata.Duration > clips[j].Metadata.Duration
-	})
-	best := infos[0]
-	return best.clip, best.fadesOut, best.firstSilence, nil
-}
-
-type clipInfo struct {
-	fadesOut     bool
-	timeOK       bool
-	firstSilence time.Duration
-	clip         *clip
 }
 
 func (c *Client) waitClips(ctx context.Context, ids []string) ([]clip, error) {
