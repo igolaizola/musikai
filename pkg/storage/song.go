@@ -29,6 +29,8 @@ type Song struct {
 	Wave     string  `gorm:"not null;default:''"`
 	Tempo    float32 `gorm:"not null;default:0"`
 
+	AlbumID string `gorm:"index,not null;default:''"`
+
 	Disabled bool `gorm:"index"`
 }
 
