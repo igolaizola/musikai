@@ -137,12 +137,13 @@ func (c *Client) log(format string, args ...interface{}) {
 
 func (c *Client) err(format string, args ...interface{}) {
 	text := fmt.Sprintf(format, args...)
+	now := time.Now().UTC().Format("20060102_150405")
 	log.Println("❌", text)
 	c.lck.Lock()
 	defer c.lck.Unlock()
-	f, err := os.OpenFile("errors.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile("logs/suno.err", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		panic(fmt.Errorf("suno: couldn't open errors file: %w", err))
+		panic(fmt.Errorf("%s suno: couldn't open errors file: %w", now, err))
 	}
 	defer f.Close()
 	if _, err := f.WriteString(fmt.Sprintf("%s\n", text)); err != nil {
