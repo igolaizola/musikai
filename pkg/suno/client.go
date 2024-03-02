@@ -29,6 +29,8 @@ type Client struct {
 	cookieStore     CookieStore
 	parallel        bool
 	lck             sync.Mutex
+	endPrompt       string
+	endStyle        string
 }
 
 type Config struct {
@@ -37,6 +39,8 @@ type Config struct {
 	Client      *http.Client
 	CookieStore CookieStore
 	Parallel    bool
+	EndPrompt   string
+	EndStyle    string
 }
 
 type cookieStore struct {
@@ -86,6 +90,8 @@ func New(cfg *Config) *Client {
 		debug:       cfg.Debug,
 		cookieStore: cfg.CookieStore,
 		parallel:    cfg.Parallel,
+		endPrompt:   cfg.EndPrompt,
+		endStyle:    cfg.EndStyle,
 	}
 }
 

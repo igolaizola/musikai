@@ -196,6 +196,8 @@ func newGenerateCommand() *ffcli.Command {
 	fs.StringVar(&cfg.Style, "style", "", "style to use")
 	fs.BoolVar(&cfg.Instrumental, "instrumental", true, "instrumental song")
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
+	fs.StringVar(&cfg.EndPrompt, "end-prompt", "[refrain]", "end prompt to use")
+	fs.StringVar(&cfg.EndStyle, "end-style", "", "end style to use")
 
 	fs.StringVar(&cfg.S3Bucket, "s3-bucket", "", "s3 bucket")
 	fs.StringVar(&cfg.S3Region, "s3-region", "", "s3 region")

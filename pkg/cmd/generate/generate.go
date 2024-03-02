@@ -43,6 +43,8 @@ type Config struct {
 	Prompt       string
 	Style        string
 	Instrumental bool
+	EndPrompt    string
+	EndStyle     string
 }
 
 // Run launches the song generation process.
@@ -104,6 +106,8 @@ func Run(ctx context.Context, cfg *Config) error {
 		Client:      http.DefaultClient,
 		CookieStore: store.NewCookieStore("suno", cfg.Account),
 		Parallel:    cfg.Limit == 1,
+		EndPrompt:   cfg.EndPrompt,
+		EndStyle:    cfg.EndStyle,
 	})
 	if err := generator.Start(ctx); err != nil {
 		return fmt.Errorf("generate: couldn't start suno generator: %w", err)

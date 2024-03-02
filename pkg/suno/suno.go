@@ -295,8 +295,10 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 		var prompt string
 		tags := originalTags
 		if duration+30.0 > minDuration {
-			prompt = "[refrain]"
-			tags = "end"
+			prompt = c.endPrompt
+			if c.endStyle != "" {
+				tags = c.endStyle
+			}
 		}
 		req := &generateRequest{
 			Prompt:         prompt,
