@@ -154,7 +154,10 @@
                 <a target="_blank" x-bind:href="img.url">     
                     <img x-bind:src="img.thumbnail_url" />
                 </a>
-
+                <audio controls class="w-100 my-2" style="height: 30px;">
+                  <source x-bind:src="img.url" type="audio/mp3">
+                Your browser does not support the audio element.
+                </audio>
                 <span class="small" x-text="img.prompt"></span>
 
                 <div class="btn-group" role="group">
