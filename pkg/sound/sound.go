@@ -202,7 +202,6 @@ func (a *Analyzer) PlotWave() ([]byte, error) {
 }
 
 func createPlot(name string, data []float64, min, max float64, window float64, line float64) ([]byte, error) {
-	fmt.Println(window)
 	// Create a new plot
 	p := plot.New()
 
