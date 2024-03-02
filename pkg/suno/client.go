@@ -31,22 +31,24 @@ type Client struct {
 	lck             sync.Mutex
 	endPrompt       string
 	endStyle        string
+	endStyleAppend  bool
 	minDuration     float32
 	maxDuration     float32
 	maxExtensions   int
 }
 
 type Config struct {
-	Wait          time.Duration
-	Debug         bool
-	Client        *http.Client
-	CookieStore   CookieStore
-	Parallel      bool
-	EndPrompt     string
-	EndStyle      string
-	MinDuration   time.Duration
-	MaxDuration   time.Duration
-	MaxExtensions int
+	Wait           time.Duration
+	Debug          bool
+	Client         *http.Client
+	CookieStore    CookieStore
+	Parallel       bool
+	EndPrompt      string
+	EndStyle       string
+	EndStyleAppend bool
+	MinDuration    time.Duration
+	MaxDuration    time.Duration
+	MaxExtensions  int
 }
 
 type cookieStore struct {

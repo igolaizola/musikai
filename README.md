@@ -43,6 +43,12 @@ account: sunoaccoount
 type: jazz
 prompt: jazz
 style: nostalgic mood ambient jazz
+end-prompt: "[refrain]"
+end-style: end # leave empty to use copy the song style
+end-style-append: false # append the value instead of replacing it
+min-duration: 2m5s
+max-duration: 3m55s
+max-extensions: 2
 ```
 
 ### Filter
