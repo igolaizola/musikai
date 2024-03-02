@@ -171,9 +171,9 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 			lck.Lock()
 			defer lck.Unlock()
 			songs = append(songs, Song{
-				ID:    clp.ID,
-				Title: clp.Title,
-
+				ID:           clp.ID,
+				Title:        clp.Title,
+				Style:        clp.Metadata.Tags,
 				Audio:        clp.AudioURL,
 				Image:        clp.ImageURL,
 				Video:        clp.VideoURL,
