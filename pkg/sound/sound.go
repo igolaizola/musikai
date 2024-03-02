@@ -202,6 +202,7 @@ func (a *Analyzer) PlotWave() ([]byte, error) {
 }
 
 func createPlot(name string, data []float64, min, max float64, window float64, line float64) ([]byte, error) {
+	fmt.Println(window)
 	// Create a new plot
 	p := plot.New()
 
@@ -209,7 +210,7 @@ func createPlot(name string, data []float64, min, max float64, window float64, l
 	p.Y.Min = min
 	p.Y.Max = max
 
-	d := time.Duration(float64(len(data))*window) * time.Second
+	d := time.Duration(float64(len(data))*window*0.5) * time.Second
 	p.Title.Text = fmt.Sprintf("%s %s", name, d)
 	p.X.Label.Text = "time"
 	p.Y.Label.Text = "data"
