@@ -90,8 +90,9 @@ db-conn: postgresql://musikai:password@provider-url:26257/musikai?sslmode=verify
 
 You need to have the following software installed and available in your PATH:
 
- - ffmpeg
- - aubio
+ - [ffmpeg](https://ffmpeg.org/)
+ - [aubio](https://aubio.org/)
+ - [phaselimiter](https://github.com/ai-mastering/phaselimiter)
 
 ### Sunno
 

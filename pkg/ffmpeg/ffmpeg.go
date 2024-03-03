@@ -9,15 +9,18 @@ import (
 	"time"
 )
 
-type ffmpeg struct {
+type FFMPEG struct {
 	bin string
 }
 
-func New(bin string) *ffmpeg {
-	return &ffmpeg{bin: bin}
+func New(bin string) *FFMPEG {
+	if bin == "" {
+		bin = "ffmpeg"
+	}
+	return &FFMPEG{bin: bin}
 }
 
-func (f *ffmpeg) FadeOut(ctx context.Context, input, output string, duration time.Duration) error {
+func (f *FFMPEG) FadeOut(ctx context.Context, input, output string, duration time.Duration) error {
 	// Use a temporary file if the input and output are the same
 	tmp := output
 	if input == output {
@@ -45,7 +48,7 @@ func (f *ffmpeg) FadeOut(ctx context.Context, input, output string, duration tim
 	return nil
 }
 
-func (f *ffmpeg) Cut(ctx context.Context, input, output string, end time.Duration) error {
+func (f *FFMPEG) Cut(ctx context.Context, input, output string, end time.Duration) error {
 	// Use a temporary file if the input and output are the same
 	tmp := output
 	if input == output {

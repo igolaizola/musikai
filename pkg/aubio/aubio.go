@@ -13,6 +13,9 @@ type App struct {
 }
 
 func New(bin string) *App {
+	if bin == "" {
+		bin = "aubio"
+	}
 	return &App{bin: bin}
 }
 
