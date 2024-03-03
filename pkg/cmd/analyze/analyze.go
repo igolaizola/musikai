@@ -28,10 +28,19 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 	fmt.Println("Tempo:", tempo)
 
+	bpms, err := aub.BPM(ctx, cfg.Input)
+	if err != nil {
+		return err
+	}
+
 	a, err := sound.NewAnalyzer(cfg.Input)
 	if err != nil {
 		return err
 	}
+
+	a.BPMChanges(bpms, []float64{a.Duration().Seconds() / 2.0})
+	return nil
+
 	d, p := a.EndSilence()
 	fmt.Printf("End silence: duration: %s, position %s\n", d, p)
 

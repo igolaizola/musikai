@@ -64,6 +64,11 @@ func (s *Store) DeleteSong(ctx context.Context, id string) error {
 }
 
 func (s *Store) ListSongs(ctx context.Context, page, size int, orderBy string, filter ...Filter) ([]*Song, error) {
+	filter = append(filter, Where("disabled = ?", false))
+	return s.ListAllSongs(ctx, page, size, orderBy, filter...)
+}
+
+func (s *Store) ListAllSongs(ctx context.Context, page, size int, orderBy string, filter ...Filter) ([]*Song, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -71,7 +76,6 @@ func (s *Store) ListSongs(ctx context.Context, page, size int, orderBy string, f
 	vs := []*Song{}
 
 	q := s.db.Offset(offset).Limit(size)
-	q = q.Where("disabled = ?", false)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}

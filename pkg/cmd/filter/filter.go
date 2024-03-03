@@ -96,12 +96,13 @@ func Serve(ctx context.Context, cfg *Config) error {
 		}
 		filters := []storage.Filter{
 			// TODO: Add filters
+			storage.Where("disabled = ?", false),
 		}
 		if query := r.URL.Query().Get("query"); query != "" {
 			fmt.Println("query:", query)
 			filters = append(filters, storage.Where(fmt.Sprintf("songs.type LIKE '%s'", query)))
 		}
-		songs, err := store.ListSongs(ctx, page, size, "", filters...)
+		songs, err := store.ListAllSongs(ctx, page, size, "", filters...)
 		if err != nil {
 			log.Println("couldn't list videos:", err)
 			http.Error(w, fmt.Sprintf("couldn't list videos: %v", err), http.StatusInternalServerError)

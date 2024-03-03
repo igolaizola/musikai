@@ -135,6 +135,73 @@ func calculateRMS(samples []float64) float64 {
 
 const silenceThreshold = 0.002
 
+type Silence struct {
+	Duration time.Duration
+	Position time.Duration
+}
+
+func (a *Analyzer) Silences() []Silence {
+	windowSize := 50 * time.Millisecond
+	rms := a.RMS(windowSize)
+	inSilence := false
+	position := -1
+	duration := 0
+
+	silenceDurationThreshold := int((1 * time.Second).Seconds() / windowSize.Seconds())
+
+	var silences []Silence
+
+	for i, v := range rms {
+		if v < silenceThreshold {
+			if !inSilence {
+				inSilence = true
+				position = i
+				duration = 1
+				continue
+			} else {
+				duration++
+			}
+		} else {
+			if inSilence && duration >= silenceDurationThreshold {
+				dur := time.Duration(duration) * windowSize
+				pos := time.Duration(position) * windowSize
+				silences = append(silences, Silence{Duration: dur, Position: pos})
+			}
+			inSilence = false
+			duration = 0
+		}
+	}
+
+	if inSilence && duration >= silenceDurationThreshold {
+		dur := time.Duration(duration) * windowSize
+		pos := time.Duration(position) * windowSize
+		silences = append(silences, Silence{Duration: dur, Position: pos})
+	}
+	return silences
+}
+
+func (a *Analyzer) BPMChanges(beats []float64, splits []float64) {
+	i := 0
+	bpms := make([]float64, len(splits)+1)
+	for _, pos := range beats {
+		if i < len(splits) && pos >= splits[i] {
+			i++
+		}
+		bpms[i]++
+	}
+	splits = append([]float64{0}, append(splits, a.duration.Seconds())...)
+	for i, v := range bpms {
+		bpms[i] = v * 60.0 / (splits[i+1] - splits[i])
+	}
+	for i, v := range bpms {
+		fmt.Printf("(%.1f, %.1f) %.1f\n", splits[i], splits[i+1], v)
+	}
+
+	fmt.Println(a.duration.Seconds())
+	fmt.Println("BPMs", len(bpms))
+	fmt.Println("Samples", len(a.mono))
+}
+
 func (a *Analyzer) FirstSilence() (time.Duration, time.Duration) {
 	windowSize := 50 * time.Millisecond
 	rms := a.RMS(windowSize)
