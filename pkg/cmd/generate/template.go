@@ -21,12 +21,13 @@ func (t template) String() string {
 
 func nextTemplate() template {
 	var opts []string
-	opts = append(opts, options(100, "classical")...)
-	opts = append(opts, options(100, "jazz")...)
-	opts = append(opts, options(50, "post-rock")...)
+	opts = append(opts, options(100, "lullaby")...)
+	opts = append(opts, options(80, "classical")...)
+	opts = append(opts, options(80, "jazz")...)
 	opts = append(opts, options(50, "post-metal")...)
+	opts = append(opts, options(50, "electronic dance")...)
+	opts = append(opts, options(20, "post-rock")...)
 	opts = append(opts, options(10, "post-punk")...)
-	opts = append(opts, options(100, "electronic dance")...)
 	opts = append(opts, options(10, "bluegrass")...)
 	opts = append(opts, options(10, "ambient")...)
 	opts = append(opts, options(10, "film score")...)
