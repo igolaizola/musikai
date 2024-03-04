@@ -97,10 +97,20 @@ func (c *Client) sessionID(ctx context.Context) (string, error) {
 	if _, err := c.do(ctx, "GET", u, nil, &resp); err != nil {
 		return "", fmt.Errorf("suno: couldn't get client: %w", err)
 	}
-	if resp.Response.LastActiveSessionID == "" {
+	sessionID := resp.Response.LastActiveSessionID
+	if sessionID == "" {
+		for _, s := range resp.Response.Sessions {
+			if s.Status == "expired" {
+				continue
+			}
+			sessionID = s.ID
+			break
+		}
+	}
+	if sessionID == "" {
 		return "", errors.New("suno: empty session id")
 	}
-	return resp.Response.LastActiveSessionID, nil
+	return sessionID, nil
 }
 
 type clerkTokenResponse struct {
