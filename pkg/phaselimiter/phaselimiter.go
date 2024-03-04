@@ -93,7 +93,7 @@ func (p *PhaseLimiter) Master(ctx context.Context, input string, output string) 
 		tmp = fmt.Sprintf("%s.tmp%s", input, filepath.Ext(input))
 	}
 	// Encode the wav file to mp3
-	if err := encode(ctx, p.ffmpeg, wav, tmp, 0); err != nil {
+	if err := encode(ctx, p.ffmpeg, wav, tmp); err != nil {
 		return fmt.Errorf("phaselimiter: couldn't encode: %w", err)
 	}
 	// Move the temporary file to the output path
@@ -116,14 +116,14 @@ func formatBool(x bool) string {
 	return "false"
 }
 
-func encode(ctx context.Context, bin, input, output string, quality int) error {
+func encode(ctx context.Context, bin, input, output string) error {
 	if ext := filepath.Ext(input); ext != ".wav" {
 		return fmt.Errorf("ffmpeg: input file must be a wav file: %s", ext)
 	}
 	if ext := filepath.Ext(output); ext != ".mp3" {
 		return fmt.Errorf("ffmpeg: output file must be a mp3 file: %s", ext)
 	}
-	cmd := exec.CommandContext(ctx, bin, "-y", "-i", input, "-codec:a", "libmp3lame", "-qscale:a", fmt.Sprintf("%d", quality), output)
+	cmd := exec.CommandContext(ctx, bin, "-y", "-i", input, "-codec:a", "libmp3lame", "-b:a", "320k", "-ac", "2", output)
 	data, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := string(data)
