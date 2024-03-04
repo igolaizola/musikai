@@ -222,7 +222,7 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 				return nil, fmt.Errorf("suno: couldn't get silences: %w", err)
 			}
 			var firstSilencePosition, endSilenceDuration time.Duration
-			if len(silences) == 0 {
+			if len(silences) > 0 {
 				for _, s := range silences {
 					if s.Start.Seconds() > float64(c.Metadata.Duration*0.70) {
 						firstSilencePosition = s.Start
