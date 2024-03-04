@@ -21,6 +21,8 @@ type Config struct {
 	DBType string
 	DBConn string
 	Port   int
+
+	Disabled bool
 }
 
 //go:embed web/*
@@ -96,7 +98,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 		}
 		filters := []storage.Filter{
 			// TODO: Add filters
-			storage.Where("disabled = ?", false),
+			storage.Where("disabled = ?", cfg.Disabled),
 		}
 		if query := r.URL.Query().Get("query"); query != "" {
 			fmt.Println("query:", query)

@@ -227,15 +227,19 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 		if err != nil {
 			return fmt.Errorf("generate: couldn't download song audio: %w", err)
 		}
+		var path string
 		if output != "" {
-			path := filepath.Join(output, fmt.Sprintf("%s.mp3", s.ID))
-			if err := os.WriteFile(path, b, 0644); err != nil {
-				return fmt.Errorf("generate: couldn't save song audio: %w", err)
-			}
+			path = filepath.Join(output, fmt.Sprintf("%s.mp3", s.ID))
+		} else {
+			path = filepath.Join(os.TempDir(), fmt.Sprintf("%s.mp3", s.ID))
+			defer func() { _ = os.Remove(path) }()
+		}
+		if err := os.WriteFile(path, b, 0644); err != nil {
+			return fmt.Errorf("generate: couldn't save song audio: %w", err)
 		}
 
 		// Generate the wave image
-		a, err := sound.NewAnalyzerBytes(b)
+		a, err := sound.NewAnalyzer(path, "")
 		if err != nil {
 			return fmt.Errorf("generate: couldn't create analyzer: %w", err)
 		}

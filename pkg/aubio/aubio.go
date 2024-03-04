@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type App struct {
@@ -83,4 +84,68 @@ func (a *App) Tempo(ctx context.Context, input string) (float64, error) {
 		return 0, fmt.Errorf("aubio: no tempo found")
 	}
 	return tempo, nil
+}
+
+func (a *App) Fragments(ctx context.Context, silence bool, input string, duration time.Duration, thresholdDB int, thresholdTime time.Duration) ([][2]time.Duration, error) {
+	if thresholdDB == 0 {
+		thresholdDB = -70
+	}
+	cmd := exec.CommandContext(ctx, a.bin, "quiet", "-i", input, "-s", fmt.Sprintf("%d", thresholdDB))
+	data, err := cmd.Output()
+	if err != nil {
+		msg := string(data)
+		return nil, fmt.Errorf("aubio: couldn't get silences: %w: %s", err, msg)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("aubio: no silences found")
+	}
+	if silence != isSilence(lines[0]) {
+		lines = lines[1:]
+	}
+
+	var fragments [][2]time.Duration
+	for i := 0; i < len(lines); i += 2 {
+		t0, err := toTimestamp(lines[i])
+		if err != nil {
+			return nil, fmt.Errorf("aubio: couldn't parse entry: %w", err)
+		}
+		var t1 time.Duration
+		if i+1 >= len(lines) {
+			t1 = duration
+		} else {
+			t1, err = toTimestamp(lines[i+1])
+			if err != nil {
+				return nil, fmt.Errorf("aubio: couldn't parse entry: %w", err)
+			}
+		}
+		if t1-t0 > thresholdTime {
+			fragments = append(fragments, [2]time.Duration{t0, t1})
+		}
+	}
+	return fragments, nil
+}
+
+func isSilence(line string) bool {
+	return strings.HasPrefix(line, "QUIET: ")
+}
+
+func toTimestamp(line string) (time.Duration, error) {
+	line = strings.TrimSpace(line)
+	split := strings.Split(line, ": ")
+	if len(split) != 2 {
+		return 0, fmt.Errorf("invalid line: %s", line)
+	}
+	// Check entry type
+	if split[0] != "QUIET" && split[0] != "NOISY" {
+		return 0, fmt.Errorf("invalid type: %s", split[0])
+	}
+
+	// Parse timestamp.
+	f, err := strconv.ParseFloat(split[1], 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid duration: %w", err)
+	}
+	ts := time.Duration(f * float64(time.Second))
+	return ts, nil
 }

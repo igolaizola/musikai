@@ -89,25 +89,30 @@ func GenerateSong(ctx context.Context, cfg *Config, prompt, style, title string,
 		if err := download(ctx, httpClient, song.Audio, path); err != nil {
 			return fmt.Errorf("couldn't download song: %w", err)
 		}
-		a, err := sound.NewAnalyzer(path)
+		a, err := sound.NewAnalyzer(path, "")
 		if err != nil {
 			return fmt.Errorf("couldn't create analyzer: %w", err)
 		}
-		d, p := a.FirstSilence()
-		if d > 0 {
+		silences, err := a.Silences(ctx)
+		if err != nil {
+			return fmt.Errorf("couldn't get silences: %w", err)
+		}
+		var final *sound.Fragment
+		if len(silences) > 0 {
+			last := silences[len(silences)-1]
+			if last.Final {
+				final = &last
+			}
+		}
+		if final != nil {
 			log.Println("cutting song...")
-			p = p + 1*time.Second
+			p := final.End + 1*time.Second
 			if err := ffm.Cut(ctx, path, path, p); err != nil {
 				return fmt.Errorf("couldn't cut song: %w", err)
 			}
-			a, err = sound.NewAnalyzer(path)
-			if err != nil {
-				return fmt.Errorf("couldn't create analyzer: %w", err)
-			}
-		}
-		if !a.HasFadeOut() {
+		} else {
 			log.Println("fading out song...")
-			pos := a.Duration() - 2*time.Second
+			pos := a.Duration() - 5*time.Second
 			if err := ffm.FadeOut(ctx, path, path, pos); err != nil {
 				return fmt.Errorf("couldn't fade out song: %w", err)
 			}

@@ -208,27 +208,40 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 		// Choose the best clip
 		var best string
 		lookup := map[string]struct {
-			firstSilence time.Duration
-			endSilence   time.Duration
-			clip         *clip
+			firstSilencePosition time.Duration
+			clip                 *clip
 		}{}
 
 		for _, c := range clips {
-			a, err := sound.NewAnalyzer(c.AudioURL)
+			a, err := sound.NewAnalyzer(c.AudioURL, "")
 			if err != nil {
 				return nil, fmt.Errorf("suno: couldn't create analyzer: %w", err)
 			}
+			silences, err := a.Silences(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("suno: couldn't get silences: %w", err)
+			}
+			var firstSilencePosition, endSilenceDuration time.Duration
+			if len(silences) == 0 {
+				for _, s := range silences {
+					if s.Start.Seconds() > float64(c.Metadata.Duration*0.70) {
+						firstSilencePosition = s.Start
+						break
+					}
+				}
+				last := silences[len(silences)-1]
+				if last.Final {
+					endSilenceDuration = last.Duration
+				}
+			}
+
 			// Add to lookup
-			_, firstPos := a.FirstSilence()
-			endSilence, _ := a.EndSilence()
 			lookup[c.ID] = struct {
-				firstSilence time.Duration
-				endSilence   time.Duration
-				clip         *clip
+				firstSilencePosition time.Duration
+				clip                 *clip
 			}{
-				firstSilence: firstPos,
-				endSilence:   endSilence,
-				clip:         &c,
+				firstSilencePosition: firstSilencePosition,
+				clip:                 &c,
 			}
 
 			// Check if the clip ends
@@ -236,11 +249,11 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 				best = c.ID
 				break
 			}
-			if a.HasFadeOut() {
+			if endSilenceDuration > 0 {
 				best = c.ID
 				break
 			}
-			if endSilence > 500*time.Millisecond {
+			if a.HasFadeOut() {
 				best = c.ID
 				break
 			}
@@ -261,14 +274,9 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 		duration += clp.Metadata.Duration
 
 		continueAt := clp.Metadata.Duration
-		firstSilence = lookup[clp.ID].firstSilence
+		firstSilence = lookup[clp.ID].firstSilencePosition
 		if firstSilence > 0 {
 			continueAt = float32(firstSilence.Seconds() - 1.0)
-		}
-		if firstSilence > 0 && firstSilence.Seconds() < float64(clp.Metadata.Duration*0.5) && extensions == 0 {
-			err := fmt.Errorf("suno: first silence too short: (%s, %s)", firstSilence, clp.AudioURL)
-			c.err("%v", err)
-			return nil, err
 		}
 
 		// If the duration is over the min duration, log

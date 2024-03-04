@@ -235,6 +235,7 @@ func newFilterCommand() *ffcli.Command {
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
 	fs.IntVar(&cfg.Port, "port", 1337, "port to listen on")
+	fs.BoolVar(&cfg.Disabled, "disabled", false, "show disabled songs")
 
 	return &ffcli.Command{
 		Name:       cmd,

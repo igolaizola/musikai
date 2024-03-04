@@ -2,17 +2,18 @@ package sound
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image/color"
 	"io"
 	"math"
 	"net/http"
 	"os"
-	"slices"
 	"strings"
 	"time"
 
 	mp3 "github.com/hajimehoshi/go-mp3"
+	"github.com/igolaizola/musikai/pkg/aubio"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
@@ -23,26 +24,16 @@ type Analyzer struct {
 	mono     []float64
 	rate     int
 	duration time.Duration
+	source   string
+	aubio    *aubio.App
 }
 
-func NewAnalyzerBytes(b []byte) (*Analyzer, error) {
-	// Decode MP3 to PCM
-	decoder, err := mp3.NewDecoder(bytes.NewReader(b))
-	if err != nil {
-		return nil, fmt.Errorf("sound: couldn't decode mp3: %w", err)
-	}
-	return newAnalyzer(decoder)
-}
-
-func NewAnalyzer(u string) (*Analyzer, error) {
-	decoder, err := toDecoder(u)
+func NewAnalyzer(src, aubioBin string) (*Analyzer, error) {
+	decoder, err := toDecoder(src)
 	if err != nil {
 		return nil, fmt.Errorf("sound: couldn't create decoder: %w", err)
 	}
-	return newAnalyzer(decoder)
-}
 
-func newAnalyzer(decoder *mp3.Decoder) (*Analyzer, error) {
 	var stereo [2][]float64 // Assume stereo audio
 	buf := make([]byte, 2)  // 2 bytes per sample for 16-bit audio
 	var i int
@@ -71,10 +62,12 @@ func newAnalyzer(decoder *mp3.Decoder) (*Analyzer, error) {
 
 	duration := time.Duration(float64(len(mono)) / float64(decoder.SampleRate()) * float64(time.Second))
 	return &Analyzer{
+		source:   src,
 		stereo:   stereo,
 		mono:     mono,
 		rate:     decoder.SampleRate(),
 		duration: duration,
+		aubio:    aubio.New(aubioBin),
 	}, nil
 }
 
@@ -133,51 +126,36 @@ func calculateRMS(samples []float64) float64 {
 	return math.Sqrt(meanSquare)
 }
 
-const silenceThreshold = 0.002
-
-type Silence struct {
+type Fragment struct {
+	Start    time.Duration
+	End      time.Duration
 	Duration time.Duration
-	Position time.Duration
+	Final    bool
 }
 
-func (a *Analyzer) Silences() []Silence {
-	windowSize := 50 * time.Millisecond
-	rms := a.RMS(windowSize)
-	inSilence := false
-	position := -1
-	duration := 0
+func (a *Analyzer) Silences(ctx context.Context) ([]Fragment, error) {
+	return a.fragments(ctx, true, 1*time.Second)
+}
 
-	silenceDurationThreshold := int((1 * time.Second).Seconds() / windowSize.Seconds())
+func (a *Analyzer) Noises(ctx context.Context) ([]Fragment, error) {
+	return a.fragments(ctx, false, 10*time.Second)
+}
 
-	var silences []Silence
-
-	for i, v := range rms {
-		if v < silenceThreshold {
-			if !inSilence {
-				inSilence = true
-				position = i
-				duration = 1
-				continue
-			} else {
-				duration++
-			}
-		} else {
-			if inSilence && duration >= silenceDurationThreshold {
-				dur := time.Duration(duration) * windowSize
-				pos := time.Duration(position) * windowSize
-				silences = append(silences, Silence{Duration: dur, Position: pos})
-			}
-			inSilence = false
-			duration = 0
-		}
+func (a *Analyzer) fragments(ctx context.Context, silence bool, timeThreshold time.Duration) ([]Fragment, error) {
+	ss, err := a.aubio.Fragments(ctx, silence, a.source, a.duration, -70, timeThreshold)
+	if err != nil {
+		return nil, fmt.Errorf("sound: couldn't get silences: %w", err)
 	}
-
-	if inSilence && duration >= silenceDurationThreshold {
-		dur := time.Duration(duration) * windowSize
-		pos := time.Duration(position) * windowSize
-		silences = append(silences, Silence{Duration: dur, Position: pos})
+	var fragments []Fragment
+	for _, s := range ss {
+		fragments = append(fragments, Fragment{
+			Start:    s[0],
+			End:      s[1],
+			Duration: s[1] - s[0],
+			Final:    s[1] == a.duration,
+		})
 	}
-	return silences
+	return fragments, nil
 }
 
 func (a *Analyzer) BPMChanges(beats []float64, splits []float64) {
@@ -200,60 +178,6 @@ func (a *Analyzer) BPMChanges(beats []float64, splits []float64) {
 	fmt.Println(a.duration.Seconds())
 	fmt.Println("BPMs", len(bpms))
 	fmt.Println("Samples", len(a.mono))
-}
-
-func (a *Analyzer) FirstSilence() (time.Duration, time.Duration) {
-	windowSize := 50 * time.Millisecond
-	rms := a.RMS(windowSize)
-	inSilence := false
-	position := -1
-	duration := 0
-
-	silenceDurationThreshold := int((1 * time.Second).Seconds() / windowSize.Seconds())
-
-	for i, v := range rms {
-		if v < silenceThreshold {
-			if !inSilence {
-				inSilence = true
-				position = i
-				duration = 1
-				continue
-			} else {
-				duration++
-			}
-		} else {
-			if inSilence && duration >= silenceDurationThreshold {
-				break
-			}
-			inSilence = false
-			duration = 0
-		}
-	}
-
-	if inSilence && duration >= silenceDurationThreshold {
-		dur := time.Duration(duration) * windowSize
-		pos := time.Duration(position) * windowSize
-		return dur, pos
-	}
-	return 0, 0
-}
-
-func (a *Analyzer) EndSilence() (time.Duration, time.Duration) {
-	rms := a.RMS(50 * time.Millisecond)
-	// Reverse the slice
-	slices.Reverse(rms)
-
-	var duration time.Duration
-	for i, v := range rms {
-		if v < silenceThreshold {
-			continue
-		}
-		duration = time.Duration(i) * 50 * time.Millisecond
-		break
-	}
-	full := time.Duration(len(rms)) * 50 * time.Millisecond
-	position := full - duration
-	return duration, position
 }
 
 func (a *Analyzer) PlotRMS() ([]byte, error) {
