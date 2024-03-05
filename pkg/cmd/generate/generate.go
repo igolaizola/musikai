@@ -3,18 +3,13 @@ package generate
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/igolaizola/musikai/pkg/filestorage/s3"
-	"github.com/igolaizola/musikai/pkg/sound"
 	"github.com/igolaizola/musikai/pkg/sound/aubio"
 	"github.com/igolaizola/musikai/pkg/storage"
 	"github.com/igolaizola/musikai/pkg/suno"
@@ -31,18 +26,13 @@ type Config struct {
 	WaitMax     time.Duration
 	Limit       int
 	Proxy       string
-	Output      string
-
-	S3Bucket string
-	S3Region string
-	S3Key    string
-	S3Secret string
 
 	Account      string
 	Type         string
 	Prompt       string
 	Style        string
 	Instrumental bool
+	Notes        string
 
 	EndLyrics      string
 	EndStyle       string
@@ -72,18 +62,6 @@ func Run(ctx context.Context, cfg *Config) error {
 
 	if _, err := aubio.Version(ctx); err != nil {
 		return fmt.Errorf("generate: couldn't get aubio version: %w", err)
-	}
-
-	if cfg.Output != "" {
-		// Create output folder if it doesn't exist.
-		if err := os.MkdirAll(cfg.Output, 0755); err != nil {
-			return fmt.Errorf("generate: couldn't create output folder: %w", err)
-		}
-	}
-
-	fstore := s3.New(cfg.S3Key, cfg.S3Secret, cfg.S3Region, cfg.S3Bucket, cfg.Debug)
-	if err := fstore.Start(ctx); err != nil {
-		return fmt.Errorf("generate: couldn't start s3 store: %w", err)
 	}
 
 	store, err := storage.New(cfg.DBType, cfg.DBConn, cfg.Debug)
@@ -213,7 +191,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			go func() {
 				defer wg.Done()
 				debug("generate: start %s", tmpl)
-				err := generate(ctx, generator, store, fstore, httpClient, cfg.Output, tmpl)
+				err := generate(ctx, generator, store, tmpl, cfg.Notes)
 				if err != nil {
 					log.Println(err)
 				}
@@ -224,7 +202,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func generate(ctx context.Context, generator *suno.Client, store *storage.Store, fstore *s3.Store, client *http.Client, output string, t template) error {
+func generate(ctx context.Context, generator *suno.Client, store *storage.Store, t template, notes string) error {
 	// Generate the songs.
 	songs, err := generator.Generate(ctx, t.Prompt, t.Style, t.Title, t.Instrumental)
 	if err != nil {
@@ -233,43 +211,6 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 
 	// Save the generated songs to the database.
 	for _, s := range songs {
-		// Download the audio file
-		b, err := download(ctx, client, s.Audio)
-		if err != nil {
-			return fmt.Errorf("generate: couldn't download song audio: %w", err)
-		}
-		var path string
-		if output != "" {
-			path = filepath.Join(output, fmt.Sprintf("%s.mp3", s.ID))
-		} else {
-			path = filepath.Join(os.TempDir(), fmt.Sprintf("%s.mp3", s.ID))
-			defer func() { _ = os.Remove(path) }()
-		}
-		if err := os.WriteFile(path, b, 0644); err != nil {
-			return fmt.Errorf("generate: couldn't save song audio: %w", err)
-		}
-
-		// Generate the wave image
-		a, err := sound.NewAnalyzer(path)
-		if err != nil {
-			return fmt.Errorf("generate: couldn't create analyzer: %w", err)
-		}
-		waveBytes, err := a.PlotWave()
-		if err != nil {
-			return fmt.Errorf("generate: couldn't plot wave: %w", err)
-		}
-		waveName := fmt.Sprintf("%s-wave.jpg", s.ID)
-		if err := fstore.SetImage(ctx, waveName, waveBytes); err != nil {
-			return fmt.Errorf("generate: couldn't save wave image to s3: %w", err)
-		}
-		waveURL := fstore.URL(waveName)
-
-		// Get the tempo
-		tempo, err := aubio.Tempo(ctx, s.Audio)
-		if err != nil {
-			return fmt.Errorf("generate: couldn't get tempo: %w", err)
-		}
-
 		if err := store.SetSong(ctx, &storage.Song{
 			ID:        ulid.Make().String(),
 			Type:      t.Type,
@@ -280,29 +221,10 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 			SunoAudio: s.Audio,
 			SunoImage: s.Image,
 			SunoTitle: s.Title,
-			Wave:      waveURL,
-			Tempo:     float32(tempo),
+			Notes:     notes,
 		}); err != nil {
 			return fmt.Errorf("generate: couldn't save song to database: %w", err)
 		}
 	}
 	return nil
-}
-
-func download(ctx context.Context, client *http.Client, url string) ([]byte, error) {
-	// Create request
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't create request: %w", err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't download video: %w", err)
-	}
-	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't read response body: %w", err)
-	}
-	return b, nil
 }
