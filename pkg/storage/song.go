@@ -15,6 +15,7 @@ type Song struct {
 	UpdatedAt time.Time
 
 	Type string `gorm:"not null;default:''"`
+	Notes string `gorm:"not null;default:''"`
 
 	Prompt       string `gorm:"not null;default:''"`
 	Style        string `gorm:"not null;default:''"`
@@ -29,10 +30,12 @@ type Song struct {
 	Wave     string  `gorm:"not null;default:''"`
 	Tempo    float32 `gorm:"not null;default:0"`
 	Flags    string  `gorm:"not null;default:''"`
+	Master  string  `gorm:"not null;default:''"`
 
 	AlbumID string `gorm:"index,not null;default:''"`
 
-	Disabled bool `gorm:"index"`
+	Processed bool `gorm:"index"`
+	Disabled  bool `gorm:"index"`
 }
 
 func (s *Store) GetSong(ctx context.Context, id string) (*Song, error) {

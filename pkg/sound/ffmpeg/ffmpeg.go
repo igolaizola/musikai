@@ -9,25 +9,19 @@ import (
 	"time"
 )
 
-type FFMPEG struct {
-	bin string
-}
+// BinPath is the path to the ffmpeg binary
+var BinPath = "ffmpeg"
 
-func New(bin string) *FFMPEG {
-	if bin == "" {
-		bin = "ffmpeg"
-	}
-	return &FFMPEG{bin: bin}
-}
-
-func (f *FFMPEG) FadeOut(ctx context.Context, input, output string, duration time.Duration) error {
+func FadeOut(ctx context.Context, input, output string, totalDuration, fadeOutDuration time.Duration) error {
 	// Use a temporary file if the input and output are the same
 	tmp := output
 	if input == output {
 		tmp = fmt.Sprintf("%s.tmp%s", input, filepath.Ext(input))
 	}
 
-	cmd := exec.CommandContext(ctx, f.bin, "-y", "-i", input, "-af", fmt.Sprintf("afade=t=out:st=0:d=%d", +int(duration.Seconds())), tmp)
+	fd := fadeOutDuration.Seconds()
+	st := totalDuration.Seconds() - fadeOutDuration.Seconds()
+	cmd := exec.CommandContext(ctx, BinPath, "-y", "-i", input, "-af", fmt.Sprintf("afade=t=out:st=%f:d=%f", st, fd), tmp)
 	data, err := cmd.CombinedOutput()
 	if err != nil {
 		if tmp != output {
@@ -48,14 +42,14 @@ func (f *FFMPEG) FadeOut(ctx context.Context, input, output string, duration tim
 	return nil
 }
 
-func (f *FFMPEG) Cut(ctx context.Context, input, output string, end time.Duration) error {
+func Cut(ctx context.Context, input, output string, end time.Duration) error {
 	// Use a temporary file if the input and output are the same
 	tmp := output
 	if input == output {
 		tmp = fmt.Sprintf("%s.tmp%s", input, filepath.Ext(input))
 	}
 
-	cmd := exec.CommandContext(ctx, f.bin, "-y", "-i", input, "-to", toText(end), "-acodec", "copy", tmp)
+	cmd := exec.CommandContext(ctx, BinPath, "-y", "-i", input, "-to", toText(end), "-acodec", "copy", tmp)
 	data, err := cmd.CombinedOutput()
 	if err != nil {
 		if tmp != output {

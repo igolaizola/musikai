@@ -16,7 +16,7 @@ import (
 const (
 	defaultMinDuration   = 2*time.Minute + 5*time.Second
 	defaultMaxDuration   = 3*time.Minute + 55*time.Second
-	defaultMaxExtensions = 1
+	defaultMaxExtensions = 2
 )
 
 type generateRequest struct {
@@ -200,7 +200,7 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 	// Initialize variables
 	clips := []clip{*clp}
-	originalTags := clp.Metadata.Tags
+	originalStyle := clp.Metadata.Tags
 	var duration float32
 	var extensions int
 
@@ -213,7 +213,7 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 		}{}
 
 		for _, c := range clips {
-			a, err := sound.NewAnalyzer(c.AudioURL, "")
+			a, err := sound.NewAnalyzer(c.AudioURL)
 			if err != nil {
 				return nil, fmt.Errorf("suno: couldn't create analyzer: %w", err)
 			}
@@ -295,25 +295,32 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 		// If we are extending the song, recalculate duration
 		duration = prevDuration + continueAt
 
+		// If the duration is over the max duration, add prompt to make it end
+		var lyrics string
+		style := originalStyle
+		if duration+30.0 > c.minDuration {
+			switch extensions {
+			case 0:
+				lyrics = c.endLyrics
+				if c.endStyle != "" {
+					if c.endStyleAppend {
+						style += c.endStyle
+					} else {
+						style = c.endStyle
+					}
+				}
+			default:
+				lyrics = c.forceEndLyrics
+				style = c.forceEndStyle
+			}
+		}
+
 		// Generate next fragment
 		extensions++
 
-		// If the duration is over the max duration, add prompt to make it end
-		var prompt string
-		tags := originalTags
-		if duration+30.0 > c.minDuration {
-			prompt = c.endPrompt
-			if c.endStyle != "" {
-				if c.endStyleAppend {
-					tags += c.endStyle
-				} else {
-					tags = c.endStyle
-				}
-			}
-		}
 		req := &generateRequest{
-			Prompt:         prompt,
-			Tags:           tags,
+			Prompt:         lyrics,
+			Tags:           style,
 			MV:             "chirp-v3-alpha",
 			Title:          clp.Title,
 			ContinueClipID: &clp.ID,

@@ -29,9 +29,11 @@ type Client struct {
 	cookieStore     CookieStore
 	parallel        bool
 	lck             sync.Mutex
-	endPrompt       string
+	endLyrics       string
 	endStyle        string
 	endStyleAppend  bool
+	forceEndLyrics  string
+	forceEndStyle   string
 	minDuration     float32
 	maxDuration     float32
 	maxExtensions   int
@@ -43,9 +45,11 @@ type Config struct {
 	Client         *http.Client
 	CookieStore    CookieStore
 	Parallel       bool
-	EndPrompt      string
+	EndLyrics      string
 	EndStyle       string
 	EndStyleAppend bool
+	ForceEndLyrics string
+	ForceEndStyle  string
 	MinDuration    time.Duration
 	MaxDuration    time.Duration
 	MaxExtensions  int
@@ -111,8 +115,11 @@ func New(cfg *Config) *Client {
 		debug:         cfg.Debug,
 		cookieStore:   cfg.CookieStore,
 		parallel:      cfg.Parallel,
-		endPrompt:     cfg.EndPrompt,
-		endStyle:      cfg.EndStyle,
+		endLyrics:    cfg.EndLyrics,
+		endStyle:     cfg.EndStyle,
+		endStyleAppend: cfg.EndStyleAppend,
+		forceEndLyrics: cfg.ForceEndLyrics,
+		forceEndStyle:  cfg.ForceEndStyle,
 		minDuration:   float32(minDuration.Seconds()),
 		maxDuration:   float32(maxDuration.Seconds()),
 		maxExtensions: maxExtensions,

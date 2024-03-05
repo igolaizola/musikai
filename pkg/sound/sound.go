@@ -13,7 +13,7 @@ import (
 	"time"
 
 	mp3 "github.com/hajimehoshi/go-mp3"
-	"github.com/igolaizola/musikai/pkg/aubio"
+	"github.com/igolaizola/musikai/pkg/sound/aubio"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
@@ -25,10 +25,9 @@ type Analyzer struct {
 	rate     int
 	duration time.Duration
 	source   string
-	aubio    *aubio.App
 }
 
-func NewAnalyzer(src, aubioBin string) (*Analyzer, error) {
+func NewAnalyzer(src string) (*Analyzer, error) {
 	decoder, err := toDecoder(src)
 	if err != nil {
 		return nil, fmt.Errorf("sound: couldn't create decoder: %w", err)
@@ -67,7 +66,6 @@ func NewAnalyzer(src, aubioBin string) (*Analyzer, error) {
 		mono:     mono,
 		rate:     decoder.SampleRate(),
 		duration: duration,
-		aubio:    aubio.New(aubioBin),
 	}, nil
 }
 
@@ -142,7 +140,7 @@ func (a *Analyzer) Noises(ctx context.Context) ([]Fragment, error) {
 }
 
 func (a *Analyzer) fragments(ctx context.Context, silence bool, timeThreshold time.Duration) ([]Fragment, error) {
-	ss, err := a.aubio.Fragments(ctx, silence, a.source, a.duration, -70, timeThreshold)
+	ss, err := aubio.Fragments(ctx, silence, a.source, a.duration, -70, timeThreshold)
 	if err != nil {
 		return nil, fmt.Errorf("sound: couldn't get silences: %w", err)
 	}
@@ -158,7 +156,60 @@ func (a *Analyzer) fragments(ctx context.Context, silence bool, timeThreshold ti
 	return fragments, nil
 }
 
-func (a *Analyzer) BPMChanges(beats []float64, splits []float64) {
+const bpmThreshold = 10.0
+
+func (a *Analyzer) BPMChange(beats []float64, splits []float64) bool {
+	bpms := a.BPMs(beats, splits)
+	if len(bpms) < 2 {
+		return false
+	}
+	var sum float64
+	for _, bpm := range bpms {
+		sum += bpm
+	}
+	avg := sum / float64(len(bpms))
+	for _, bpm := range bpms {
+		if math.Abs(bpm-avg) > bpmThreshold {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Analyzer) FragmentBPMChange(beats []float64, fragments []Fragment) bool {
+	bpms := a.FragmentBPMs(beats, fragments)
+	if len(bpms) < 2 {
+		return false
+	}
+	var sum float64
+	for _, bpm := range bpms {
+		sum += bpm
+	}
+	avg := sum / float64(len(bpms))
+	for _, bpm := range bpms {
+		if math.Abs(bpm-avg) > bpmThreshold {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Analyzer) FragmentBPMs(beats []float64, fragments []Fragment) []float64 {
+	bpms := make([]float64, len(fragments))
+	for _, pos := range beats {
+		for i, f := range fragments {
+			if pos >= f.Start.Seconds() && pos < f.End.Seconds() {
+				bpms[i]++
+			}
+		}
+	}
+	for i, v := range bpms {
+		bpms[i] = v * 60.0 / fragments[i].Duration.Seconds()
+	}
+	return bpms
+}
+
+func (a *Analyzer) BPMs(beats []float64, splits []float64) []float64 {
 	i := 0
 	bpms := make([]float64, len(splits)+1)
 	for _, pos := range beats {
@@ -171,13 +222,7 @@ func (a *Analyzer) BPMChanges(beats []float64, splits []float64) {
 	for i, v := range bpms {
 		bpms[i] = v * 60.0 / (splits[i+1] - splits[i])
 	}
-	for i, v := range bpms {
-		fmt.Printf("(%.1f, %.1f) %.1f\n", splits[i], splits[i+1], v)
-	}
-
-	fmt.Println(a.duration.Seconds())
-	fmt.Println("BPMs", len(bpms))
-	fmt.Println("Samples", len(a.mono))
+	return bpms
 }
 
 func (a *Analyzer) PlotRMS() ([]byte, error) {

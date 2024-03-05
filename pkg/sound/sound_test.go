@@ -18,7 +18,7 @@ func TestFadeOut(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.file, func(t *testing.T) {
-			a, err := NewAnalyzer(tt.file, "")
+			a, err := NewAnalyzer(tt.file)
 			if err != nil {
 				t.Fatalf("NewAnalyzer(%q) err = %v; want nil", tt.file, err)
 			}

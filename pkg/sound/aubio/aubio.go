@@ -9,19 +9,11 @@ import (
 	"time"
 )
 
-type App struct {
-	bin string
-}
+// BinPath is the path to the aubio binary
+var BinPath = "aubio"
 
-func New(bin string) *App {
-	if bin == "" {
-		bin = "aubio"
-	}
-	return &App{bin: bin}
-}
-
-func (a *App) Version(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, a.bin, "--version")
+func Version(ctx context.Context) (string, error) {
+	cmd := exec.CommandContext(ctx, BinPath, "--version")
 	data, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := string(data)
@@ -35,8 +27,8 @@ func (a *App) Version(ctx context.Context) (string, error) {
 	return version, nil
 }
 
-func (a *App) BPM(ctx context.Context, input string) ([]float64, error) {
-	cmd := exec.CommandContext(ctx, a.bin, "beat", input)
+func BPM(ctx context.Context, input string) ([]float64, error) {
+	cmd := exec.CommandContext(ctx, BinPath, "beat", input)
 	data, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := string(data)
@@ -58,8 +50,8 @@ func (a *App) BPM(ctx context.Context, input string) ([]float64, error) {
 	return bpm, nil
 }
 
-func (a *App) Tempo(ctx context.Context, input string) (float64, error) {
-	cmd := exec.CommandContext(ctx, a.bin, "tempo", input)
+func Tempo(ctx context.Context, input string) (float64, error) {
+	cmd := exec.CommandContext(ctx, BinPath, "tempo", input)
 	data, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := string(data)
@@ -86,11 +78,11 @@ func (a *App) Tempo(ctx context.Context, input string) (float64, error) {
 	return tempo, nil
 }
 
-func (a *App) Fragments(ctx context.Context, silence bool, input string, duration time.Duration, thresholdDB int, thresholdTime time.Duration) ([][2]time.Duration, error) {
+func Fragments(ctx context.Context, silence bool, input string, duration time.Duration, thresholdDB int, thresholdTime time.Duration) ([][2]time.Duration, error) {
 	if thresholdDB == 0 {
 		thresholdDB = -70
 	}
-	cmd := exec.CommandContext(ctx, a.bin, "quiet", "-i", input, "-s", fmt.Sprintf("%d", thresholdDB))
+	cmd := exec.CommandContext(ctx, BinPath, "quiet", "-i", input, "-s", fmt.Sprintf("%d", thresholdDB))
 	data, err := cmd.Output()
 	if err != nil {
 		msg := string(data)

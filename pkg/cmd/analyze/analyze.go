@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/igolaizola/musikai/pkg/aubio"
-	"github.com/igolaizola/musikai/pkg/ffmpeg"
 	"github.com/igolaizola/musikai/pkg/sound"
+	"github.com/igolaizola/musikai/pkg/sound/aubio"
+	"github.com/igolaizola/musikai/pkg/sound/ffmpeg"
 )
 
 type Config struct {
@@ -21,19 +21,13 @@ type Config struct {
 }
 
 func Run(ctx context.Context, cfg *Config) error {
-	aub := aubio.New("aubio")
-	tempo, err := aub.Tempo(ctx, cfg.Input)
+	tempo, err := aubio.Tempo(ctx, cfg.Input)
 	if err != nil {
 		return err
 	}
 	fmt.Println("Tempo:", tempo)
 
-	bpms, err := aub.BPM(ctx, cfg.Input)
-	if err != nil {
-		return err
-	}
-
-	a, err := sound.NewAnalyzer(cfg.Input, "")
+	a, err := sound.NewAnalyzer(cfg.Input)
 	if err != nil {
 		return err
 	}
@@ -53,8 +47,6 @@ func Run(ctx context.Context, cfg *Config) error {
 	for _, s := range noises {
 		fmt.Printf("Noise: (%s, %s) duration %s, final %v\n", s.Start, s.End, s.Duration, s.Final)
 	}
-
-	a.BPMChanges(bpms, []float64{a.Duration().Seconds() / 2.0})
 
 	name := filepath.Base(cfg.Input)
 	name = strings.TrimSuffix(name, filepath.Ext(name))
@@ -77,7 +69,6 @@ func Run(ctx context.Context, cfg *Config) error {
 		return err
 	}
 
-	ffm := ffmpeg.New("ffmpeg")
 	input := cfg.Input
 
 	lastSilence := silences[len(silences)-1]
@@ -87,14 +78,14 @@ func Run(ctx context.Context, cfg *Config) error {
 		log.Println("cutting song...")
 		out := strings.Replace(cfg.Input, ".mp3", "-cut.mp3", 1)
 		p = p + 1*time.Second
-		if err := ffm.Cut(ctx, cfg.Input, out, p); err != nil {
+		if err := ffmpeg.Cut(ctx, cfg.Input, out, p); err != nil {
 			return fmt.Errorf("couldn't cut song: %w", err)
 		}
 	} else {
 		out := strings.Replace(input, ".mp3", "-fadeout.mp3", 1)
 		log.Println("fading out song...")
 		pos := a.Duration() - 5*time.Second
-		if err := ffm.FadeOut(ctx, input, out, pos); err != nil {
+		if err := ffmpeg.FadeOut(ctx, input, out, a.Duration(), pos); err != nil {
 			return fmt.Errorf("couldn't fade out song: %w", err)
 		}
 	}

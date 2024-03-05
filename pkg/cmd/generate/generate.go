@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/igolaizola/musikai/pkg/aubio"
-	"github.com/igolaizola/musikai/pkg/s3"
+	"github.com/igolaizola/musikai/pkg/filestorage/s3"
 	"github.com/igolaizola/musikai/pkg/sound"
+	"github.com/igolaizola/musikai/pkg/sound/aubio"
 	"github.com/igolaizola/musikai/pkg/storage"
 	"github.com/igolaizola/musikai/pkg/suno"
 	"github.com/oklog/ulid/v2"
@@ -38,14 +38,17 @@ type Config struct {
 	S3Key    string
 	S3Secret string
 
-	Account        string
-	Type           string
-	Prompt         string
-	Style          string
-	Instrumental   bool
-	EndPrompt      string
+	Account      string
+	Type         string
+	Prompt       string
+	Style        string
+	Instrumental bool
+
+	EndLyrics      string
 	EndStyle       string
 	EndStyleAppend bool
+	ForceEndLyrics string
+	ForceEndStyle  string
 	MinDuration    time.Duration
 	MaxDuration    time.Duration
 	MaxExtensions  int
@@ -67,8 +70,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		log.Printf(format, args...)
 	}
 
-	aub := aubio.New("aubio")
-	if _, err := aub.Version(ctx); err != nil {
+	if _, err := aubio.Version(ctx); err != nil {
 		return fmt.Errorf("generate: couldn't get aubio version: %w", err)
 	}
 
@@ -110,9 +112,11 @@ func Run(ctx context.Context, cfg *Config) error {
 		Client:         http.DefaultClient,
 		CookieStore:    store.NewCookieStore("suno", cfg.Account),
 		Parallel:       cfg.Limit == 1,
-		EndPrompt:      cfg.EndPrompt,
+		EndLyrics:      cfg.EndLyrics,
 		EndStyle:       cfg.EndStyle,
 		EndStyleAppend: cfg.EndStyleAppend,
+		ForceEndLyrics: cfg.ForceEndLyrics,
+		ForceEndStyle:  cfg.ForceEndStyle,
 		MinDuration:    cfg.MinDuration,
 		MaxDuration:    cfg.MaxDuration,
 		MaxExtensions:  cfg.MaxExtensions,
@@ -124,6 +128,13 @@ func Run(ctx context.Context, cfg *Config) error {
 		if err := generator.Stop(ctx); err != nil {
 			log.Printf("generate: couldn't stop suno generator: %v\n", err)
 		}
+	}()
+
+	// Print time stats
+	start := time.Now()
+	defer func() {
+		total := time.Since(start)
+		log.Printf("generate: total time %s, average time %s\n", total, total/time.Duration(iteration))
 	}()
 
 	nErr := 0
@@ -202,7 +213,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			go func() {
 				defer wg.Done()
 				debug("generate: start %s", tmpl)
-				err := generate(ctx, generator, store, fstore, aub, httpClient, cfg.Output, tmpl)
+				err := generate(ctx, generator, store, fstore, httpClient, cfg.Output, tmpl)
 				if err != nil {
 					log.Println(err)
 				}
@@ -213,7 +224,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func generate(ctx context.Context, generator *suno.Client, store *storage.Store, fstore *s3.Store, aub *aubio.App, client *http.Client, output string, t template) error {
+func generate(ctx context.Context, generator *suno.Client, store *storage.Store, fstore *s3.Store, client *http.Client, output string, t template) error {
 	// Generate the songs.
 	songs, err := generator.Generate(ctx, t.Prompt, t.Style, t.Title, t.Instrumental)
 	if err != nil {
@@ -239,7 +250,7 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 		}
 
 		// Generate the wave image
-		a, err := sound.NewAnalyzer(path, "")
+		a, err := sound.NewAnalyzer(path)
 		if err != nil {
 			return fmt.Errorf("generate: couldn't create analyzer: %w", err)
 		}
@@ -254,7 +265,7 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 		waveURL := fstore.URL(waveName)
 
 		// Get the tempo
-		tempo, err := aub.Tempo(ctx, s.Audio)
+		tempo, err := aubio.Tempo(ctx, s.Audio)
 		if err != nil {
 			return fmt.Errorf("generate: couldn't get tempo: %w", err)
 		}
