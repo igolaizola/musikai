@@ -109,14 +109,9 @@ func Serve(ctx context.Context, cfg *Config) error {
 			size = 100
 		}
 		filters := []storage.Filter{
-			// TODO: Add filters
 			storage.Where("disabled = ?", cfg.Disabled),
 			storage.Where("processed = ?", cfg.Processed),
-		}
-		if cfg.Flagged {
-			filters = append(filters, storage.Where("flags != ''"))
-		} else {
-			filters = append(filters, storage.Where("flags = ''"))
+			storage.Where("flagged = ?", cfg.Flagged),
 		}
 		if query := r.URL.Query().Get("query"); query != "" {
 			fmt.Println("query:", query)

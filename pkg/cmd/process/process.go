@@ -386,6 +386,7 @@ func processFlags(ctx context.Context, song *storage.Song, mastered string, noEn
 	song.Processed = true
 	song.Duration = float32(analyzer.Duration().Seconds())
 	song.Flags = flagJSON
+	song.Flagged = flagJSON != ""
 
 	debug("flags: %s", flagJSON)
 

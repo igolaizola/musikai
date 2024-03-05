@@ -14,7 +14,7 @@ type Song struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
-	Type string `gorm:"not null;default:''"`
+	Type  string `gorm:"not null;default:''"`
 	Notes string `gorm:"not null;default:''"`
 
 	Prompt       string `gorm:"not null;default:''"`
@@ -30,11 +30,12 @@ type Song struct {
 	Wave     string  `gorm:"not null;default:''"`
 	Tempo    float32 `gorm:"not null;default:0"`
 	Flags    string  `gorm:"not null;default:''"`
-	Master  string  `gorm:"not null;default:''"`
+	Master   string  `gorm:"not null;default:''"`
 
 	AlbumID string `gorm:"index,not null;default:''"`
 
 	Processed bool `gorm:"index"`
+	Flagged   bool `gorm:"index"`
 	Disabled  bool `gorm:"index"`
 }
 
