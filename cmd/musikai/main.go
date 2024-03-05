@@ -243,6 +243,12 @@ func newFilterCommand() *ffcli.Command {
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
 	fs.IntVar(&cfg.Port, "port", 1337, "port to listen on")
 	fs.BoolVar(&cfg.Disabled, "disabled", false, "show disabled songs")
+	fs.BoolVar(&cfg.Flagged, "flagged", false, "show flagged songs")
+	fs.BoolVar(&cfg.Processed, "processed", false, "show processed songs")
+
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
+	fs.Int64Var(&cfg.TGChat, "tg-chat", 0, "telegram chat")
 
 	return &ffcli.Command{
 		Name:       cmd,

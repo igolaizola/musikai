@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
 
@@ -22,7 +23,13 @@ type Config struct {
 	DBConn string
 	Port   int
 
-	Disabled bool
+	Proxy   string
+	TGChat  int64
+	TGToken string
+
+	Disabled  bool
+	Flagged   bool
+	Processed bool
 }
 
 //go:embed web/*
@@ -51,6 +58,11 @@ func Serve(ctx context.Context, cfg *Config) error {
 	}
 	if err := store.Start(ctx); err != nil {
 		return fmt.Errorf("scrape: couldn't start orm store: %w", err)
+	}
+
+	tgStore, err := tgstore.New(cfg.TGToken, cfg.TGChat, cfg.Proxy, cfg.Debug)
+	if err != nil {
+		return fmt.Errorf("process: couldn't create file storage: %w", err)
 	}
 
 	// Create web static content
@@ -99,8 +111,12 @@ func Serve(ctx context.Context, cfg *Config) error {
 		filters := []storage.Filter{
 			// TODO: Add filters
 			storage.Where("disabled = ?", cfg.Disabled),
-			storage.Where("processed = ?", true),
-			storage.Where("flags != ?", ""),
+			storage.Where("processed = ?", cfg.Processed),
+		}
+		if cfg.Flagged {
+			filters = append(filters, storage.Where("flags != ''"))
+		} else {
+			filters = append(filters, storage.Where("flags = ''"))
 		}
 		if query := r.URL.Query().Get("query"); query != "" {
 			fmt.Println("query:", query)
@@ -122,10 +138,23 @@ func Serve(ctx context.Context, cfg *Config) error {
 			if s.Style != "" {
 				p += ", " + s.Style
 			}
+			if s.Flags != "" {
+				p += " " + s.Flags
+			}
+
+			u := s.SunoAudio
+			if s.Master != "" {
+				u, err = tgStore.Get(ctx, s.Master)
+				if err != nil {
+					log.Println("couldn't get master:", err)
+					http.Error(w, fmt.Sprintf("couldn't get master: %v", err), http.StatusInternalServerError)
+					return
+				}
+			}
 
 			assets = append(assets, &Asset{
 				ID:           s.ID,
-				URL:          s.SunoAudio,
+				URL:          u,
 				ThumbnailURL: s.Wave,
 				Prompt:       p,
 			})

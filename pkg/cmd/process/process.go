@@ -162,7 +162,7 @@ func Run(ctx context.Context, cfg *Config) error {
 
 			// Get next songs
 			filters := []storage.Filter{
-				storage.Where("processed = ?", false),
+				storage.Where("processed = ?", true),
 				storage.Where("id > ?", currID),
 			}
 			if cfg.Type != "" {
@@ -272,7 +272,7 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 	// Remove last silence
 	if len(silences) > 0 {
 		last := silences[len(silences)-1]
-		if last.Final {
+		if last.Final || last.End > analyzer.Duration()-10*time.Second {
 			// Cut the last silence
 			if err := ffmpeg.Cut(ctx, mastered, mastered, last.Start); err != nil {
 				return fmt.Errorf("process: couldn't cut last silence: %w", err)
@@ -317,6 +317,17 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 	if err != nil {
 		return fmt.Errorf("process: couldn't get tempo: %w", err)
 	}
+	return processFlags(ctx, song, mastered, noEnd, float32(tempo), masterID, waveURL, analyzer, debug, store)
+}
+
+func processFlags(ctx context.Context, song *storage.Song, mastered string, noEnd bool,
+	tempo float32, masterID string, waveURL string, analyzer *sound.Analyzer,
+	debug func(string, ...any), store *storage.Store) error {
+	// Get the silences again
+	silences, err := analyzer.Silences(ctx)
+	if err != nil {
+		return fmt.Errorf("process: couldn't get silences: %w", err)
+	}
 
 	// Detect flags
 	f := flags{
@@ -351,7 +362,14 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 	}
 	f.BPMN = analyzer.FragmentBPMChange(beats, noises)
 
-	flagsBytes, _ := json.Marshal(f)
+	var flagJSON string
+	if f != (flags{}) {
+		flagsBytes, err := json.Marshal(f)
+		if err != nil {
+			return fmt.Errorf("process: couldn't marshal flags: %w", err)
+		}
+		flagJSON = string(flagsBytes)
+	}
 
 	debug("process: end flags %s", song.ID)
 
@@ -367,7 +385,9 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 	song.Tempo = float32(tempo)
 	song.Processed = true
 	song.Duration = float32(analyzer.Duration().Seconds())
-	song.Flags = string(flagsBytes)
+	song.Flags = flagJSON
+
+	debug("flags: %s", flagJSON)
 
 	if err := store.SetSong(ctx, song); err != nil {
 		return fmt.Errorf("process: couldn't save song to database: %w", err)
@@ -392,3 +412,25 @@ func download(ctx context.Context, client *http.Client, url string) ([]byte, err
 	}
 	return b, nil
 }
+
+/*
+func reprocess(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store) error {
+	// Download the mastered audio
+	debug("process: start download master %s", song.ID)
+	mastered := filepath.Join(os.TempDir(), fmt.Sprintf("%s.mp3", song.ID))
+	if err := tgStore.Download(ctx, song.Master, mastered); err != nil {
+		return fmt.Errorf("process: couldn't download master audio: %w", err)
+	}
+	debug("process: end download master %s", song.ID)
+	f := flags{}
+	if song.Flags != "" {
+		if err := json.Unmarshal([]byte(song.Flags), &f); err != nil {
+			return fmt.Errorf("process: couldn't unmarshal flags: %w", err)
+		}
+	}
+	analyzer, err := sound.NewAnalyzer(mastered)
+	if err != nil {
+		return fmt.Errorf("process: couldn't create analyzer: %w", err)
+	}
+	return processFlags(ctx, song, mastered, f.NoEnd, song.Tempo, song.Master, song.Wave, analyzer, debug, store)
+}*/

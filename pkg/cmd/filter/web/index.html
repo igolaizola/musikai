@@ -47,6 +47,16 @@
         top: 5px;
         right: 5px;
       }
+      audio:hover {
+        width: 400px !important;
+        margin-left: -100px !important;
+        z-index: 1000;
+      }
+      audio::-webkit-media-controls-play-button:hover,
+      audio::-webkit-media-controls-panel:hover{
+        background-color: #43b9d9;
+        color: #43b9d9;;
+      }
     </style>
   </head>
 
@@ -154,7 +164,7 @@
                 <a target="_blank" x-bind:href="img.url">     
                     <img x-bind:src="img.thumbnail_url" />
                 </a>
-                <audio controls class="w-100 my-2" style="height: 30px;">
+                <audio controls class="my-2" style="height: 30px; width: 100%;">
                   <source x-bind:src="img.url" type="audio/mp3">
                 Your browser does not support the audio element.
                 </audio>
