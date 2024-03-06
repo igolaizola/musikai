@@ -34,6 +34,10 @@ type Song struct {
 
 	AlbumID string `gorm:"index,not null;default:''"`
 
+	ProcessedAt time.Time
+
+	Ends      bool
+	Approved  bool `gorm:"index"`
 	Processed bool `gorm:"index"`
 	Flagged   bool `gorm:"index"`
 	Disabled  bool `gorm:"index"`

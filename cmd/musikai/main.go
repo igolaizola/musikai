@@ -204,6 +204,8 @@ func newProcessCommand() *ffcli.Command {
 
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
 	fs.BoolVar(&cfg.Reprocess, "reprocess", false, "reprocess the song")
+	fs.DurationVar(&cfg.ShortFadeOut, "short-fadeout", 0, "short fade out duration")
+	fs.DurationVar(&cfg.LongFadeOut, "long-fadeout", 0, "long fade out duration")
 
 	fs.StringVar(&cfg.S3Bucket, "s3-bucket", "", "s3 bucket")
 	fs.StringVar(&cfg.S3Region, "s3-region", "", "s3 region")
@@ -240,9 +242,6 @@ func newFilterCommand() *ffcli.Command {
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
 	fs.IntVar(&cfg.Port, "port", 1337, "port to listen on")
-	fs.BoolVar(&cfg.Disabled, "disabled", false, "show disabled songs")
-	fs.BoolVar(&cfg.Flagged, "flagged", false, "show flagged songs")
-	fs.BoolVar(&cfg.Processed, "processed", false, "show processed songs")
 
 	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
 	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")

@@ -28,10 +28,6 @@ type Config struct {
 	Proxy   string
 	TGChat  int64
 	TGToken string
-
-	Disabled  bool
-	Flagged   bool
-	Processed bool
 }
 
 //go:embed web/*
@@ -114,14 +110,16 @@ func Serve(ctx context.Context, cfg *Config) error {
 			size = 100
 		}
 		filters := []storage.Filter{
-			storage.Where("disabled = ?", cfg.Disabled),
-			storage.Where("processed = ?", cfg.Processed),
+			storage.Where("processed = ?", true),
 		}
-		if cfg.Flagged {
-			filters = append(filters, storage.Where(`flagged = true AND flags != '{"no_end":true}'`))
-		} else {
-			filters = append(filters, storage.Where(`flagged = false OR flags = '{"no_end":true}'`))
+		options := []string{"approved", "flagged", "disabled", "ends"}
+		for _, o := range options {
+			if v := r.URL.Query().Get(o); v != "" {
+				b := v == "true"
+				filters = append(filters, storage.Where(fmt.Sprintf("%s = ?", o), b))
+			}
 		}
+
 		if query := r.URL.Query().Get("query"); query != "" {
 			fmt.Println("query:", query)
 			filters = append(filters, storage.Where(fmt.Sprintf("songs.type LIKE '%s'", query)))
@@ -181,6 +179,8 @@ func Serve(ctx context.Context, cfg *Config) error {
 				URL:          audioURL,
 				ThumbnailURL: waveURL,
 				Prompt:       p,
+				Approved:     s.Approved,
+				Disabled:     s.Disabled,
 			})
 		}
 		if err := json.NewEncoder(w).Encode(assets); err != nil {
@@ -190,23 +190,52 @@ func Serve(ctx context.Context, cfg *Config) error {
 		}
 	})
 
-	r.Delete("/api/songs/{id}", func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
-		song, err := store.GetSong(ctx, id)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("couldn't get song: %v", err), http.StatusNotFound)
-			return
-		}
-		song.Disabled = true
-		if err := store.SetSong(ctx, song); err != nil {
-			log.Println("couldn't set song:", err)
-			http.Error(w, fmt.Sprintf("couldn't set song: %v", err), http.StatusInternalServerError)
-			return
-		}
+	r.Put("/api/songs/{id}/approve", func(w http.ResponseWriter, r *http.Request) {
+		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
+			s.Approved = true
+			return s
+		})
+	})
+
+	r.Put("/api/songs/{id}/disapprove", func(w http.ResponseWriter, r *http.Request) {
+		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
+			s.Approved = false
+			return s
+		})
+	})
+
+	r.Put("/api/songs/{id}/disable", func(w http.ResponseWriter, r *http.Request) {
+		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
+			s.Disabled = true
+			return s
+		})
+	})
+
+	r.Put("/api/songs/{id}/enable", func(w http.ResponseWriter, r *http.Request) {
+		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
+			s.Disabled = false
+			return s
+		})
 	})
 
 	<-ctx.Done()
 	return nil
+}
+
+func updateSong(w http.ResponseWriter, r *http.Request, store *storage.Store, update func(s *storage.Song) *storage.Song) {
+	ctx := r.Context()
+	id := chi.URLParam(r, "id")
+	song, err := store.GetSong(ctx, id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("couldn't get song: %v", err), http.StatusNotFound)
+		return
+	}
+	song = update(song)
+	if err := store.SetSong(ctx, song); err != nil {
+		log.Println("couldn't set song:", err)
+		http.Error(w, fmt.Sprintf("couldn't set song: %v", err), http.StatusInternalServerError)
+		return
+	}
 }
 
 type Asset struct {
@@ -214,4 +243,6 @@ type Asset struct {
 	URL          string `json:"url"`
 	ThumbnailURL string `json:"thumbnail_url"`
 	Prompt       string `json:"prompt"`
+	Approved     bool   `json:"approved"`
+	Disabled     bool   `json:"disabled"`
 }

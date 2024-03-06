@@ -129,10 +129,46 @@
                 <option value="songs">Song</option>
               </select>
             </div>
+
             <div class="col-md-2">
               <button type="submit" class="btn btn-primary w-100">
                 Refresh
               </button>
+            </div>
+
+            <div class="input-group">
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="approved" x-model="approved">
+                <label class="form-check-label" for="approved">Approved</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="disapproved" x-model="disapproved">
+                <label class="form-check-label" for="disapproved">Disapproved</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="disabled" x-model="disabled">
+                <label class="form-check-label" for="disabled">Disabled</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="enabled" x-model="enabled">
+                <label class="form-check-label" for="enabled">Enabled</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="flagged" x-model="flagged">
+                <label class="form-check-label" for="flagged">Flagged</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="noflagged" x-model="noflagged">
+                <label class="form-check-label" for="noflagged">Not Flagged</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="ends" x-model="ends">
+                <label class="form-check-label" for="ends">Ends</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="noends" x-model="noends">
+                <label class="form-check-label" for="noends">No Ends</label>
+              </div>
             </div>
           </form>
           <div
@@ -171,18 +207,42 @@
                 <span class="small" x-text="img.prompt"></span>
 
                 <div class="btn-group" role="group">
-                  <template x-if="!img.deleted && img.deleted != true">
+
+                  <template x-if="!img.approved && img.approved != true">
                     <button
-                      @click="deleteImage(index)"
+                      @click="approveImage(index, true)"
+                      type="button"
+                      class="btn btn-success btn-sm"
+                    >
+                      Approve
+                    </button>
+                  </template>
+                  <template x-if="img.approved === true">
+                    <button
+                      @click="approveImage(index, false)"
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                    >
+                      Disapprove
+                    </button>
+                  </template>
+
+                  <template x-if="!img.disabled && img.disabled != true">
+                    <button
+                      @click="disableImage(index, true)"
                       type="button"
                       class="btn btn-danger btn-sm"
                     >
-                      Delete
+                      Disable
                     </button>
                   </template>
-                  <template x-if="img.deleted === true">
-                    <button type="button" class="btn btn-secondary btn-sm">
-                      Disabled
+                  <template x-if="img.disabled === true">
+                    <button
+                    @click="disableImage(index, false)"
+                    type="button"
+                    class="btn btn-info btn-sm"
+                  >
+                      Enable
                     </button>
                   </template>
                 </div>

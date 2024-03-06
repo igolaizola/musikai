@@ -39,8 +39,10 @@ type Config struct {
 	TGChat  int64
 	TGToken string
 
-	Type      string
-	Reprocess bool
+	Type         string
+	Reprocess    bool
+	ShortFadeOut time.Duration
+	LongFadeOut  time.Duration
 }
 
 // Run launches the song generation process.
@@ -61,6 +63,16 @@ func Run(ctx context.Context, cfg *Config) error {
 		}
 		format += "\n"
 		log.Printf(format, args...)
+	}
+
+	if cfg.ShortFadeOut == 0 {
+		return errors.New("process: short fade out is required")
+	}
+	if cfg.LongFadeOut == 0 {
+		return errors.New("process: long fade out is required")
+	}
+	if cfg.ShortFadeOut > cfg.LongFadeOut {
+		return errors.New("process: short fade out must be less than long fade out")
 	}
 
 	if _, err := aubio.Version(ctx); err != nil {
@@ -202,7 +214,7 @@ func Run(ctx context.Context, cfg *Config) error {
 				if cfg.Reprocess {
 					err = reprocess(ctx, song, debug, store, tgStore)
 				} else {
-					err = process(ctx, song, debug, store, tgStore, &tgLock, httpClient, ph, &phLock)
+					err = process(ctx, song, debug, store, tgStore, &tgLock, httpClient, ph, &phLock, cfg.ShortFadeOut, cfg.LongFadeOut)
 				}
 				if err != nil {
 					log.Println(err)
@@ -216,7 +228,6 @@ func Run(ctx context.Context, cfg *Config) error {
 
 type flags struct {
 	Silences []int `json:"silences,omitempty"`
-	NoEnd    bool  `json:"no_end,omitempty"`
 	Short    bool  `json:"short,omitempty"`
 	BPM2     bool  `json:"bpm_2,omitempty"`
 	BPM4     bool  `json:"bpm_4,omitempty"`
@@ -224,7 +235,7 @@ type flags struct {
 }
 
 func process(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store, tgLock *sync.Mutex,
-	client *http.Client, ph *phaselimiter.PhaseLimiter, phLock *sync.Mutex) error {
+	client *http.Client, ph *phaselimiter.PhaseLimiter, phLock *sync.Mutex, shortFadeOut, longFadeOut time.Duration) error {
 
 	// Download the audio file
 	debug("process: start download %s", song.ID)
@@ -281,8 +292,8 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 		return fmt.Errorf("process: couldn't get silences: %w", err)
 	}
 
-	fadeOut := 5 * time.Second
-	noEnd := true
+	fadeOut := longFadeOut
+	var ends bool
 
 	// Remove last silence
 	if len(silences) > 0 {
@@ -293,8 +304,8 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 				return fmt.Errorf("process: couldn't cut last silence: %w", err)
 			}
 		}
-		fadeOut = 1 * time.Second
-		noEnd = false
+		fadeOut = shortFadeOut
+		ends = true
 	}
 
 	// Apply fade out
@@ -353,10 +364,10 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 	if err != nil {
 		return fmt.Errorf("process: couldn't get tempo: %w", err)
 	}
-	return processFlags(ctx, song, mastered, noEnd, float32(tempo), masterID, waveID, analyzer, debug, store)
+	return processFlags(ctx, song, mastered, ends, float32(tempo), masterID, waveID, analyzer, debug, store)
 }
 
-func processFlags(ctx context.Context, song *storage.Song, mastered string, noEnd bool,
+func processFlags(ctx context.Context, song *storage.Song, mastered string, ends bool,
 	tempo float32, masterID string, waveID string, analyzer *sound.Analyzer,
 	debug func(string, ...any), store *storage.Store) error {
 
@@ -370,9 +381,7 @@ func processFlags(ctx context.Context, song *storage.Song, mastered string, noEn
 	}
 
 	// Detect flags
-	f := flags{
-		NoEnd: noEnd,
-	}
+	f := flags{}
 	for _, s := range silences {
 		// If the silence is final, don't add it
 		if s.Final {
@@ -432,6 +441,7 @@ func processFlags(ctx context.Context, song *storage.Song, mastered string, noEn
 	song.Tempo = float32(tempo)
 	song.Processed = true
 	song.Duration = float32(analyzer.Duration().Seconds())
+	song.Ends = ends
 	song.Flags = flagJSON
 	song.Flagged = flagJSON != ""
 
@@ -479,5 +489,5 @@ func reprocess(ctx context.Context, song *storage.Song, debug func(string, ...an
 	if err != nil {
 		return fmt.Errorf("process: couldn't create analyzer: %w", err)
 	}
-	return processFlags(ctx, song, mastered, f.NoEnd, song.Tempo, song.Master, song.Wave, analyzer, debug, store)
+	return processFlags(ctx, song, mastered, song.Ends, song.Tempo, song.Master, song.Wave, analyzer, debug, store)
 }
