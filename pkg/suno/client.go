@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/ratelimit"
@@ -28,7 +27,6 @@ type Client struct {
 	tokenExpiration time.Time
 	cookieStore     CookieStore
 	parallel        bool
-	lck             sync.Mutex
 	endLyrics       string
 	endStyle        string
 	endStyleAppend  bool
@@ -110,19 +108,19 @@ func New(cfg *Config) *Client {
 	}
 
 	return &Client{
-		client:        client,
-		ratelimit:     ratelimit.New(wait),
-		debug:         cfg.Debug,
-		cookieStore:   cfg.CookieStore,
-		parallel:      cfg.Parallel,
-		endLyrics:    cfg.EndLyrics,
-		endStyle:     cfg.EndStyle,
+		client:         client,
+		ratelimit:      ratelimit.New(wait),
+		debug:          cfg.Debug,
+		cookieStore:    cfg.CookieStore,
+		parallel:       cfg.Parallel,
+		endLyrics:      cfg.EndLyrics,
+		endStyle:       cfg.EndStyle,
 		endStyleAppend: cfg.EndStyleAppend,
 		forceEndLyrics: cfg.ForceEndLyrics,
 		forceEndStyle:  cfg.ForceEndStyle,
-		minDuration:   float32(minDuration.Seconds()),
-		maxDuration:   float32(maxDuration.Seconds()),
-		maxExtensions: maxExtensions,
+		minDuration:    float32(minDuration.Seconds()),
+		maxDuration:    float32(maxDuration.Seconds()),
+		maxExtensions:  maxExtensions,
 	}
 }
 
@@ -172,6 +170,7 @@ func (c *Client) log(format string, args ...interface{}) {
 	}
 }
 
+/*
 func (c *Client) err(format string, args ...interface{}) {
 	text := fmt.Sprintf(format, args...)
 	now := time.Now().UTC().Format("20060102_150405")
@@ -186,7 +185,7 @@ func (c *Client) err(format string, args ...interface{}) {
 	if _, err := f.WriteString(fmt.Sprintf("%s\n", text)); err != nil {
 		panic(fmt.Errorf("suno: couldn't write to errors file: %w", err))
 	}
-}
+}*/
 
 var backoff = []time.Duration{
 	30 * time.Second,

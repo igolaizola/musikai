@@ -259,10 +259,8 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 			}
 		}
 
-		ends := true
 		var firstSilence time.Duration
 		if best == "" {
-			ends = false
 			// Choose random clip
 			rnd := rand.Intn(len(clips))
 			clp = &clips[rnd]
@@ -279,15 +277,7 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 			continueAt = float32(firstSilence.Seconds() - 1.0)
 		}
 
-		// If the duration is over the min duration, log
-		if duration > c.minDuration && extensions > 0 && !ends {
-			var urls []string
-			for _, c := range clips {
-				urls = append(urls, c.AudioURL)
-			}
-			c.err("suno: didn't end: (%s)", strings.Join(urls, ", "))
-		}
-
+		// Check if the song is over the min duration
 		if duration > c.minDuration {
 			break
 		}
