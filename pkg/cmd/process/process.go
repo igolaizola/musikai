@@ -170,7 +170,7 @@ func Run(ctx context.Context, cfg *Config) error {
 
 			// Get next songs
 			filters := []storage.Filter{
-				//storage.Where("processed = ?", cfg.Reprocess),
+				storage.Where("processed = ?", cfg.Reprocess),
 				storage.Where("id > ?", currID),
 			}
 			if cfg.Type != "" {
