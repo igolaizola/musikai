@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/igolaizola/musikai/pkg/filestorage/s3"
 	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
 	"github.com/igolaizola/musikai/pkg/sound"
 	"github.com/igolaizola/musikai/pkg/sound/aubio"
@@ -40,15 +39,20 @@ type Config struct {
 	TGChat  int64
 	TGToken string
 
-	Type string
+	Type      string
+	Reprocess bool
 }
 
 // Run launches the song generation process.
 func Run(ctx context.Context, cfg *Config) error {
 	var iteration int
-	log.Println("process: process started")
+	action := "process"
+	if cfg.Reprocess {
+		action = "reprocess"
+	}
+	log.Printf("process: %s started\n", action)
 	defer func() {
-		log.Printf("process: process ended (%d)\n", iteration)
+		log.Printf("process: %s ended (%d)\n", action, iteration)
 	}()
 
 	debug := func(format string, args ...any) {
@@ -68,10 +72,13 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("process: couldn't get phaselimiter version: %w", err)
 	}
 
-	s3Store := s3.New(cfg.S3Key, cfg.S3Secret, cfg.S3Region, cfg.S3Bucket, cfg.Debug)
-	if err := s3Store.Start(ctx); err != nil {
-		return fmt.Errorf("process: couldn't start s3 store: %w", err)
-	}
+	// TODO: Allow to use S3 storage
+	/*
+		s3Store := s3.New(cfg.S3Key, cfg.S3Secret, cfg.S3Region, cfg.S3Bucket, cfg.Debug)
+		if err := s3Store.Start(ctx); err != nil {
+			return fmt.Errorf("process: couldn't start s3 store: %w", err)
+		}
+	*/
 
 	store, err := storage.New(cfg.DBType, cfg.DBConn, cfg.Debug)
 	if err != nil {
@@ -85,6 +92,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	if err != nil {
 		return fmt.Errorf("process: couldn't create file storage: %w", err)
 	}
+	var tgLock sync.Mutex
 
 	httpClient := &http.Client{
 		Timeout: 2 * time.Minute,
@@ -162,7 +170,7 @@ func Run(ctx context.Context, cfg *Config) error {
 
 			// Get next songs
 			filters := []storage.Filter{
-				storage.Where("processed = ?", false),
+				//storage.Where("processed = ?", cfg.Reprocess),
 				storage.Where("id > ?", currID),
 			}
 			if cfg.Type != "" {
@@ -190,7 +198,12 @@ func Run(ctx context.Context, cfg *Config) error {
 			go func() {
 				defer wg.Done()
 				debug("process: start %s", song.ID)
-				err := process(ctx, song, debug, store, s3Store, tgStore, httpClient, ph, &phLock)
+				var err error
+				if cfg.Reprocess {
+					err = reprocess(ctx, song, debug, store, tgStore)
+				} else {
+					err = process(ctx, song, debug, store, tgStore, &tgLock, httpClient, ph, &phLock)
+				}
 				if err != nil {
 					log.Println(err)
 				}
@@ -202,15 +215,15 @@ func Run(ctx context.Context, cfg *Config) error {
 }
 
 type flags struct {
-	Silences int  `json:"silences,omitempty"`
-	NoEnd    bool `json:"no_end,omitempty"`
-	Short    bool `json:"short,omitempty"`
-	BPM2     bool `json:"bpm_2,omitempty"`
-	BPM4     bool `json:"bpm_4,omitempty"`
-	BPMN     bool `json:"bpm_n,omitempty"`
+	Silences []int `json:"silences,omitempty"`
+	NoEnd    bool  `json:"no_end,omitempty"`
+	Short    bool  `json:"short,omitempty"`
+	BPM2     bool  `json:"bpm_2,omitempty"`
+	BPM4     bool  `json:"bpm_4,omitempty"`
+	BPMN     bool  `json:"bpm_n,omitempty"`
 }
 
-func process(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, s3Store *s3.Store, tgStore *tgstore.Store,
+func process(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store, tgLock *sync.Mutex,
 	client *http.Client, ph *phaselimiter.PhaseLimiter, phLock *sync.Mutex) error {
 
 	// Download the audio file
@@ -241,11 +254,13 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 	}
 	debug("process: start master %s", song.ID)
 	if err := func() error {
+		// Lock the phase limiter to avoid concurrent calls
 		phLock.Lock()
 		defer phLock.Unlock()
 		if ctx.Err() != nil {
 			return fmt.Errorf("process: %w", ctx.Err())
 		}
+
 		if err := ph.Master(ctx, original, mastered); err != nil {
 			return fmt.Errorf("process: couldn't master song: %w", err)
 		}
@@ -288,41 +303,66 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 	}
 	debug("process: end cut and fade out %s", song.ID)
 
-	// Reload analyzer to process flags
-	debug("process: start flags %s", song.ID)
 	analyzer, err = sound.NewAnalyzer(mastered)
 	if err != nil {
 		return fmt.Errorf("process: couldn't create analyzer: %w", err)
 	}
 
-	// Upload the mastered audio
-	masterID, err := tgStore.Set(ctx, mastered)
-	if err != nil {
-		return fmt.Errorf("process: couldn't save mastered audio to telegram: %w", err)
-	}
-
 	// process the wave image
-	waveBytes, err := analyzer.PlotWave()
+	waveBytes, err := analyzer.PlotWave(song.Style)
 	if err != nil {
 		return fmt.Errorf("process: couldn't plot wave: %w", err)
 	}
-	waveName := fmt.Sprintf("%s-wave.jpg", song.ID)
-	if err := s3Store.SetImage(ctx, waveName, waveBytes); err != nil {
-		return fmt.Errorf("process: couldn't save wave image to s3: %w", err)
+	wavePath := filepath.Join(os.TempDir(), fmt.Sprintf("%s.jpg", song.ID))
+	if err := os.WriteFile(wavePath, waveBytes, 0644); err != nil {
+		return fmt.Errorf("process: couldn't write wave image: %w", err)
 	}
-	waveURL := s3Store.URL(waveName)
+	defer func() { _ = os.Remove(wavePath) }()
+
+	debug("process: start upload %s", song.ID)
+	var masterID string
+	var waveID string
+	if err := func() error {
+		// Lock the tg store to avoid concurrent calls
+		tgLock.Lock()
+		defer tgLock.Unlock()
+		if ctx.Err() != nil {
+			return fmt.Errorf("process: %w", ctx.Err())
+		}
+
+		// Upload the wave image
+		waveID, err = tgStore.Set(ctx, wavePath)
+		if err != nil {
+			return fmt.Errorf("process: couldn't save wave image to telegram: %w", err)
+		}
+
+		// Upload the mastered audio
+		masterID, err = tgStore.Set(ctx, mastered)
+		if err != nil {
+			return fmt.Errorf("process: couldn't save mastered audio to telegram: %w", err)
+		}
+
+		return nil
+	}(); err != nil {
+		return err
+	}
+	debug("process: end upload %s", song.ID)
 
 	// Get the tempo
 	tempo, err := aubio.Tempo(ctx, mastered)
 	if err != nil {
 		return fmt.Errorf("process: couldn't get tempo: %w", err)
 	}
-	return processFlags(ctx, song, mastered, noEnd, float32(tempo), masterID, waveURL, analyzer, debug, store)
+	return processFlags(ctx, song, mastered, noEnd, float32(tempo), masterID, waveID, analyzer, debug, store)
 }
 
 func processFlags(ctx context.Context, song *storage.Song, mastered string, noEnd bool,
-	tempo float32, masterID string, waveURL string, analyzer *sound.Analyzer,
+	tempo float32, masterID string, waveID string, analyzer *sound.Analyzer,
 	debug func(string, ...any), store *storage.Store) error {
+
+	// Reload analyzer to process flags
+	debug("process: start flags %s", song.ID)
+
 	// Get the silences again
 	silences, err := analyzer.Silences(ctx)
 	if err != nil {
@@ -334,10 +374,17 @@ func processFlags(ctx context.Context, song *storage.Song, mastered string, noEn
 		NoEnd: noEnd,
 	}
 	for _, s := range silences {
+		// If the silence is final, don't add it
 		if s.Final {
 			break
 		}
-		f.Silences++
+		// If the silence is near the end, don't add it (it's probably a fade out)
+		if s.End > analyzer.Duration()-5*time.Second {
+			break
+		}
+		p := (s.Start.Seconds() + s.Duration.Seconds()/2.0) / analyzer.Duration().Seconds()
+		p100 := int(p * 100.0)
+		f.Silences = append(f.Silences, p100)
 	}
 
 	// Short song
@@ -362,16 +409,16 @@ func processFlags(ctx context.Context, song *storage.Song, mastered string, noEn
 	}
 	f.BPMN = analyzer.FragmentBPMChange(beats, noises)
 
-	var flagJSON string
-	if f != (flags{}) {
-		flagsBytes, err := json.Marshal(f)
-		if err != nil {
-			return fmt.Errorf("process: couldn't marshal flags: %w", err)
-		}
-		flagJSON = string(flagsBytes)
+	flagsBytes, err := json.Marshal(f)
+	if err != nil {
+		return fmt.Errorf("process: couldn't marshal flags: %w", err)
 	}
+	flagJSON := string(flagsBytes)
 
 	debug("process: end flags %s", song.ID)
+	if flagJSON == "{}" {
+		flagJSON = ""
+	}
 
 	// Get the latest version of the song
 	song, err = store.GetSong(ctx, song.ID)
@@ -381,7 +428,7 @@ func processFlags(ctx context.Context, song *storage.Song, mastered string, noEn
 
 	// Update the song
 	song.Master = masterID
-	song.Wave = waveURL
+	song.Wave = waveID
 	song.Tempo = float32(tempo)
 	song.Processed = true
 	song.Duration = float32(analyzer.Duration().Seconds())
@@ -414,7 +461,6 @@ func download(ctx context.Context, client *http.Client, url string) ([]byte, err
 	return b, nil
 }
 
-/*
 func reprocess(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store) error {
 	// Download the mastered audio
 	debug("process: start download master %s", song.ID)
@@ -434,4 +480,4 @@ func reprocess(ctx context.Context, song *storage.Song, debug func(string, ...an
 		return fmt.Errorf("process: couldn't create analyzer: %w", err)
 	}
 	return processFlags(ctx, song, mastered, f.NoEnd, song.Tempo, song.Master, song.Wave, analyzer, debug, store)
-}*/
+}

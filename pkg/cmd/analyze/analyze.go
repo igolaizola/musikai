@@ -3,7 +3,6 @@ package analyze
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,12 +22,12 @@ type Config struct {
 }
 
 type flags struct {
-	Silences int  `json:"silences,omitempty"`
-	NoEnd    bool `json:"no_end,omitempty"`
-	Short    bool `json:"short,omitempty"`
-	BPM2     bool `json:"bpm_2,omitempty"`
-	BPM4     bool `json:"bpm_4,omitempty"`
-	BPMN     bool `json:"bpm_n,omitempty"`
+	Silences []int `json:"silences,omitempty"`
+	NoEnd    bool  `json:"no_end,omitempty"`
+	Short    bool  `json:"short,omitempty"`
+	BPM2     bool  `json:"bpm_2,omitempty"`
+	BPM4     bool  `json:"bpm_4,omitempty"`
+	BPMN     bool  `json:"bpm_n,omitempty"`
 }
 
 func Run(ctx context.Context, cfg *Config) error {
@@ -43,12 +42,12 @@ func Run(ctx context.Context, cfg *Config) error {
 	mastered := out + "-master.mp3"
 
 	// Master the song
-	if _, err := os.Stat(mastered); errors.Is(err, os.ErrNotExist) {
-		ph := phaselimiter.New(&phaselimiter.Config{})
-		if err := ph.Master(ctx, cfg.Input, mastered); err != nil {
-			return err
-		}
+	//if _, err := os.Stat(mastered); errors.Is(err, os.ErrNotExist) {
+	ph := phaselimiter.New(&phaselimiter.Config{})
+	if err := ph.Master(ctx, cfg.Input, mastered); err != nil {
+		return err
 	}
+	//}
 
 	// Analyze the song
 	analyzer, err := sound.NewAnalyzer(mastered)
@@ -56,7 +55,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		return err
 	}
 
-	fmt.Println("Duration:", analyzer.Duration())
+	fmt.Println("Duration:", analyzer.Duration(), analyzer.Duration().Seconds())
 
 	silences, err := analyzer.Silences(ctx)
 	if err != nil {
@@ -91,8 +90,16 @@ func Run(ctx context.Context, cfg *Config) error {
 		return err
 	}
 
+	silences, err = analyzer.Silences(ctx)
+	if err != nil {
+		return err
+	}
+	for _, s := range silences {
+		fmt.Printf("Silence: (%s, %s) duration %s, final %v\n", s.Start, s.End, s.Duration, s.Final)
+	}
+
 	// process the wave image
-	waveBytes, err := analyzer.PlotWave()
+	waveBytes, err := analyzer.PlotWave("wave")
 	if err != nil {
 		return fmt.Errorf("process: couldn't plot wave: %w", err)
 	}
@@ -115,7 +122,9 @@ func Run(ctx context.Context, cfg *Config) error {
 		if s.Final {
 			break
 		}
-		f.Silences++
+		p := (s.Start.Seconds() + s.Duration.Seconds()/2.0) / analyzer.Duration().Seconds()
+		p100 := int(p * 100.0)
+		f.Silences = append(f.Silences, p100)
 	}
 
 	// Short song

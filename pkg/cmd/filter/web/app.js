@@ -22,6 +22,18 @@ window.app = function () {
             console.log("deleting " + id);
             this.error = '';
 
+            const audioElements = document.querySelectorAll('audio');
+            const audioElement = audioElements[index];
+            // Pause the audio if it's playing
+            if (!audioElement.paused) {
+                audioElement.pause();
+                // Optional: Reset the audio time to 0
+                audioElement.currentTime = 0;
+            }
+            this.images[index].deleted = true;
+
+            return;
+
             let apiURL = "/api/" + this.asset + "/" + id;
             fetch(apiURL, {
                 method: 'DELETE',

@@ -8,7 +8,9 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -98,6 +100,9 @@ func Serve(ctx context.Context, cfg *Config) error {
 	// Handler to serve the static files
 	mux.Get("/*", http.StripPrefix("/", http.FileServer(http.FS(webFS))).ServeHTTP)
 
+	// Handler to serve cached files "cache folder"
+	mux.Get("/cache/*", http.StripPrefix("/cache/", http.FileServer(http.Dir(".cache"))).ServeHTTP)
+
 	r.Get("/api/songs", func(w http.ResponseWriter, r *http.Request) {
 		// Obtain page from query params
 		page, err := strconv.Atoi(r.URL.Query().Get("page"))
@@ -111,7 +116,11 @@ func Serve(ctx context.Context, cfg *Config) error {
 		filters := []storage.Filter{
 			storage.Where("disabled = ?", cfg.Disabled),
 			storage.Where("processed = ?", cfg.Processed),
-			storage.Where("flagged = ?", cfg.Flagged),
+		}
+		if cfg.Flagged {
+			filters = append(filters, storage.Where(`flagged = true AND flags != '{"no_end":true}'`))
+		} else {
+			filters = append(filters, storage.Where(`flagged = false OR flags = '{"no_end":true}'`))
 		}
 		if query := r.URL.Query().Get("query"); query != "" {
 			fmt.Println("query:", query)
@@ -137,20 +146,40 @@ func Serve(ctx context.Context, cfg *Config) error {
 				p += " " + s.Flags
 			}
 
-			u := s.SunoAudio
-			if s.Master != "" {
-				u, err = tgStore.Get(ctx, s.Master)
-				if err != nil {
-					log.Println("couldn't get master:", err)
-					http.Error(w, fmt.Sprintf("couldn't get master: %v", err), http.StatusInternalServerError)
-					return
+			audioURL := s.SunoAudio
+			if _, err := os.Stat(fmt.Sprintf(".cache/%s.mp3", s.ID)); err == nil {
+				audioURL = fmt.Sprintf("/cache/%s.mp3", s.ID)
+			} else if s.Master != "" {
+				audioURL = s.Master
+				if !strings.HasPrefix(s.Master, "http") {
+					audioURL, err = tgStore.Get(ctx, s.Master)
+					if err != nil {
+						log.Println("couldn't get master:", err)
+						http.Error(w, fmt.Sprintf("couldn't get master: %v", err), http.StatusInternalServerError)
+						return
+					}
+				}
+			}
+
+			waveURL := s.Wave
+			if _, err := os.Stat(fmt.Sprintf(".cache/%s.jpg", s.ID)); err == nil {
+				waveURL = fmt.Sprintf("/cache/%s.jpg", s.ID)
+			} else if s.Wave != "" {
+				waveURL = s.Wave
+				if !strings.HasPrefix(s.Wave, "http") {
+					audioURL, err = tgStore.Get(ctx, s.Wave)
+					if err != nil {
+						log.Println("couldn't get wave:", err)
+						http.Error(w, fmt.Sprintf("couldn't get wave: %v", err), http.StatusInternalServerError)
+						return
+					}
 				}
 			}
 
 			assets = append(assets, &Asset{
 				ID:           s.ID,
-				URL:          u,
-				ThumbnailURL: s.Wave,
+				URL:          audioURL,
+				ThumbnailURL: waveURL,
 				Prompt:       p,
 			})
 		}

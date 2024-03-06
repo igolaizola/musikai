@@ -48,14 +48,14 @@
         right: 5px;
       }
       audio:hover {
-        width: 400px !important;
-        margin-left: -100px !important;
+        width: 300px !important;
+        /*margin-left: -100px !important;*/
         z-index: 1000;
       }
       audio::-webkit-media-controls-play-button:hover,
-      audio::-webkit-media-controls-panel:hover{
+      audio::-webkit-media-controls-panel:hover {
         background-color: #43b9d9;
-        color: #43b9d9;;
+        color: #43b9d9;
       }
     </style>
   </head>
@@ -125,10 +125,10 @@
               />
             </div>
             <div class="col-md-2">
-                <select x-model="asset" class="form-select mb-3">
-                  <option value="songs">Song</option>
-                </select>
-              </div>
+              <select x-model="asset" class="form-select mb-3">
+                <option value="songs">Song</option>
+              </select>
+            </div>
             <div class="col-md-2">
               <button type="submit" class="btn btn-primary w-100">
                 Refresh
@@ -161,23 +161,30 @@
           <div class="gallery mb-4">
             <template x-for="(img, index) in images">
               <div class="gallery-item card">
-                <a target="_blank" x-bind:href="img.url">     
-                    <img x-bind:src="img.thumbnail_url" />
+                <a target="_blank" x-bind:href="img.url">
+                  <img x-bind:src="img.thumbnail_url" />
                 </a>
-                <audio controls class="my-2" style="height: 30px; width: 100%;">
-                  <source x-bind:src="img.url" type="audio/mp3">
-                Your browser does not support the audio element.
+                <audio controls class="my-2" style="height: 30px; width: 100%">
+                  <source x-bind:src="img.url" type="audio/mp3" />
+                  Your browser does not support the audio element.
                 </audio>
                 <span class="small" x-text="img.prompt"></span>
 
                 <div class="btn-group" role="group">
-                  <button
-                    @click="deleteImage(index)"
-                    type="button"
-                    class="btn btn-danger btn-sm"
-                  >
-                    Delete
-                  </button>
+                  <template x-if="!img.deleted && img.deleted != true">
+                    <button
+                      @click="deleteImage(index)"
+                      type="button"
+                      class="btn btn-danger btn-sm"
+                    >
+                      Delete
+                    </button>
+                  </template>
+                  <template x-if="img.deleted === true">
+                    <button type="button" class="btn btn-secondary btn-sm">
+                      Disabled
+                    </button>
+                  </template>
                 </div>
               </div>
             </template>

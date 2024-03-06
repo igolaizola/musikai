@@ -231,10 +231,10 @@ func (a *Analyzer) PlotRMS() ([]byte, error) {
 	return createPlot("rms", rms, 0, 1, window.Seconds(), 0.01)
 }
 
-func (a *Analyzer) PlotWave() ([]byte, error) {
+func (a *Analyzer) PlotWave(name string) ([]byte, error) {
 	window := 50 * time.Millisecond
 	resampled := a.Resample(window)
-	return createPlot("wave", resampled, -1, 1, window.Seconds(), 0.00)
+	return createPlot(name, resampled, -1, 1, window.Seconds(), 0.00)
 }
 
 func createPlot(name string, data []float64, min, max float64, window float64, line float64) ([]byte, error) {
