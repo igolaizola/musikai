@@ -1,5 +1,6 @@
 window.app = function () {
   return {
+    speed: 1,
     asset: "songs",
     style: "",
     type: "",
@@ -9,14 +10,15 @@ window.app = function () {
     loading: false,
     images: [],
     nav: "home",
+    pending: true,
     approved: false,
-    disapproved: false,
-    disabled: false,
-    enabled: false,
+    rejected: false,
     flagged: false,
     noflagged: false,
     ends: false,
     noends: false,
+    liked: false,
+    noliked: false,
     nav_home: function () {
       this.nav = "home";
       this.clear();
@@ -25,16 +27,11 @@ window.app = function () {
       this.error = "";
       this.loading = false;
     },
-    approveImage: function (index, value) {
+    action: function (action, index, callback) {
       id = this.images[index].id;
-
-      console.log("approving " + id);
+      console.log(action + " " + id);
       this.error = "";
-
-      let apiURL = "/api/" + this.asset + "/" + id + "/approve";
-      if (value === false) {
-        apiURL = "/api/" + this.asset + "/" + id + "/disapprove";
-      }
+      let apiURL = "/api/" + this.asset + "/" + id + "/" + action;
 
       fetch(apiURL, {
         method: "PUT",
@@ -50,52 +47,61 @@ window.app = function () {
           }
         })
         .then((data) => {
-          this.images[index].approved = value;
+          callback(index);
         })
         .catch((error) => {
           this.error = error.message;
         });
     },
-    disableImage: function (index, value) {
-      id = this.images[index].id;
-
-      console.log("disabling " + id);
-      this.error = "";
-
-      let apiURL = "/api/" + this.asset + "/" + id + "/disable";
-      if (value === false) {
-        apiURL = "/api/" + this.asset + "/" + id + "/enable";
+    likeImage: function (index) {
+      this.action("like", index, function (index) {
+        this.images[index].liked = true;
+        this.images[index].state = 2;
+      });
+    },
+    dislikeImage: function (index) {
+      this.action("dislike", index, function (index) {
+        this.images[index].liked = false;
+      });
+    },
+    approveImage: function (index) {
+      this.action("approve", index, function (index) {
+        this.images[index].state = 2;
+      });
+    },
+    rejectImage: function (index) {
+      this.action("reject", index, function (index) {
+        this.images[index].state = 1;
+        const audioElements = document.querySelectorAll("audio");
+        const audioElement = audioElements[index];
+        // Pause the audio if it's playing
+        if (!audioElement.paused) {
+          audioElement.pause();
+          // Optional: Reset the audio time to 0
+          audioElement.currentTime = 0;
+        }
+      });
+    },
+    changeSpeed() {
+      if (this.speed === 3) {
+        this.speed = 1;
+      } else {
+        this.speed++;
       }
-
-      fetch(apiURL, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-        .then((response) => {
-          if (response.ok) {
-            return;
-          } else {
-            throw new Error(response.statusText);
-          }
-        })
-        .then((data) => {
-          if (value === true) {
-            const audioElements = document.querySelectorAll("audio");
-            const audioElement = audioElements[index];
-            // Pause the audio if it's playing
-            if (!audioElement.paused) {
-              audioElement.pause();
-              // Optional: Reset the audio time to 0
-              audioElement.currentTime = 0;
-            }
-          }
-          this.images[index].disabled = value;
-        })
-        .catch((error) => {
-          this.error = error.message;
-        });
+      const audioElements = document.querySelectorAll("audio");
+      // Iterate over the audio elements
+      for (let i = 0; i < audioElements.length; i++) {
+        audioElements[i].playbackRate = this.speed;
+      }
+    },
+    play(index) {
+      const audioElements = document.querySelectorAll("audio");
+      const audioElement = audioElements[index];
+      audioElement.playbackRate = this.speed;
+      if (!audioElement.paused) {
+        // Play the audio
+        audioElement.play();
+      }
     },
     search: function (page) {
       this.page = page;
@@ -120,19 +126,14 @@ window.app = function () {
         "&page=" +
         this.page;
 
-      if (this.approved !== this.disapproved) {
-        if (this.approved) {
-          apiURL += "&approved=true";
-        } else {
-          apiURL += "&approved=false";
-        }
+      if (this.pending === true) {
+        apiURL += "&pending=true";
       }
-      if (this.disabled !== this.enabled) {
-        if (this.disabled) {
-          apiURL += "&disabled=true";
-        } else {
-          apiURL += "&disabled=false";
-        }
+      if (this.approved === true) {
+        apiURL += "&approved=true";
+      }
+      if (this.rejected === true) {
+        apiURL += "&rejected=true";
       }
       if (this.flagged !== this.noflagged) {
         if (this.flagged) {
@@ -146,6 +147,13 @@ window.app = function () {
           apiURL += "&ends=true";
         } else {
           apiURL += "&ends=false";
+        }
+      }
+      if (this.liked !== this.noliked) {
+        if (this.liked) {
+          apiURL += "&liked=true";
+        } else {
+          apiURL += "&liked=false";
         }
       }
 

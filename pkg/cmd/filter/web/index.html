@@ -132,44 +132,104 @@
                 placeholder="Size"
               />
             </div>
-            <div class="col-md-2">
+            <div class="col-md-1">
               <button type="submit" class="btn btn-primary w-100">
-                Refresh
+                👁️
+              </button>
+            </div>
+            <div class="col-md-1">
+              <button
+                @click="changeSpeed()"
+                type="button"
+                class="btn btn-secondary w-100"
+              >
+                <span x-text="speed"></span>x
               </button>
             </div>
 
             <div class="input-group">
               <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" id="approved" x-model="approved">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="pending"
+                  x-model="pending"
+                />
+                <label class="form-check-label" for="pending">Pending</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="approved"
+                  x-model="approved"
+                />
                 <label class="form-check-label" for="approved">Approved</label>
               </div>
               <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" id="disapproved" x-model="disapproved">
-                <label class="form-check-label" for="disapproved">Disapproved</label>
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="rejected"
+                  x-model="rejected"
+                />
+                <label class="form-check-label" for="rejected">Rejected</label>
               </div>
               <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" id="disabled" x-model="disabled">
-                <label class="form-check-label" for="disabled">Disabled</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" id="enabled" x-model="enabled">
-                <label class="form-check-label" for="enabled">Enabled</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" id="flagged" x-model="flagged">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="flagged"
+                  x-model="flagged"
+                />
                 <label class="form-check-label" for="flagged">Flagged</label>
               </div>
               <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" id="noflagged" x-model="noflagged">
-                <label class="form-check-label" for="noflagged">Not Flagged</label>
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="noflagged"
+                  x-model="noflagged"
+                />
+                <label class="form-check-label" for="noflagged"
+                  >!Flagged</label
+                >
               </div>
               <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" id="ends" x-model="ends">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="ends"
+                  x-model="ends"
+                />
                 <label class="form-check-label" for="ends">Ends</label>
               </div>
               <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" id="noends" x-model="noends">
-                <label class="form-check-label" for="noends">No Ends</label>
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="noends"
+                  x-model="noends"
+                />
+                <label class="form-check-label" for="noends">!Ends</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="liked"
+                  x-model="liked"
+                />
+                <label class="form-check-label" for="liked">Liked</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="noliked"
+                  x-model="noliked"
+                />
+                <label class="form-check-label" for="noliked">!Liked</label>
               </div>
             </div>
           </form>
@@ -202,49 +262,55 @@
                 <a target="_blank" x-bind:href="img.url">
                   <img x-bind:src="img.thumbnail_url" />
                 </a>
-                <audio controls class="my-2" style="height: 30px; width: 100%">
+                <audio
+                  controls
+                  class="my-2"
+                  style="height: 30px; width: 100%"
+                  x-bind:onplay="play(index)"
+                >
                   <source x-bind:src="img.url" type="audio/mp3" />
                   Your browser does not support the audio element.
                 </audio>
                 <span class="small" x-text="img.prompt"></span>
 
                 <div class="btn-group" role="group">
-
-                  <template x-if="!img.approved && img.approved != true">
+                  <template x-if="!img.liked || img.liked === false">
                     <button
-                      @click="approveImage(index, true)"
+                      @click="likeImage(index)"
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                    >
+                      🤍
+                    </button>
+                  </template>
+
+                  <template x-if="img.liked === true">
+                    <button
+                      @click="dislikeImage(index)"
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                    >
+                      ❤️
+                    </button>
+                  </template>
+
+                  <template x-if="img.state !== 2">
+                    <button
+                      @click="approveImage(index)"
                       type="button"
                       class="btn btn-success btn-sm"
                     >
                       Approve
                     </button>
                   </template>
-                  <template x-if="img.approved === true">
-                    <button
-                      @click="approveImage(index, false)"
-                      type="button"
-                      class="btn btn-secondary btn-sm"
-                    >
-                      Disapprove
-                    </button>
-                  </template>
 
-                  <template x-if="!img.disabled && img.disabled != true">
+                  <template x-if="img.state !== 1">
                     <button
-                      @click="disableImage(index, true)"
+                      @click="rejectImage(index)"
                       type="button"
                       class="btn btn-danger btn-sm"
                     >
-                      Disable
-                    </button>
-                  </template>
-                  <template x-if="img.disabled === true">
-                    <button
-                    @click="disableImage(index, false)"
-                    type="button"
-                    class="btn btn-info btn-sm"
-                  >
-                      Enable
+                      Reject
                     </button>
                   </template>
                 </div>

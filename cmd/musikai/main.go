@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -242,6 +243,7 @@ func newFilterCommand() *ffcli.Command {
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
 	fs.IntVar(&cfg.Port, "port", 1337, "port to listen on")
+	fsMapVar(fs, &cfg.Credentials, "creds", nil, "credentials to use")
 
 	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
 	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
@@ -296,4 +298,38 @@ func newDownloadCommand() *ffcli.Command {
 			return download.Run(ctx, cfg)
 		},
 	}
+}
+
+type mapValue struct {
+	v *map[string]string
+}
+
+func (m *mapValue) String() string {
+	if m.v == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", map[string]string(*m.v))
+}
+
+func (m *mapValue) Set(value string) error {
+	if m.v == nil {
+		return errors.New("nil map reference")
+	}
+	pairs := strings.Split(value, ";")
+	for _, pair := range pairs {
+		parts := strings.SplitN(pair, ":", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid map entry: %s", pair)
+		}
+		(*m.v)[parts[0]] = parts[1]
+	}
+	return nil
+}
+
+func fsMapVar(fs *flag.FlagSet, p *map[string]string, name string, value map[string]string, usage string) {
+	if value == nil {
+		value = make(map[string]string)
+	}
+	*p = value
+	fs.Var(&mapValue{p}, name, usage)
 }

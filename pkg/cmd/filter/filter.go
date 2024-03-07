@@ -20,10 +20,11 @@ import (
 )
 
 type Config struct {
-	Debug  bool
-	DBType string
-	DBConn string
-	Port   int
+	Debug       bool
+	DBType      string
+	DBConn      string
+	Port        int
+	Credentials map[string]string
 
 	Proxy   string
 	TGChat  int64
@@ -76,6 +77,13 @@ func Serve(ctx context.Context, cfg *Config) error {
 	mux.Use(middleware.RealIP)
 	mux.Use(middleware.Recoverer)
 	mux.Use(middleware.Timeout(60 * time.Second))
+
+	// Add BasicAuth middleware
+	if len(cfg.Credentials) > 0 {
+		mux.Use(middleware.BasicAuth("private", cfg.Credentials))
+	}
+
+	// Create subrouter for api endpoints
 	r := mux.Group(func(r chi.Router) {
 		r.Use(middleware.Logger)
 	})
@@ -112,12 +120,24 @@ func Serve(ctx context.Context, cfg *Config) error {
 		filters := []storage.Filter{
 			storage.Where("processed = ?", true),
 		}
-		options := []string{"approved", "flagged", "disabled", "ends"}
+		options := []string{"flagged", "liked", "ends"}
 		for _, o := range options {
 			if v := r.URL.Query().Get(o); v != "" {
 				b := v == "true"
 				filters = append(filters, storage.Where(fmt.Sprintf("%s = ?", o), b))
 			}
+		}
+		var values []int
+		states := []string{"pending", "rejected", "approved"}
+		for i, s := range states {
+			if v := r.URL.Query().Get(s); v != "" {
+				if v == "true" {
+					values = append(values, i)
+				}
+			}
+		}
+		if len(values) > 0 {
+			filters = append(filters, storage.Where("state IN (?)", values))
 		}
 
 		queries := []string{"prompt", "style", "type"}
@@ -138,10 +158,10 @@ func Serve(ctx context.Context, cfg *Config) error {
 			d := time.Duration(int(s.Duration)) * time.Second
 			p := fmt.Sprintf("%s %.f BPM %s", d, s.Tempo, s.Type)
 			if s.Prompt != "" {
-				p += ", " + s.Prompt
+				p += " | " + s.Prompt
 			}
 			if s.Style != "" {
-				p += ", " + s.Style
+				p += " | " + s.Style
 			}
 			if s.Flags != "" {
 				p += " " + s.Flags
@@ -182,8 +202,8 @@ func Serve(ctx context.Context, cfg *Config) error {
 				URL:          audioURL,
 				ThumbnailURL: waveURL,
 				Prompt:       p,
-				Approved:     s.Approved,
-				Disabled:     s.Disabled,
+				State:        s.State,
+				Liked:        s.Liked,
 			})
 		}
 		if err := json.NewEncoder(w).Encode(assets); err != nil {
@@ -195,28 +215,26 @@ func Serve(ctx context.Context, cfg *Config) error {
 
 	r.Put("/api/songs/{id}/approve", func(w http.ResponseWriter, r *http.Request) {
 		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
-			s.Approved = true
+			s.State = storage.Approved
 			return s
 		})
 	})
-
-	r.Put("/api/songs/{id}/disapprove", func(w http.ResponseWriter, r *http.Request) {
+	r.Put("/api/songs/{id}/reject", func(w http.ResponseWriter, r *http.Request) {
 		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
-			s.Approved = false
+			s.State = storage.Rejected
 			return s
 		})
 	})
-
-	r.Put("/api/songs/{id}/disable", func(w http.ResponseWriter, r *http.Request) {
+	r.Put("/api/songs/{id}/like", func(w http.ResponseWriter, r *http.Request) {
 		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
-			s.Disabled = true
+			s.State = storage.Approved
+			s.Liked = true
 			return s
 		})
 	})
-
-	r.Put("/api/songs/{id}/enable", func(w http.ResponseWriter, r *http.Request) {
+	r.Put("/api/songs/{id}/dislike", func(w http.ResponseWriter, r *http.Request) {
 		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
-			s.Disabled = false
+			s.Liked = false
 			return s
 		})
 	})
@@ -242,10 +260,10 @@ func updateSong(w http.ResponseWriter, r *http.Request, store *storage.Store, up
 }
 
 type Asset struct {
-	ID           string `json:"id"`
-	URL          string `json:"url"`
-	ThumbnailURL string `json:"thumbnail_url"`
-	Prompt       string `json:"prompt"`
-	Approved     bool   `json:"approved"`
-	Disabled     bool   `json:"disabled"`
+	ID           string        `json:"id"`
+	URL          string        `json:"url"`
+	ThumbnailURL string        `json:"thumbnail_url"`
+	Prompt       string        `json:"prompt"`
+	State        storage.State `json:"state"`
+	Liked        bool          `json:"liked"`
 }

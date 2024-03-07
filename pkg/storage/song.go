@@ -9,6 +9,16 @@ import (
 	"gorm.io/gorm"
 )
 
+// State custom type for our enum
+type State int
+
+// Enum values for State
+const (
+	Pending  State = 0
+	Rejected State = 1
+	Approved State = 2
+)
+
 type Song struct {
 	ID        string `gorm:"primarykey"`
 	CreatedAt time.Time
@@ -35,12 +45,12 @@ type Song struct {
 	AlbumID string `gorm:"index,not null;default:''"`
 
 	ProcessedAt time.Time
+	Processed   bool `gorm:"index"`
 
-	Ends      bool
-	Approved  bool `gorm:"index"`
-	Processed bool `gorm:"index"`
-	Flagged   bool `gorm:"index"`
-	Disabled  bool `gorm:"index"`
+	Ends    bool
+	Flagged bool `gorm:"index"`
+	Liked   bool
+	State   State `gorm:"not null;default:0"`
 }
 
 func (s *Store) GetSong(ctx context.Context, id string) (*Song, error) {
@@ -72,7 +82,7 @@ func (s *Store) DeleteSong(ctx context.Context, id string) error {
 }
 
 func (s *Store) ListSongs(ctx context.Context, page, size int, orderBy string, filter ...Filter) ([]*Song, error) {
-	filter = append(filter, Where("disabled = ?", false))
+	filter = append(filter, Where("state != ?", Rejected))
 	return s.ListAllSongs(ctx, page, size, orderBy, filter...)
 }
 
@@ -99,7 +109,7 @@ func (s *Store) ListAllSongs(ctx context.Context, page, size int, orderBy string
 
 func (s *Store) NextSong(ctx context.Context, filter ...Filter) (*Song, error) {
 	var v Song
-	q := s.db.Where("disabled = ?", false)
+	q := s.db.Where("state != ?", Rejected)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}
