@@ -18,6 +18,7 @@ import (
 	"github.com/igolaizola/musikai/pkg/cmd/generate"
 	"github.com/igolaizola/musikai/pkg/cmd/migrate"
 	"github.com/igolaizola/musikai/pkg/cmd/process"
+	"github.com/igolaizola/musikai/pkg/cmd/title"
 	"github.com/peterbourgon/ff/ffyaml"
 	"github.com/peterbourgon/ff/v3"
 	"github.com/peterbourgon/ff/v3/ffcli"
@@ -51,10 +52,11 @@ func newCommand() *ffcli.Command {
 		},
 		Subcommands: []*ffcli.Command{
 			newVersionCommand(),
+			newMigrateCommand(),
 			newAnalyzeCommand(),
 			newGenerateCommand(),
 			newProcessCommand(),
-			newMigrateCommand(),
+			newTitleCommand(),
 			newFilterCommand(),
 			newDownloadCommand(),
 		},
@@ -261,6 +263,35 @@ func newFilterCommand() *ffcli.Command {
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
 			return filter.Serve(ctx, cfg)
+		},
+	}
+}
+
+func newTitleCommand() *ffcli.Command {
+	cmd := "title"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &title.Config{}
+
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
+	fs.StringVar(&cfg.Input, "input", "", "input file")
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return title.Run(ctx, cfg)
 		},
 	}
 }
