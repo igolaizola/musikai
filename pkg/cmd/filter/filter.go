@@ -85,7 +85,9 @@ func Serve(ctx context.Context, cfg *Config) error {
 
 	// Create subrouter for api endpoints
 	r := mux.Group(func(r chi.Router) {
-		r.Use(middleware.Logger)
+		if cfg.Debug {
+			r.Use(middleware.Logger)
+		}
 	})
 
 	// Create server
