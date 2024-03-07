@@ -1,7 +1,8 @@
 window.app = function () {
   return {
     asset: "songs",
-    query: "",
+    style: "",
+    type: "",
     size: 100,
     error: "",
     page: 1,
@@ -104,13 +105,16 @@ window.app = function () {
       this.images = [];
 
       // URL encode the query string
-      q = encodeURIComponent(this.query);
+      style = encodeURIComponent(this.style);
+      type = encodeURIComponent(this.type);
 
       apiURL =
         "/api/" +
         this.asset +
-        "?query=" +
-        q +
+        "?style=" +
+        style +
+        "&type=" +
+        type +
         "&size=" +
         this.size +
         "&page=" +

@@ -108,12 +108,20 @@
         >
           <!--h1 class="mb-4">Gallery</!--h1-->
           <form @submit.prevent="search(1)" class="row mb-4">
-            <div class="col-md-4">
+            <div class="col-md-3">
               <input
-                x-model="query"
+                x-model="type"
                 type="text"
                 class="form-control mb-3"
-                placeholder="Query"
+                placeholder="Type"
+              />
+            </div>
+            <div class="col-md-3">
+              <input
+                x-model="style"
+                type="text"
+                class="form-control mb-3"
+                placeholder="Style"
               />
             </div>
             <div class="col-md-2">
@@ -124,12 +132,6 @@
                 placeholder="Size"
               />
             </div>
-            <div class="col-md-2">
-              <select x-model="asset" class="form-select mb-3">
-                <option value="songs">Song</option>
-              </select>
-            </div>
-
             <div class="col-md-2">
               <button type="submit" class="btn btn-primary w-100">
                 Refresh

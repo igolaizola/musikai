@@ -120,10 +120,13 @@ func Serve(ctx context.Context, cfg *Config) error {
 			}
 		}
 
-		if query := r.URL.Query().Get("query"); query != "" {
-			fmt.Println("query:", query)
-			filters = append(filters, storage.Where(fmt.Sprintf("songs.type LIKE '%s'", query)))
+		queries := []string{"prompt", "style", "type"}
+		for _, q := range queries {
+			if v := r.URL.Query().Get(q); v != "" {
+				filters = append(filters, storage.Where(fmt.Sprintf("songs.%s LIKE '%s'", q, v)))
+			}
 		}
+
 		songs, err := store.ListAllSongs(ctx, page, size, "", filters...)
 		if err != nil {
 			log.Println("couldn't list videos:", err)
