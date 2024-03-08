@@ -17,6 +17,7 @@ const (
 	Pending  State = 0
 	Rejected State = 1
 	Approved State = 2
+	Used     State = 3
 )
 
 type Song struct {
