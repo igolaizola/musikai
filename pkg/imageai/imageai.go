@@ -257,12 +257,12 @@ func indexes() []int {
 	indexes := []int{0, 1, 2, 3}
 
 	// Seed the random number generator.
-	rand.Seed(time.Now().UnixNano())
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// Shuffle the slice.
 	for i := len(indexes) - 1; i > 0; i-- {
 		// Generate a random index between 0 and i.
-		randomIndex := rand.Intn(i + 1)
+		randomIndex := r.Intn(i + 1)
 
 		// Swap the elements at the current index and the random index.
 		indexes[i], indexes[randomIndex] = indexes[randomIndex], indexes[i]

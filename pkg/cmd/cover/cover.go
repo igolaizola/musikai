@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -162,7 +161,7 @@ func Run(ctx context.Context, cfg *Config) error {
 					return errors.New("process: no drafts to process")
 				}
 				for _, dc := range draftCovers {
-					for i := dc.Covers; i < cfg.Minimum; i++ {
+					for i := dc.Covers; i < cfg.Minimum; i += 4 {
 						drafts = append(drafts, &dc.Draft)
 					}
 				}
@@ -190,6 +189,7 @@ func Run(ctx context.Context, cfg *Config) error {
 func generate(ctx context.Context, generator *imageai.Generator, store *storage.Store, draft *storage.Draft, template string) error {
 	// Generate the images.
 	prompt := strings.ReplaceAll(template, "{title}", draft.Title)
+	prompt = strings.ReplaceAll(prompt, "{TITLE}", strings.ToUpper(draft.Title))
 
 	urls, err := generator.Generate(ctx, prompt)
 	var aiErr ai.Error
@@ -225,18 +225,4 @@ func generate(ctx context.Context, generator *imageai.Generator, store *storage.
 		}
 	}
 	return nil
-}
-
-func addAR(prompt, ar string) string {
-	// Regular expression to find the --ar flag and its value
-	re := regexp.MustCompile(`(--ar\s+[\d:.]+)`)
-	found := re.FindStringSubmatch(prompt)
-
-	// If --ar is found, replace its value
-	if len(found) > 0 {
-		return re.ReplaceAllString(prompt, "--ar "+ar)
-	}
-
-	// If --ar is not found, append --ar and the new value to the end
-	return prompt + " --ar " + ar
 }

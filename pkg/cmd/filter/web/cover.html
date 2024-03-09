@@ -26,7 +26,7 @@
       }
 
       div.gallery img:hover {
-        transform: scale(1.1);
+        transform: scale(1.05);
         /* Increase the size when the mouse hovers over the image */
         box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
         /* Increase the shadow when the mouse hovers over the image */
@@ -253,13 +253,7 @@
           <div class="gallery mb-4">
             <template x-for="(img, index) in images">
               <div class="gallery-item card">
-                <a target="_blank" x-bind:href="img.url">
-                  <img x-bind:src="img.thumbnail_url" />
-                </a>
-
-                <span class="small" x-text="img.prompt"></span>
-
-                <div class="btn-group" role="group">
+                <div class="no-btn-group m-1" role="group">
                   <template x-if="!img.liked || img.liked === false">
                     <button
                       @click="likeImage(index)"
@@ -300,6 +294,13 @@
                     </button>
                   </template>
                 </div>
+
+                <a target="_blank" x-bind:href="img.url">
+                  <img x-bind:src="img.thumbnail_url" />
+                </a>
+
+                <span class="small" x-text="img.prompt"></span>
+
               </div>
             </template>
           </div>
