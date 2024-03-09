@@ -284,6 +284,7 @@ func newTitleCommand() *ffcli.Command {
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
 	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
 	fs.StringVar(&cfg.Input, "input", "", "input file")
+	fs.StringVar(&cfg.Type, "type", "", "default type to use (can be override by the input file)")
 
 	return &ffcli.Command{
 		Name:       cmd,

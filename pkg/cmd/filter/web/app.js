@@ -47,6 +47,7 @@ window.app = function () {
           }
         })
         .then((data) => {
+          console.log("launch callback")
           callback(index);
         })
         .catch((error) => {
@@ -54,24 +55,23 @@ window.app = function () {
         });
     },
     likeImage: function (index) {
-      this.action("like", index, function (index) {
+      this.action("like", index,  () => {
         this.images[index].liked = true;
         this.images[index].state = 2;
       });
     },
     dislikeImage: function (index) {
-      this.action("dislike", index, function (index) {
+      this.action("dislike", index,  () => {
         this.images[index].liked = false;
       });
     },
     approveImage: function (index) {
-      this.action("approve", index, function (index) {
+      this.action("approve", image,  () => {
         this.images[index].state = 2;
       });
     },
     rejectImage: function (index) {
-      this.action("reject", index, function (index) {
-        this.images[index].state = 1;
+      this.action("reject", index, () => {
         const audioElements = document.querySelectorAll("audio");
         const audioElement = audioElements[index];
         // Pause the audio if it's playing
@@ -80,6 +80,7 @@ window.app = function () {
           // Optional: Reset the audio time to 0
           audioElement.currentTime = 0;
         }
+        this.images[index].state = 1;
       });
     },
     changeSpeed() {

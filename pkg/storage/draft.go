@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -22,11 +23,6 @@ type Draft struct {
 
 	Cover    bool `gorm:"not null;default:false"`
 	Disabled bool `gorm:"index"`
-}
-
-type DraftCovers struct {
-	Draft  *Draft
-	Covers int
 }
 
 func (s *Store) GetDraft(ctx context.Context, id string) (*Draft, error) {
@@ -94,15 +90,30 @@ func (s *Store) NextDraft(ctx context.Context, filter ...Filter) (*Draft, error)
 	return &v, nil
 }
 
+type DraftCovers struct {
+	Draft
+	Covers int `gorm:"column:covers"`
+}
+
 func (s *Store) ListDraftCovers(ctx context.Context, min, page, size int, orderBy string, filter ...Filter) ([]*DraftCovers, error) {
 	vs := []*DraftCovers{}
 
-	// Adjust the join condition based on your actual foreign key and relationship
-	q := s.db.Model(&Draft{}).Select("drafts.*, count(*) as count").
-		Joins("inner join covers on drafts.title = covers.title").
+	// Getting DB column names
+	stmt := &gorm.Statement{DB: s.db}
+	if err := stmt.Parse(&Draft{}); err != nil {
+		return nil, fmt.Errorf("storage: couldn't parse draft: %w", err)
+	}
+	columns := []string{}
+	for _, dbField := range stmt.Schema.DBNames {
+		columns = append(columns, fmt.Sprintf("drafts.%s", dbField))
+	}
+
+	// Query to get drafts with less covers than the minimum
+	q := s.db.Model(&Draft{}).Select(strings.Join(append(columns, "count(*) as covers"), ",")).
+		Joins("LEFT JOIN covers on drafts.title = covers.title AND covers.state IN ?", []State{Pending, Approved}).
 		Where("drafts.disabled = ?", false).
-		Where("covers.state IN ?", []State{Pending, Approved}).
-		Having("count < (drafts.Volumes+1) * ?", min)
+		Group(strings.Join(columns, ",")).
+		Having("count(*) < (drafts.Volumes+1) * ?", min)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}
@@ -114,7 +125,7 @@ func (s *Store) ListDraftCovers(ctx context.Context, min, page, size int, orderB
 	offset := (page - 1) * size
 	q = q.Offset(offset).Limit(size)
 	if err := q.Scan(&vs).Error; err != nil {
-		return nil, fmt.Errorf("orm: couldn't list videos and images: %w", err)
+		return nil, fmt.Errorf("storage: couldn't list draft covers: %w", err)
 	}
 	return vs, nil
 }

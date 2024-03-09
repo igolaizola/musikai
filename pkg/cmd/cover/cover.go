@@ -53,6 +53,10 @@ func Run(ctx context.Context, cfg *Config) error {
 		return errors.New("cover: template is required")
 	}
 
+	if cfg.Minimum < 1 {
+		return errors.New("cover: minimum is required")
+	}
+
 	var err error
 	store, err := storage.New(cfg.DBType, cfg.DBConn, cfg.Debug)
 	if err != nil {
@@ -152,14 +156,14 @@ func Run(ctx context.Context, cfg *Config) error {
 				var err error
 				draftCovers, err := store.ListDraftCovers(ctx, cfg.Minimum, 1, 100, "", filters...)
 				if err != nil {
-					return fmt.Errorf("process: couldn't get song from database: %w", err)
+					return fmt.Errorf("process: couldn't get draft from database: %w", err)
 				}
 				if len(draftCovers) == 0 {
-					return errors.New("process: no songs to process")
+					return errors.New("process: no drafts to process")
 				}
 				for _, dc := range draftCovers {
 					for i := dc.Covers; i < cfg.Minimum; i++ {
-						drafts = append(drafts, dc.Draft)
+						drafts = append(drafts, &dc.Draft)
 					}
 				}
 				currID = drafts[len(drafts)-1].ID
@@ -186,6 +190,7 @@ func Run(ctx context.Context, cfg *Config) error {
 func generate(ctx context.Context, generator *imageai.Generator, store *storage.Store, draft *storage.Draft, template string) error {
 	// Generate the images.
 	prompt := strings.ReplaceAll(template, "{title}", draft.Title)
+
 	urls, err := generator.Generate(ctx, prompt)
 	var aiErr ai.Error
 	if errors.As(err, &aiErr) {

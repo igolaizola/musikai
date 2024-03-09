@@ -3,7 +3,7 @@ module github.com/igolaizola/musikai
 go 1.22
 
 require (
-	github.com/Danny-Dasilva/fhttp v0.0.0-20240217042913-eeeb0b347ce1
+	github.com/Danny-Dasilva/fhttp v0.0.0-20220524230104-f801520157d6
 	github.com/aws/aws-sdk-go-v2 v1.25.2
 	github.com/aws/aws-sdk-go-v2/config v1.27.4
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.4
@@ -46,10 +46,8 @@ require (
 	github.com/bwmarrin/discordgo v0.27.0 // indirect
 	github.com/bwmarrin/snowflake v0.3.0 // indirect
 	github.com/campoy/embedmd v1.0.0 // indirect
-	github.com/cloudflare/circl v1.3.3 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/gaukas/godicttls v0.0.4 // indirect
 	github.com/glebarez/go-sqlite v1.21.2 // indirect
 	github.com/go-fonts/liberation v0.3.1 // indirect
 	github.com/go-latex/latex v0.0.0-20230307184459-12ec69307ad9 // indirect
@@ -57,6 +55,7 @@ require (
 	github.com/go-sql-driver/mysql v1.7.0 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/igolaizola/askimg v1.0.1 // indirect
@@ -65,12 +64,9 @@ require (
 	github.com/jackc/pgx/v5 v5.4.3 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/quic-go/quic-go v0.37.4 // indirect
-	github.com/refraction-networking/utls v1.5.4 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/technoweenie/multipartstreamer v1.0.1 // indirect

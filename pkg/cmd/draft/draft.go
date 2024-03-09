@@ -3,10 +3,12 @@ package draft
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gocarina/gocsv"
 	"github.com/igolaizola/musikai/pkg/storage"
@@ -26,7 +28,7 @@ type Config struct {
 type draft struct {
 	Type     string `json:"type" csv:"type"`
 	Title    string `json:"title" csv:"title"`
-	Subtitle string `json:"keywords" csv:"subtitle"`
+	Subtitle string `json:"subtitle" csv:"subtitle"`
 	Volumes  int    `json:"volumes" csv:"volumes"`
 }
 
@@ -62,6 +64,17 @@ func Run(ctx context.Context, cfg *Config) error {
 			return is, nil
 		}
 	case ".csv":
+		// Check for inconsistent number of fields in csv
+		lines := strings.Split(string(b), "\n")
+		commas := strings.Count(lines[0], ",")
+		for i, l := range lines {
+			if l == "" {
+				continue
+			}
+			if commas != strings.Count(l, ",") {
+				return fmt.Errorf("draft: inconsistent number of fields in csv %d (%s)", i, l)
+			}
+		}
 		unmarshal = func(b []byte) ([]*draft, error) {
 			var is []*draft
 			if err := gocsv.UnmarshalBytes(b, &is); err != nil {
@@ -100,11 +113,30 @@ func Run(ctx context.Context, cfg *Config) error {
 			volumes = cfg.Volumes
 		}
 		if typ == "" {
-			return fmt.Errorf("draft: type not set %s", string(js))
+			log.Printf("draft: type not set %s\n", string(js))
+			continue
 		}
 		if d.Title == "" {
-			return fmt.Errorf("draft: title not set %s", string(js))
+			log.Printf("draft: title not set %s", string(js))
+			continue
 		}
+
+		// Check for duplicates
+		uniqueTitle := strings.ToLower(strings.ReplaceAll(d.Title, " ", ""))
+		uniqueSubtitle := strings.ToLower(strings.ReplaceAll(d.Subtitle, " ", ""))
+		coincidences, err := store.ListDrafts(ctx, 1, 1, "",
+			storage.Where("LOWER(REPLACE(title, ' ', '')) = ?", uniqueTitle),
+			storage.Where("LOWER(REPLACE(subtitle, ' ', '')) = ?", uniqueSubtitle),
+		)
+		switch {
+		case errors.Is(err, storage.ErrNotFound):
+		case err != nil:
+			return fmt.Errorf("draft: couldn't list drafts: %w", err)
+		case len(coincidences) > 0:
+			log.Printf("draft: already exists (%s) %s\n", coincidences[0].ID, string(js))
+			continue
+		}
+
 		if err := store.SetDraft(ctx, &storage.Draft{
 			ID:       ulid.Make().String(),
 			Type:     typ,

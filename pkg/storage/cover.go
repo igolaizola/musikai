@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -23,6 +25,50 @@ type Cover struct {
 	DraftID string `gorm:"not null;default:''"`
 
 	State State `gorm:"not null;default:0"`
+}
+
+func (c *Cover) URL() string {
+	if isExpired(c.DsURL) {
+		return c.MjURL
+	}
+	return c.DsURL
+}
+
+func isExpired(u string) bool {
+	if u == "" {
+		return true
+	}
+
+	// Parse the URL
+	parsedURL, err := url.Parse(u)
+	if err != nil {
+		panic(fmt.Errorf("error parsing URL: %w", err))
+	}
+
+	// Extract the `ex` query parameter
+	values, err := url.ParseQuery(parsedURL.RawQuery)
+	if err != nil {
+		panic(fmt.Errorf("error parsing query parameters: %w", err))
+	}
+	exHex := values.Get("ex")
+	if exHex == "" {
+		// If `ex` is not present, the URL is not expired
+		return false
+	}
+
+	// Convert `ex` from hex to int
+	exInt, err := strconv.ParseInt(exHex, 16, 64)
+	if err != nil {
+		panic(fmt.Errorf("`ex` value conversion error: %w", err))
+	}
+
+	// Convert int to Unix time
+	exTime := time.Unix(exInt, 0)
+
+	// Check if the time is expired
+	isExpired := exTime.Before(time.Now())
+
+	return isExpired
 }
 
 func (s *Store) GetCover(ctx context.Context, id string) (*Cover, error) {

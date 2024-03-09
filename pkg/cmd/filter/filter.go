@@ -241,6 +241,54 @@ func Serve(ctx context.Context, cfg *Config) error {
 		})
 	})
 
+	r.Get("/api/covers", func(w http.ResponseWriter, r *http.Request) {
+		// Obtain page from query params
+		page, err := strconv.Atoi(r.URL.Query().Get("page"))
+		if err != nil {
+			page = 1
+		}
+		size, err := strconv.Atoi(r.URL.Query().Get("size"))
+		if err != nil {
+			size = 100
+		}
+		filters := []storage.Filter{}
+		if query := r.URL.Query().Get("query"); query != "" {
+			fmt.Println("query:", query)
+			filters = append(filters, storage.Where(fmt.Sprintf("type LIKE '%s'", query)))
+		}
+		covers, err := store.ListCovers(ctx, page, size, "", filters...)
+		if err != nil {
+			log.Println("couldn't list covers:", err)
+			http.Error(w, fmt.Sprintf("couldn't list covers: %v", err), http.StatusInternalServerError)
+			return
+		}
+		var assets []*Asset
+		for _, cover := range covers {
+			thumbnail := strings.Replace(cover.URL(), "cdn.discordapp.com", "media.discordapp.net", 1)
+			thumbnail += "?width=224&height=224"
+			assets = append(assets, &Asset{
+				ID:           cover.ID,
+				URL:          cover.URL(),
+				ThumbnailURL: thumbnail,
+				Prompt:       fmt.Sprintf("%s %s", cover.Type, cover.Title), //cover.Prompt,
+				State:        cover.State,
+				// Liked:        image.Liked,
+			})
+		}
+		if err := json.NewEncoder(w).Encode(assets); err != nil {
+			log.Println("couldn't encode covers:", err)
+			http.Error(w, fmt.Sprintf("couldn't encode covers: %v", err), http.StatusInternalServerError)
+			return
+		}
+	})
+
+	r.Put("/api/covers/{id}/reject", func(w http.ResponseWriter, r *http.Request) {
+		updateCover(w, r, store, func(c *storage.Cover) *storage.Cover {
+			c.State = storage.Rejected
+			return c
+		})
+	})
+
 	<-ctx.Done()
 	return nil
 }
@@ -257,6 +305,22 @@ func updateSong(w http.ResponseWriter, r *http.Request, store *storage.Store, up
 	if err := store.SetSong(ctx, song); err != nil {
 		log.Println("couldn't set song:", err)
 		http.Error(w, fmt.Sprintf("couldn't set song: %v", err), http.StatusInternalServerError)
+		return
+	}
+}
+
+func updateCover(w http.ResponseWriter, r *http.Request, store *storage.Store, update func(s *storage.Cover) *storage.Cover) {
+	ctx := r.Context()
+	id := chi.URLParam(r, "id")
+	cover, err := store.GetCover(ctx, id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("couldn't get cover: %v", err), http.StatusNotFound)
+		return
+	}
+	cover = update(cover)
+	if err := store.SetCover(ctx, cover); err != nil {
+		log.Println("couldn't set cover:", err)
+		http.Error(w, fmt.Sprintf("couldn't set cover: %v", err), http.StatusInternalServerError)
 		return
 	}
 }
