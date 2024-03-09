@@ -256,7 +256,29 @@ func Serve(ctx context.Context, cfg *Config) error {
 			fmt.Println("query:", query)
 			filters = append(filters, storage.Where(fmt.Sprintf("type LIKE '%s'", query)))
 		}
-		covers, err := store.ListCovers(ctx, page, size, "", filters...)
+
+		options := []string{"liked"}
+		for _, o := range options {
+			if v := r.URL.Query().Get(o); v != "" {
+				b := v == "true"
+				filters = append(filters, storage.Where(fmt.Sprintf("%s = ?", o), b))
+			}
+		}
+
+		var values []int
+		states := []string{"pending", "rejected", "approved"}
+		for i, s := range states {
+			if v := r.URL.Query().Get(s); v != "" {
+				if v == "true" {
+					values = append(values, i)
+				}
+			}
+		}
+		if len(values) > 0 {
+			filters = append(filters, storage.Where("state IN (?)", values))
+		}
+
+		covers, err := store.ListAllCovers(ctx, page, size, "", filters...)
 		if err != nil {
 			log.Println("couldn't list covers:", err)
 			http.Error(w, fmt.Sprintf("couldn't list covers: %v", err), http.StatusInternalServerError)
@@ -272,7 +294,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 				ThumbnailURL: thumbnail,
 				Prompt:       fmt.Sprintf("%s %s", cover.Type, cover.Title), //cover.Prompt,
 				State:        cover.State,
-				// Liked:        image.Liked,
+				Liked:        false,
 			})
 		}
 		if err := json.NewEncoder(w).Encode(assets); err != nil {
@@ -282,10 +304,29 @@ func Serve(ctx context.Context, cfg *Config) error {
 		}
 	})
 
+	r.Put("/api/covers/{id}/approve", func(w http.ResponseWriter, r *http.Request) {
+		updateCover(w, r, store, func(c *storage.Cover) *storage.Cover {
+			c.State = storage.Approved
+			return c
+		})
+	})
 	r.Put("/api/covers/{id}/reject", func(w http.ResponseWriter, r *http.Request) {
 		updateCover(w, r, store, func(c *storage.Cover) *storage.Cover {
 			c.State = storage.Rejected
 			return c
+		})
+	})
+	r.Put("/api/songs/{id}/like", func(w http.ResponseWriter, r *http.Request) {
+		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
+			s.State = storage.Approved
+			s.Liked = true
+			return s
+		})
+	})
+	r.Put("/api/songs/{id}/dislike", func(w http.ResponseWriter, r *http.Request) {
+		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
+			s.Liked = false
+			return s
 		})
 	})
 

@@ -1,7 +1,7 @@
 window.app = function () {
   return {
     speed: 1,
-    asset: "songs",
+    asset: "covers",
     style: "",
     type: "",
     size: 100,
@@ -72,37 +72,8 @@ window.app = function () {
     },
     rejectImage: function (index) {
       this.action("reject", index, () => {
-        const audioElements = document.querySelectorAll("audio");
-        const audioElement = audioElements[index];
-        // Pause the audio if it's playing
-        if (!audioElement.paused) {
-          audioElement.pause();
-          // Optional: Reset the audio time to 0
-          audioElement.currentTime = 0;
-        }
         this.images[index].state = 1;
       });
-    },
-    changeSpeed() {
-      if (this.speed === 3) {
-        this.speed = 1;
-      } else {
-        this.speed++;
-      }
-      const audioElements = document.querySelectorAll("audio");
-      // Iterate over the audio elements
-      for (let i = 0; i < audioElements.length; i++) {
-        audioElements[i].playbackRate = this.speed;
-      }
-    },
-    play(index) {
-      const audioElements = document.querySelectorAll("audio");
-      const audioElement = audioElements[index];
-      audioElement.playbackRate = this.speed;
-      if (!audioElement.paused) {
-        // Play the audio
-        audioElement.play();
-      }
     },
     search: function (page) {
       this.page = page;

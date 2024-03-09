@@ -25,6 +25,7 @@ type Cover struct {
 	DraftID string `gorm:"not null;default:''"`
 
 	State State `gorm:"not null;default:0"`
+	Liked bool  `gorm:"not null;default:false"`
 }
 
 func (c *Cover) URL() string {
@@ -100,6 +101,10 @@ func (s *Store) DeleteCover(ctx context.Context, id string) error {
 }
 
 func (s *Store) ListCovers(ctx context.Context, page, size int, orderBy string, filter ...Filter) ([]*Cover, error) {
+	return s.ListAllCovers(ctx, page, size, orderBy, Where("state != ?", Rejected))
+}
+
+func (s *Store) ListAllCovers(ctx context.Context, page, size int, orderBy string, filter ...Filter) ([]*Cover, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -107,7 +112,6 @@ func (s *Store) ListCovers(ctx context.Context, page, size int, orderBy string, 
 	vs := []*Cover{}
 
 	q := s.db.Offset(offset).Limit(size)
-	q = q.Where("disabled = ?", false)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}

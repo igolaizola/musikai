@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex" />
     <title>Filter</title>
-    <script defer src="app.js"></script>
+    <script defer src="cover.js"></script>
     <script
       defer
       src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
@@ -64,7 +64,7 @@
     <header>
       <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
-          <a class="navbar-brand" href="#">Filter Songs</a>
+          <a class="navbar-brand" href="#">Filter Covers</a>
           <button
             class="navbar-toggler"
             type="button"
@@ -82,8 +82,8 @@
                 <a
                   id="home-tab"
                   class="nav-link active"
-                  href="cover.html"
-                  >Covers</a
+                  href="/index.html"
+                  >Songs</a
                 >
               </li>
             </ul>
@@ -256,15 +256,7 @@
                 <a target="_blank" x-bind:href="img.url">
                   <img x-bind:src="img.thumbnail_url" />
                 </a>
-                <audio
-                  controls
-                  class="my-2"
-                  style="height: 30px; width: 100%"
-                  x-bind:onplay="play(index)"
-                >
-                  <source x-bind:src="img.url" type="audio/mp3" />
-                  Your browser does not support the audio element.
-                </audio>
+
                 <span class="small" x-text="img.prompt"></span>
 
                 <div class="btn-group" role="group">
