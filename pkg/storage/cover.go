@@ -26,6 +26,10 @@ type Cover struct {
 
 	State State `gorm:"not null;default:0"`
 	Liked bool  `gorm:"not null;default:false"`
+
+	UpscaleAt time.Time
+	UpscaleID string `gorm:"not null;default:''"`
+	Upscaled  bool   `gorm:"not null;default:false"`
 }
 
 func (c *Cover) URL() string {
