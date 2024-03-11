@@ -129,3 +129,48 @@ func (s *Store) ListDraftCovers(ctx context.Context, min, page, size int, orderB
 	}
 	return vs, nil
 }
+
+type DraftCoverSongs struct {
+	Draft
+	Covers int `gorm:"column:covers"`
+	Songs  int `gorm:"column:songs"`
+	Titles int `gorm:"column:titles"`
+}
+
+func (s *Store) NextDraftCoverSongs(ctx context.Context, min int, orderBy string, filter ...Filter) (*DraftCoverSongs, error) {
+	var vs []*DraftCoverSongs
+
+	// Getting DB column names
+	stmt := &gorm.Statement{DB: s.db}
+	if err := stmt.Parse(&Draft{}); err != nil {
+		return nil, fmt.Errorf("storage: couldn't parse draft: %w", err)
+	}
+	columns := []string{}
+	for _, dbField := range stmt.Schema.DBNames {
+		columns = append(columns, fmt.Sprintf("drafts.%s", dbField))
+	}
+
+	// Query to get drafts with less covers than the minimum
+	q := s.db.Model(&Draft{}).Select(strings.Join(append(columns, "count(*) as covers", "count(*) as songs"), ",")).
+		Joins("LEFT JOIN covers on drafts.title = covers.title AND covers.upscaled AND covers.state = ?", Approved).
+		Joins("LEFT JOIN songs on drafts.type = songs.type AND songs.state = ?", Approved).
+		Where("drafts.disabled = ?", false).
+		Group(strings.Join(columns, ",")).
+		Having("covers > 1").
+		Having("songs > ?", min)
+	for _, f := range filter {
+		q = q.Where(f.Query, f.Args...)
+	}
+	// Order by
+	if orderBy != "" {
+		q = q.Order(orderBy)
+	}
+	q = q.Limit(1)
+	if err := q.Scan(&vs).Error; err != nil {
+		return nil, fmt.Errorf("storage: couldn't list draft covers: %w", err)
+	}
+	if len(vs) == 0 {
+		return nil, ErrNotFound
+	}
+	return vs[0], nil
+}

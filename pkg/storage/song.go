@@ -43,6 +43,7 @@ type Song struct {
 	Flags    string  `gorm:"not null;default:''"`
 	Master   string  `gorm:"not null;default:''"`
 
+	Title   string `gorm:"not null;default:''"`
 	AlbumID string `gorm:"index,not null;default:''"`
 
 	ProcessedAt time.Time

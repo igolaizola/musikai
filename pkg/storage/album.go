@@ -16,7 +16,12 @@ type Album struct {
 
 	Type     string `gorm:"not null;default:''"`
 	Title    string `gorm:"not null;default:''"`
-	Disabled bool   `gorm:"index"`
+	Subtitle string `gorm:"not null;default:''"`
+	Volume   int    `gorm:"not null;default:0"`
+	Artist   string `gorm:"not null;default:''"`
+	Cover    string `gorm:"not null;default:''"`
+
+	State State `gorm:"index"`
 }
 
 func (s *Store) GetAlbum(ctx context.Context, id string) (*Album, error) {

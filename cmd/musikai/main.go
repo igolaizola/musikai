@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/igolaizola/musikai/pkg/cmd/album"
 	"github.com/igolaizola/musikai/pkg/cmd/analyze"
 	"github.com/igolaizola/musikai/pkg/cmd/cover"
 	"github.com/igolaizola/musikai/pkg/cmd/download"
@@ -65,6 +66,7 @@ func newCommand() *ffcli.Command {
 			newCoverCommand(),
 			newUpscaleCommand(),
 			newFilterCommand(),
+			newAlbumCommand(),
 			newDownloadCommand(),
 		},
 	}
@@ -274,47 +276,6 @@ func newFilterCommand() *ffcli.Command {
 	}
 }
 
-func newUpscaleCommand() *ffcli.Command {
-	cmd := "upscale"
-	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-	_ = fs.String("config", "", "config file (optional)")
-
-	cfg := &upscale.Config{}
-
-	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
-	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
-	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
-	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
-	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number of images to process (0 means no limit)")
-	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
-	fs.StringVar(&cfg.Type, "type", "", "filter by type")
-
-	// Upscale parameters
-	fs.StringVar(&cfg.UpscaleType, "upscale-type", "topaz", "upscale type (topaz, esrgan)")
-	fs.StringVar(&cfg.UpscaleBin, "upscale-bin", "", "upscale binary path")
-
-	// Telegram parameters
-	fs.StringVar(&cfg.TelegramToken, "tg-token", "", "telegram token")
-	fs.Int64Var(&cfg.TelegramChat, "tg-chat", 0, "telegram chat id")
-	fs.StringVar(&cfg.TelegramProxy, "tg-proxy", "", "telegram proxy")
-	fs.IntVar(&cfg.TelegramConcurrency, "tg-concurrency", 1, "number of concurrent uploads")
-
-	return &ffcli.Command{
-		Name:       cmd,
-		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
-		Options: []ff.Option{
-			ff.WithConfigFileFlag("config"),
-			ff.WithConfigFileParser(ffyaml.Parser),
-			ff.WithEnvVarPrefix("MUSIKAI"),
-		},
-		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
-		FlagSet:   fs,
-		Exec: func(ctx context.Context, args []string) error {
-			return upscale.Run(ctx, cfg)
-		},
-	}
-}
-
 func newTitleCommand() *ffcli.Command {
 	cmd := "title"
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
@@ -432,6 +393,88 @@ func newCoverCommand() *ffcli.Command {
 			}
 			cfg.Discord.Debug = cfg.Debug
 			return cover.Run(ctx, cfg)
+		},
+	}
+}
+
+func newUpscaleCommand() *ffcli.Command {
+	cmd := "upscale"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &upscale.Config{}
+
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
+	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number of images to process (0 means no limit)")
+	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
+	fs.StringVar(&cfg.Type, "type", "", "filter by type")
+
+	// Upscale parameters
+	fs.StringVar(&cfg.UpscaleType, "upscale-type", "topaz", "upscale type (topaz, esrgan)")
+	fs.StringVar(&cfg.UpscaleBin, "upscale-bin", "", "upscale binary path")
+
+	// Telegram parameters
+	fs.StringVar(&cfg.TelegramToken, "tg-token", "", "telegram token")
+	fs.Int64Var(&cfg.TelegramChat, "tg-chat", 0, "telegram chat id")
+	fs.StringVar(&cfg.TelegramProxy, "tg-proxy", "", "telegram proxy")
+	fs.IntVar(&cfg.TelegramConcurrency, "tg-concurrency", 1, "number of concurrent uploads")
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return upscale.Run(ctx, cfg)
+		},
+	}
+}
+
+func newAlbumCommand() *ffcli.Command {
+	cmd := "album"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &album.Config{}
+
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
+	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number of images to process (0 means no limit)")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "telegram proxy")
+
+	fs.StringVar(&cfg.Type, "type", "", "filter by type")
+	fs.StringVar(&cfg.Artist, "artist", "", "artist to apply")
+	fs.StringVar(&cfg.Overlay, "overlay", "", "overlay file to use")
+	fs.StringVar(&cfg.Font, "font", "", "font file to use")
+	fs.IntVar(&cfg.MinSongs, "min-songs", 6, "minimum number of songs")
+	fs.IntVar(&cfg.MaxSongs, "max-songs", 10, "maximum number of songs")
+
+	// Telegram parameters
+	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
+	fs.Int64Var(&cfg.TGChat, "tg-chat", 0, "telegram chat id")
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return album.Run(ctx, cfg)
 		},
 	}
 }
