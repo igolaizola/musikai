@@ -160,7 +160,7 @@ func RunAlbum(ctx context.Context, cfg *Config) error {
 				lck.Lock()
 				albumDir, ok := albumLookup[song.AlbumID]
 				if !ok {
-					albumDir, err = downloadCover(ctx, song.AlbumID, debug, store, tgStore, httpClient, cfg.Output)
+					albumDir, err = downloadCover(ctx, song.AlbumID, debug, store, tgStore, cfg.Output)
 					if err != nil {
 						log.Println(err)
 						errC <- err
@@ -170,7 +170,7 @@ func RunAlbum(ctx context.Context, cfg *Config) error {
 				}
 				lck.Unlock()
 
-				if err := downloadSong(ctx, song, debug, store, tgStore, httpClient, albumDir); err != nil {
+				if err := downloadSong(ctx, song, debug, tgStore, albumDir); err != nil {
 					log.Println(err)
 				}
 				debug("download: end %s", song.ID)
@@ -180,7 +180,7 @@ func RunAlbum(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func downloadCover(ctx context.Context, albumID string, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store, client *http.Client, output string) (string, error) {
+func downloadCover(ctx context.Context, albumID string, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store, output string) (string, error) {
 	album, err := store.GetAlbum(ctx, albumID)
 	if err != nil {
 		return "", err
@@ -212,7 +212,7 @@ func downloadCover(ctx context.Context, albumID string, debug func(string, ...an
 	return albumDir, nil
 }
 
-func downloadSong(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store, client *http.Client, output string) error {
+func downloadSong(ctx context.Context, song *storage.Song, debug func(string, ...any), tgStore *tgstore.Store, output string) error {
 	name := fmt.Sprintf("%02d - %s", song.Order, song.Title)
 
 	// Download the mastered audio

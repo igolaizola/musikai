@@ -168,7 +168,7 @@ func Run(ctx context.Context, cfg *Config) error {
 				defer wg.Done()
 				debug("download: start %s", song.ID)
 
-				if err := download(ctx, song, debug, store, tgStore, httpClient, cfg.Output); err != nil {
+				if err := download(ctx, song, debug, tgStore, cfg.Output); err != nil {
 					log.Println(err)
 				}
 				debug("download: end %s", song.ID)
@@ -178,7 +178,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func download(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store, client *http.Client, output string) error {
+func download(ctx context.Context, song *storage.Song, debug func(string, ...any), tgStore *tgstore.Store, output string) error {
 	// Download the mastered audio
 	mastered := filepath.Join(output, fmt.Sprintf("%s.mp3", song.ID))
 	if _, err := os.Stat(mastered); err != nil {

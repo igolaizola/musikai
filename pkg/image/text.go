@@ -159,6 +159,7 @@ func loadFont(path string, size float64) (font.Face, error) {
 }
 
 // drawStringWithShadowAndContrast draws a string onto an image with a shadow for legibility and chooses a contrasting color based on the background.
+/*
 func drawStringWithShadowAndContrast(img draw.Image, label string, face font.Face, position Position) error {
 	// Image dimensions
 	imgWidth := img.Bounds().Dx()
@@ -237,7 +238,7 @@ func drawStringWithShadowAndContrast(img draw.Image, label string, face font.Fac
 	d.DrawString(label)
 
 	return nil
-}
+}*/
 
 // Adjust this constant to change the desired text width as a percentage of the image width
 const textWidthPercentage = 50 // Example: 50%

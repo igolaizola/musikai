@@ -388,13 +388,13 @@ func Serve(ctx context.Context, cfg *Config) error {
 				title += " - " + a.Subtitle
 			}
 			if a.Volume > 0 {
-				title += fmt.Sprintf(" - Vol %d", a.Volume)
+				title = fmt.Sprintf("%s - Vol %d", title, a.Volume)
 			}
 			assets = append(assets, &Asset{
 				ID:           a.ID,
 				URL:          coverURL,
 				ThumbnailURL: coverURL,
-				Prompt:       fmt.Sprintf("%s | %s | %s | %s", a.Title, a.Artist, a.Type, a.ID),
+				Prompt:       fmt.Sprintf("%s | %s | %s | %s", title, a.Artist, a.Type, a.ID),
 				State:        a.State,
 			})
 

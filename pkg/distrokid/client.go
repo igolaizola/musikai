@@ -19,22 +19,10 @@ import (
 )
 
 type Client struct {
-	client          *http.Client
-	debug           bool
-	ratelimit       ratelimit.Lock
-	session         string
-	token           string
-	tokenExpiration time.Time
-	cookieStore     CookieStore
-	parallel        bool
-	endLyrics       string
-	endStyle        string
-	endStyleAppend  bool
-	forceEndLyrics  string
-	forceEndStyle   string
-	minDuration     float32
-	maxDuration     float32
-	maxExtensions   int
+	client      *http.Client
+	debug       bool
+	ratelimit   ratelimit.Lock
+	cookieStore CookieStore
 }
 
 type Config struct {
