@@ -87,7 +87,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	generator := suno.New(&suno.Config{
 		Wait:           4 * time.Second,
 		Debug:          cfg.Debug,
-		Client:         http.DefaultClient,
+		Client:         httpClient,
 		CookieStore:    store.NewCookieStore("suno", cfg.Account),
 		Parallel:       cfg.Limit == 1,
 		EndLyrics:      cfg.EndLyrics,

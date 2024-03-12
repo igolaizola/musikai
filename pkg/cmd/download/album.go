@@ -160,7 +160,7 @@ func RunAlbum(ctx context.Context, cfg *Config) error {
 				lck.Lock()
 				albumDir, ok := albumLookup[song.AlbumID]
 				if !ok {
-					albumDir, err := downloadCover(ctx, song.AlbumID, debug, store, tgStore, httpClient, cfg.Output)
+					albumDir, err = downloadCover(ctx, song.AlbumID, debug, store, tgStore, httpClient, cfg.Output)
 					if err != nil {
 						log.Println(err)
 						errC <- err
