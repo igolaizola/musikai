@@ -21,8 +21,8 @@ type Draft struct {
 	Subtitle string `gorm:"not null;default:''"`
 	Volumes  int    `gorm:"not null;default:0"`
 
-	Cover    bool `gorm:"not null;default:false"`
-	Disabled bool `gorm:"index"`
+	Cover bool  `gorm:"not null;default:false"`
+	State State `gorm:"index"`
 }
 
 func (s *Store) GetDraft(ctx context.Context, id string) (*Draft, error) {
@@ -130,15 +130,13 @@ func (s *Store) ListDraftCovers(ctx context.Context, min, page, size int, orderB
 	return vs, nil
 }
 
-type DraftCoverSongs struct {
+type DraftSongs struct {
 	Draft
-	Covers int `gorm:"column:covers"`
-	Songs  int `gorm:"column:songs"`
-	Titles int `gorm:"column:titles"`
+	Songs int `gorm:"column:count_songs"`
 }
 
-func (s *Store) NextDraftCoverSongs(ctx context.Context, min int, orderBy string, filter ...Filter) (*DraftCoverSongs, error) {
-	var vs []*DraftCoverSongs
+func (s *Store) NextDraftSongs(ctx context.Context, min int, orderBy string, filter ...Filter) (*DraftSongs, error) {
+	var vs []*DraftSongs
 
 	// Getting DB column names
 	stmt := &gorm.Statement{DB: s.db}
@@ -151,13 +149,12 @@ func (s *Store) NextDraftCoverSongs(ctx context.Context, min int, orderBy string
 	}
 
 	// Query to get drafts with less covers than the minimum
-	q := s.db.Model(&Draft{}).Select(strings.Join(append(columns, "count(*) as covers", "count(*) as songs"), ",")).
-		Joins("LEFT JOIN covers on drafts.title = covers.title AND covers.upscaled AND covers.state = ?", Approved).
-		Joins("LEFT JOIN songs on drafts.type = songs.type AND songs.state = ?", Approved).
-		Where("drafts.disabled = ?", false).
+	q := s.db.Model(&Draft{}).Select(strings.Join(append(columns, "count(*) as count_songs"), ",")).
+		Joins(`LEFT JOIN "songs" ON drafts.type = songs.type AND songs.state = ?`, Approved).
+		Where("EXISTS (select id from covers WHERE drafts.title = covers.title AND covers.upscaled AND covers.state = ?)", Approved).
+		Where("drafts.state = ?", Approved).
 		Group(strings.Join(columns, ",")).
-		Having("covers > 1").
-		Having("songs > ?", min)
+		Having("count(*) > ?", min)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}

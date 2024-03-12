@@ -45,6 +45,7 @@ type Song struct {
 
 	Title   string `gorm:"not null;default:''"`
 	AlbumID string `gorm:"index,not null;default:''"`
+	Order   int    `gorm:"not null;default:0"`
 
 	ProcessedAt time.Time
 	Processed   bool `gorm:"index"`

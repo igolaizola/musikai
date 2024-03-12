@@ -14,6 +14,9 @@ type Album struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
+	DraftID string `gorm:"not null;default:''"`
+	CoverID string `gorm:"not null;default:''"`
+
 	Type     string `gorm:"not null;default:''"`
 	Title    string `gorm:"not null;default:''"`
 	Subtitle string `gorm:"not null;default:''"`
@@ -60,7 +63,7 @@ func (s *Store) ListAlbums(ctx context.Context, page, size int, orderBy string, 
 	vs := []*Album{}
 
 	q := s.db.Offset(offset).Limit(size)
-	q = q.Where("disabled = ?", false)
+	q = q.Where("state != ?", Rejected)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}
@@ -76,7 +79,7 @@ func (s *Store) ListAlbums(ctx context.Context, page, size int, orderBy string, 
 
 func (s *Store) NextAlbum(ctx context.Context, filter ...Filter) (*Album, error) {
 	var v Album
-	q := s.db.Where("disabled = ?", false)
+	q := s.db.Where("state != ?", Rejected)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}

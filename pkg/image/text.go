@@ -1,11 +1,14 @@
 package image
 
 import (
+	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"math"
 	"os"
+	"strings"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
@@ -236,6 +239,126 @@ func drawStringWithShadowAndContrast(img draw.Image, label string, face font.Fac
 	return nil
 }
 
+// Adjust this constant to change the desired text width as a percentage of the image width
+const textWidthPercentage = 50 // Example: 50%
+
+// drawStringWithDynamicFontSize draws a string onto an image with a dynamically adjusted font size so that the text occupies a given percentage of the image size.
+func drawStringWithDynamicFontSize(img draw.Image, label string, getFace func(float64) (font.Face, error), position Position, initialFontSize float64) error {
+	imgWidth := img.Bounds().Dx()
+	imgHeight := img.Bounds().Dy()
+
+	lines := strings.Split(label, "\n")
+	desiredTextWidth := int(float64(imgWidth) * (textWidthPercentage / 100.0))
+
+	// Variables to keep track of the best matching font size and its measurements
+	var face font.Face
+	var lineTextHeight int
+
+	// Start with the initial font size
+	fontSize := initialFontSize
+
+	// Loop to adjust font size
+	for {
+		// Create a new font face with the current font size
+		// Note: The creation of a new font face depends on your font loading method, which might involve a font library or custom implementation.
+		// Example: newFace := truetype.NewFace(yourFont, &truetype.Options{Size: fontSize})
+		newFace, err := getFace(fontSize) // You need to implement this function
+		if err != nil {
+			return err
+		}
+
+		// Measure "Ay" with the current font size to get the line height
+		singleLineHeight, _ := font.BoundString(newFace, "Ay")
+		lineHeight := (singleLineHeight.Max.Y - singleLineHeight.Min.Y).Ceil()
+
+		// Calculate the total text block height
+		totalTextHeight := lineHeight * len(lines)
+
+		// Assume the first line's width as the max width for simplicity, or you can loop through all lines to find the max
+		bounds, _ := font.BoundString(newFace, lines[0])
+		currentTextWidth := (bounds.Max.X - bounds.Min.X).Ceil()
+
+		if currentTextWidth <= desiredTextWidth && totalTextHeight <= imgHeight {
+			face = newFace
+			fontSize += 1 // Try a larger font size
+			lineTextHeight = lineHeight
+		} else {
+			break // The text fits within the desired percentage, or the font size is too large
+		}
+	}
+
+	if face == nil {
+		return errors.New("unable to find a suitable font size")
+	}
+
+	// Calculate margins based on percentage
+	xMargin := int(float64(imgWidth) * 5 / 100)
+	yMargin := int(float64(imgHeight) * 5 / 100)
+
+	// Initialize x and y position
+	var x, y int
+
+	// Adjust the initial y position based on the total height of the text block and the selected position
+	totalTextHeight := lineTextHeight * len(lines)
+	switch position {
+	case TopLeft, TopRight, TopCenter:
+		y = yMargin
+	case BottomLeft, BottomRight, BottomCenter:
+		y = imgHeight - yMargin - totalTextHeight
+	case Center:
+		y = (imgHeight - totalTextHeight) / 2
+	}
+
+	// Loop through each line and draw it
+	for _, line := range lines {
+		fmt.Println("Drawing line:", line)
+
+		// Measure the text width for the current line
+		bounds, _ := font.BoundString(face, line)
+		textWidth := (bounds.Max.X - bounds.Min.X).Ceil()
+
+		// Calculate x position based on the Position
+		switch position {
+		case TopLeft, BottomLeft:
+			x = xMargin
+		case TopRight, BottomRight:
+			x = imgWidth - textWidth - xMargin
+		case TopCenter, BottomCenter, Center:
+			x = (imgWidth - textWidth) / 2
+		}
+
+		// Calculate average background color and choose contrasting color
+		bgColor := calculateTextPixelsAverageColor(img, x, y, line, face)
+		textColor := chooseContrastingColor(bgColor)
+		shadowColor := color.RGBA{0, 0, 0, 255} // Semi-transparent black for the shadow
+
+		// Draw the shadow
+		shadowOffset := fixed.Int26_6(2 * 64) // Shadow offset in fixed-point format
+		d := &font.Drawer{
+			Dst:  img,
+			Src:  image.NewUniform(shadowColor),
+			Face: face,
+			Dot: fixed.Point26_6{
+				X: fixed.Int26_6(x+int(shadowOffset/64)) * 64,
+				Y: fixed.Int26_6((y + int(shadowOffset/64))) * 64,
+			},
+		}
+		d.DrawString(line)
+
+		// Draw the main text
+		d.Src = image.NewUniform(textColor)
+		d.Dot = fixed.Point26_6{
+			X: fixed.Int26_6(x) * 64,
+			Y: fixed.Int26_6(y) * 64,
+		}
+		d.DrawString(line)
+
+		// Move y position for the next line
+		y += lineTextHeight + (lineTextHeight / 4)
+	}
+	return nil
+}
+
 type Position int
 
 const (
@@ -249,7 +372,7 @@ const (
 )
 
 // AddText opens an image, adds text to it with shadow and contrast adjustment, and saves the result.
-func AddText(text string, position Position, font, input, output string) error {
+func AddText(text string, position Position, fnt, input, output string) error {
 	// Get encoder and decoder
 	decode, err := getDecoder(input)
 	if err != nil {
@@ -275,24 +398,33 @@ func AddText(text string, position Position, font, input, output string) error {
 	rgba := image.NewRGBA(img.Bounds())
 	draw.Draw(rgba, rgba.Bounds(), img, image.Point{0, 0}, draw.Src)
 
-	// Calculate the font size as a percentage of the shorter dimension
-	// Determine the shorter dimension of the image
-	imgWidth := img.Bounds().Dx()
-	imgHeight := img.Bounds().Dy()
-	shorterDim := imgWidth
-	if imgHeight < imgWidth {
-		shorterDim = imgHeight
-	}
-	fontSize := float64(shorterDim) * 6 / 100.0
+	/*
+		// Calculate the font size as a percentage of the shorter dimension
+		// Determine the shorter dimension of the image
+		imgWidth := img.Bounds().Dx()
+		imgHeight := img.Bounds().Dy()
+		shorterDim := imgWidth
+		if imgHeight < imgWidth {
+			shorterDim = imgHeight
+		}
+		fontSize := float64(shorterDim) * 6 / 100.0
 
-	face, err := loadFont(font, fontSize)
-	if err != nil {
-		return err
-	}
-	defer face.Close()
+		face, err := loadFont(fnt, fontSize)
+		if err != nil {
+			return err
+		}
+		defer face.Close()
 
-	//  Draw the text with shadow and contrast
-	if err := drawStringWithShadowAndContrast(rgba, text, face, position); err != nil {
+		//  Draw the text with shadow and contrast
+		if err := drawStringWithShadowAndContrast(rgba, text, face, position); err != nil {
+			return err
+		}
+	*/
+
+	// Draw the text with dynamic font size
+	if err := drawStringWithDynamicFontSize(rgba, text, func(size float64) (font.Face, error) {
+		return loadFont(fnt, size)
+	}, position, 12); err != nil {
 		return err
 	}
 

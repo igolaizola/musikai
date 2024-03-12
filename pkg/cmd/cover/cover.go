@@ -198,7 +198,7 @@ func generate(ctx context.Context, generator *imageai.Generator, store *storage.
 			return fmt.Errorf("cover: fatal error: %w (%s, %s)", err, draft.ID, prompt)
 		}
 		if !aiErr.Temporary() {
-			draft.Disabled = true
+			draft.State = storage.Rejected
 			if err := store.SetDraft(ctx, draft); err != nil {
 				return fmt.Errorf("describe: couldn't update draft: %w", err)
 			}

@@ -80,6 +80,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		&Title{},
 		&Draft{},
 		&Cover{},
+		&Album{},
 		&Setting{},
 	); err != nil {
 		return fmt.Errorf("storage: failed to migrate database: %w", err)

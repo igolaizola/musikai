@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex" />
     <title>Filter</title>
-    <script defer src="app.js"></script>
+    <script defer src="album.js"></script>
     <script
       defer
       src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
@@ -64,7 +64,7 @@
     <header>
       <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
-          <a class="navbar-brand" href="#">Filter Songs</a>
+          <a class="navbar-brand" href="#">Filter Albums</a>
           <button
             class="navbar-toggler"
             type="button"
@@ -134,9 +134,7 @@
               />
             </div>
             <div class="col-md-1">
-              <button type="submit" class="btn btn-primary w-100">
-                👁️
-              </button>
+              <button type="submit" class="btn btn-primary w-100">👁️</button>
             </div>
             <div class="col-md-1">
               <button
@@ -192,9 +190,7 @@
                   id="noflagged"
                   x-model="noflagged"
                 />
-                <label class="form-check-label" for="noflagged"
-                  >!Flagged</label
-                >
+                <label class="form-check-label" for="noflagged">!Flagged</label>
               </div>
               <div class="form-check form-check-inline">
                 <input
@@ -305,13 +301,13 @@
                     </button>
                   </template>
 
-                  <template x-if="img.state !== 1">
+                  <template x-if="img.state !== 0">
                     <button
-                      @click="rejectImage(index)"
+                      @click="disapproveImage(index)"
                       type="button"
                       class="btn btn-danger btn-sm"
                     >
-                      Reject
+                      Disapprove
                     </button>
                   </template>
                 </div>

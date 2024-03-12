@@ -67,7 +67,9 @@ func newCommand() *ffcli.Command {
 			newUpscaleCommand(),
 			newFilterCommand(),
 			newAlbumCommand(),
+			newDeleteAlbumCommand(),
 			newDownloadCommand(),
+			newDownloadAlbumCommand(),
 		},
 	}
 }
@@ -479,6 +481,34 @@ func newAlbumCommand() *ffcli.Command {
 	}
 }
 
+func newDeleteAlbumCommand() *ffcli.Command {
+	cmd := "delete-album"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &album.DeleteConfig{}
+
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.ID, "id", "", "album id")
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return album.RunDelete(ctx, cfg)
+		},
+	}
+}
+
 func loadSession(fs *flag.FlagSet, file string) error {
 	if file == "" {
 		return fmt.Errorf("session file not specified")
@@ -524,6 +554,41 @@ func newDownloadCommand() *ffcli.Command {
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
 			return download.Run(ctx, cfg)
+		},
+	}
+}
+
+func newDownloadAlbumCommand() *ffcli.Command {
+	cmd := "download-album"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &download.Config{}
+
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
+	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
+	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
+	fs.Int64Var(&cfg.TGChat, "tg-chat", 0, "telegram chat")
+	fs.StringVar(&cfg.Type, "type", "", "type to use")
+	fs.StringVar(&cfg.Output, "output", ".cache", "output folder")
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return download.RunAlbum(ctx, cfg)
 		},
 	}
 }

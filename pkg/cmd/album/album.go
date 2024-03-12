@@ -2,6 +2,7 @@ package album
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -131,9 +132,48 @@ func Run(ctx context.Context, cfg *Config) error {
 		if cfg.Type != "" {
 			filters = append(filters, storage.Where("drafts.type LIKE ?", cfg.Type))
 		}
-		next, err := store.NextDraftCoverSongs(ctx, cfg.MinSongs, "", filters...)
+		next, err := store.NextDraftSongs(ctx, cfg.MinSongs, "", filters...)
 		if err != nil {
 			return fmt.Errorf("album: couldn't get next draft: %w", err)
+		}
+
+		// If volumes is enabled, obtain the last volume
+		var cover *storage.Cover
+		var volume int
+		if next.Volumes > 0 {
+			volume = 1
+			albumFilters := []storage.Filter{
+				storage.Where("draft_id = ?", next.ID),
+			}
+			albums, err := store.ListAlbums(ctx, 1, 1, "volume desc", albumFilters...)
+			if err != nil {
+				return fmt.Errorf("album: couldn't get last volume: %w", err)
+			}
+			if len(albums) > 0 {
+				volume = albums[0].Volume + 1
+				// Get cover from last volume
+				cover, err = store.GetCover(ctx, albums[0].CoverID)
+				if err != nil {
+					return fmt.Errorf("album: couldn't get cover: %w", err)
+				}
+			}
+		}
+
+		if cover == nil {
+			// Get random cover matching the draft title
+			coverFilters := []storage.Filter{
+				storage.Where("state = ?", storage.Approved),
+				storage.Where("upscaled = ?", true),
+				storage.Where("title = ?", next.Draft.Title),
+			}
+			covers, err := store.ListCovers(ctx, 1, 1, "liked desc, random()", coverFilters...)
+			if err != nil {
+				return fmt.Errorf("album: couldn't get cover: %w", err)
+			}
+			if len(covers) == 0 {
+				return fmt.Errorf("album: no cover found")
+			}
+			cover = covers[0]
 		}
 
 		// Choose randomly number of songs
@@ -142,7 +182,10 @@ func Run(ctx context.Context, cfg *Config) error {
 		if max > next.Songs {
 			max = next.Songs
 		}
-		n := rand.Intn(max-min) + min
+		n := max
+		if max > min {
+			n = rand.Intn(max-min) + min
+		}
 
 		// Get random songs matching the type
 		songsFilters := []storage.Filter{
@@ -150,7 +193,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			storage.Where("type LIKE ?", next.Draft.Type),
 			storage.Where("album_id = ?", ""),
 		}
-		songs, err := store.ListSongs(ctx, 1, n, "random()", songsFilters...)
+		songs, err := store.ListSongs(ctx, 1, n, "liked desc, random()", songsFilters...)
 		if err != nil {
 			return fmt.Errorf("album: couldn't get songs: %w", err)
 		}
@@ -162,7 +205,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		// Get random titles matching the type
 		titleFilters := []storage.Filter{
 			storage.Where("type LIKE ?", next.Draft.Type),
-			storage.Where("used = ?", false),
+			storage.Where("state = ?", storage.Approved),
 		}
 		titles, err := store.ListTitles(ctx, 1, n, "random()", titleFilters...)
 		if err != nil {
@@ -172,48 +215,44 @@ func Run(ctx context.Context, cfg *Config) error {
 			return fmt.Errorf("album: not enough titles")
 		}
 
-		// Get random cover matching the draft title
-		coverFilters := []storage.Filter{
-			storage.Where("state = ?", storage.Approved),
-			storage.Where("upscaled = ?", true),
-			storage.Where("title = ?", next.Draft.Title),
-		}
-		covers, err := store.ListCovers(ctx, 1, 1, "random()", coverFilters...)
-		if err != nil {
-			return fmt.Errorf("album: couldn't get cover: %w", err)
-		}
-		if len(covers) == 0 {
-			return fmt.Errorf("album: no cover found")
-		}
-		cover := covers[0]
-
 		debug("album: start download cover %s", cover.ID)
-		original := filepath.Join(os.TempDir(), fmt.Sprintf("%s.jpg", cover.ID))
+		original := filepath.Join(os.TempDir(), fmt.Sprintf("%s.jpeg", cover.ID))
 		if err := tgStore.Download(ctx, cover.UpscaleID, original); err != nil {
 			return fmt.Errorf("album: couldn't download cover image: %w", err)
 		}
+		defer func() { _ = os.Remove(original) }()
 		debug("album: end download cover %s", cover.ID)
 
 		albumID := ulid.Make().String()
 
-		edited := filepath.Join(os.TempDir(), fmt.Sprintf("%s.jpg", albumID))
+		input := original
+		output := filepath.Join(os.TempDir(), fmt.Sprintf("%s.jpeg", albumID))
+		defer func() { _ = os.Remove(output) }()
 
 		// Add subtitle to cover
 		subtitle := next.Draft.Subtitle
+		if volume > 0 {
+			if subtitle != "" {
+				subtitle += "\n"
+			}
+			subtitle = fmt.Sprintf("%sVol %d", subtitle, volume)
+		}
 		if subtitle != "" {
-			if err := image.AddText(original, image.BottomLeft, cfg.Font, subtitle, edited); err != nil {
+			log.Println("Adding subtitle to cover", subtitle)
+			if err := image.AddText(subtitle, image.BottomLeft, cfg.Font, input, output); err != nil {
 				return fmt.Errorf("album: couldn't add subtitle to cover: %w", err)
 			}
+			input = output
 		}
 
 		// Add overlay to cover
-		if err := image.AddOverlay(cfg.Overlay, edited, edited); err != nil {
+		if err := image.AddOverlay(cfg.Overlay, input, output); err != nil {
 			return fmt.Errorf("album: couldn't add overlay to cover: %w", err)
 		}
 
 		// Upload cover to telegram
 		debug("album: upload start %s", albumID)
-		upscaledID, err := tgStore.Set(ctx, edited)
+		uploadID, err := tgStore.Set(ctx, output)
 		if err != nil {
 			return fmt.Errorf("album: couldn't upload cover image: %w", err)
 		}
@@ -222,23 +261,29 @@ func Run(ctx context.Context, cfg *Config) error {
 		// Create the album
 		album := &storage.Album{
 			ID:       albumID,
+			CoverID:  cover.ID,
+			DraftID:  next.Draft.ID,
 			Type:     next.Draft.Type,
 			Artist:   cfg.Artist,
 			Title:    next.Draft.Title,
 			Subtitle: next.Draft.Subtitle,
-			Volume:   0,
-			Cover:    upscaledID,
+			Volume:   volume,
+			Cover:    uploadID,
 			State:    storage.Pending,
 		}
 		if err := store.SetAlbum(ctx, album); err != nil {
 			return fmt.Errorf("album: couldn't set album: %w", err)
 		}
-		return nil
 
-		// Assign album id and title to songs
+		js, _ := json.MarshalIndent(album, "", "  ")
+		fmt.Println(string(js))
+
+		// Assign album id, order and title to songs
 		for i, song := range songs {
 			song.AlbumID = album.ID
-			song.Title = titles[i].ID
+			song.Title = titles[i].Title
+			song.Order = i + 1
+			song.State = storage.Used
 			if err := store.SetSong(ctx, song); err != nil {
 				return fmt.Errorf("album: couldn't set song: %w", err)
 			}
@@ -246,9 +291,25 @@ func Run(ctx context.Context, cfg *Config) error {
 
 		// Mark titles as used
 		for _, title := range titles {
-			title.Used = true
+			title.State = storage.Used
 			if err := store.SetTitle(ctx, title); err != nil {
 				return fmt.Errorf("album: couldn't set title: %w", err)
+			}
+		}
+
+		// Mark draft as used if max volume is reached
+		if next.Volumes == 0 || volume >= next.Volumes {
+			next.Draft.State = storage.Used
+			if err := store.SetDraft(ctx, &next.Draft); err != nil {
+				return fmt.Errorf("album: couldn't set draft: %w", err)
+			}
+		}
+
+		// Mark cover as used
+		if cover.State != storage.Used {
+			cover.State = storage.Used
+			if err := store.SetCover(ctx, cover); err != nil {
+				return fmt.Errorf("album: couldn't set cover: %w", err)
 			}
 		}
 	}

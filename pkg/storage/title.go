@@ -14,10 +14,9 @@ type Title struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
-	Type     string `gorm:"not null;default:''"`
-	Title    string `gorm:"not null;default:''"`
-	Used     bool   `gorm:"index"`
-	Disabled bool   `gorm:"index"`
+	Type  string `gorm:"not null;default:''"`
+	Title string `gorm:"not null;default:''"`
+	State State  `gorm:"index"`
 }
 
 func (s *Store) GetTitle(ctx context.Context, id string) (*Title, error) {
@@ -56,7 +55,7 @@ func (s *Store) ListTitles(ctx context.Context, page, size int, orderBy string, 
 	vs := []*Title{}
 
 	q := s.db.Offset(offset).Limit(size)
-	q = q.Where("disabled = ?", false)
+	q = q.Where("state != ?", Rejected)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}
@@ -72,7 +71,7 @@ func (s *Store) ListTitles(ctx context.Context, page, size int, orderBy string, 
 
 func (s *Store) NextTitle(ctx context.Context, filter ...Filter) (*Title, error) {
 	var v Title
-	q := s.db.Where("disabled = ?", false)
+	q := s.db.Where("state != ?", Rejected)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}
