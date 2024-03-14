@@ -97,22 +97,9 @@ func Run(ctx context.Context, cfg *Config) error {
 			log.Printf("publish: couldn't stop distrokid browser: %v\n", err)
 		}
 	}()
-	album := &distrokid.Album{
-		Artist:    "My Music",
-		Title:     "New Album",
-		FirstName: "John",
-		LastName:  "Doe",
-		Songs: []distrokid.Song{
-			{
-				Title: "Song 1",
-				Path:  "",
-			},
-			{
-				Title: "Song 2",
-				Path:  "",
-			},
-		},
-	}
+	album := &distrokid.Album{}
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
+	defer cancel()
 	if err := browser.Publish(ctx, album); err != nil {
 		return fmt.Errorf("publish: couldn't distrokid publish: %w", err)
 	}

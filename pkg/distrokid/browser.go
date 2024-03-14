@@ -7,11 +7,9 @@ import (
 	"log"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
@@ -21,14 +19,16 @@ import (
 )
 
 type Browser struct {
-	ctx             context.Context
-	cancel          context.CancelFunc
-	cancelAllocator context.CancelFunc
-	rateLimit       ratelimit.Lock
-	remote          string
-	proxy           string
-	profile         bool
-	cookieStore     CookieStore
+	parent           context.Context
+	browserContext   context.Context
+	allocatorContext context.Context
+	browserCancel    context.CancelFunc
+	allocatorCancel  context.CancelFunc
+	rateLimit        ratelimit.Lock
+	remote           string
+	proxy            string
+	profile          bool
+	cookieStore      CookieStore
 }
 
 type BrowserConfig struct {
@@ -53,9 +53,9 @@ func NewBrowser(cfg *BrowserConfig) *Browser {
 	}
 }
 
-func (b *Browser) Start(ctx context.Context) error {
+func (b *Browser) Start(parent context.Context) error {
 	// Obtain the cookie
-	rawCookies, err := b.cookieStore.GetCookie(ctx)
+	rawCookies, err := b.cookieStore.GetCookie(parent)
 	if err != nil {
 		return err
 	}
@@ -67,10 +67,13 @@ func (b *Browser) Start(ctx context.Context) error {
 		return fmt.Errorf("distrokid: couldn't parse cookie: %w", err)
 	}
 
+	var browserContext, allocatorContext context.Context
+	var browserCancel, allocatorCancel context.CancelFunc
+
 	// Create a new context
 	if b.remote != "" {
 		log.Println("distrokid: connecting to browser at", b.remote)
-		ctx, b.cancelAllocator = chromedp.NewRemoteAllocator(ctx, b.remote)
+		allocatorContext, allocatorCancel = chromedp.NewRemoteAllocator(context.Background(), b.remote)
 	} else {
 		log.Println("distrokid: launching browser")
 		opts := append(
@@ -95,26 +98,25 @@ func (b *Browser) Start(ctx context.Context) error {
 				chromedp.Flag("disable-extensions", false),
 			)
 		}
-		ctx, b.cancelAllocator = chromedp.NewExecAllocator(ctx, opts...)
+		allocatorContext, allocatorCancel = chromedp.NewExecAllocator(context.Background(), opts...)
 	}
 
 	// create chrome instance
-	ctx, b.cancel = chromedp.NewContext(
-		ctx,
+	browserContext, browserCancel = chromedp.NewContext(
+		allocatorContext,
 		// chromedp.WithDebugf(log.Printf),
 	)
-	b.ctx = ctx
 
 	// Launch stealth plugin
 	if err := chromedp.Run(
-		ctx,
+		browserContext,
 		chromedp.Evaluate(stealth.JS, nil),
 	); err != nil {
 		return fmt.Errorf("distrokid: could not launch stealth plugin: %w", err)
 	}
 
 	// disable webdriver
-	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(cxt context.Context) error {
+	if err := chromedp.Run(browserContext, chromedp.ActionFunc(func(cxt context.Context) error {
 		_, err := page.AddScriptToEvaluateOnNewDocument("Object.defineProperty(navigator, 'webdriver', { get: () => false, });").Do(cxt)
 		if err != nil {
 			return err
@@ -125,7 +127,7 @@ func (b *Browser) Start(ctx context.Context) error {
 	}
 
 	// Actions to set the cookie and navigate
-	if err := chromedp.Run(ctx,
+	if err := chromedp.Run(browserContext,
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			for _, cookie := range cookies {
 				err := network.SetCookie(cookie.Name, cookie.Value).
@@ -142,7 +144,7 @@ func (b *Browser) Start(ctx context.Context) error {
 		return fmt.Errorf("distrokid: could not set cookie and navigate: %w", err)
 	}
 
-	if err := chromedp.Run(ctx,
+	if err := chromedp.Run(browserContext,
 		// Load google first to have a sane referer
 		chromedp.Navigate("https://www.google.com/"),
 		chromedp.WaitReady("body", chromedp.ByQuery),
@@ -154,7 +156,7 @@ func (b *Browser) Start(ctx context.Context) error {
 
 	// Obtain the document
 	var html string
-	if err := chromedp.Run(ctx,
+	if err := chromedp.Run(browserContext,
 		chromedp.OuterHTML("html", &html),
 	); err != nil {
 		return fmt.Errorf("distrokid: couldn't get html: %w", err)
@@ -167,16 +169,30 @@ func (b *Browser) Start(ctx context.Context) error {
 	}
 	fmt.Println("user id:", userID)
 
+	b.browserContext = browserContext
+	b.browserCancel = browserCancel
+	b.allocatorContext = allocatorContext
+	b.allocatorCancel = allocatorCancel
+	b.parent = parent
+
 	return nil
 }
 
 // Stop closes the browser.
 func (c *Browser) Stop() error {
+	defer func() {
+		c.browserCancel()
+		c.allocatorCancel()
+		go func() {
+			_ = chromedp.Cancel(c.browserContext)
+		}()
+	}()
+
 	// Obtain cookies after navigation
 	var cs []*network.Cookie
-	if err := chromedp.Run(c.ctx,
+	if err := chromedp.Run(c.browserContext,
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			candidate, err := network.GetCookies().WithUrls([]string{"https://distrokid.com"}).Do(c.ctx)
+			candidate, err := network.GetCookies().WithUrls([]string{"https://distrokid.com"}).Do(ctx)
 			if err != nil {
 				return fmt.Errorf("distrokid: could not get cookies: %w", err)
 			}
@@ -196,163 +212,10 @@ func (c *Browser) Stop() error {
 		})
 	}
 	raw := session.MarshalCookies(cookies)
-	if err := c.cookieStore.SetCookie(c.ctx, raw); err != nil {
+	if err := c.cookieStore.SetCookie(c.browserContext, raw); err != nil {
 		return fmt.Errorf("distrokid: couldn't set cookie: %w", err)
 	}
-
-	chromedp.Cancel(c.ctx)
-	c.cancel()
-	c.cancelAllocator()
 	return nil
-}
-
-type Album struct {
-	Artist    string
-	FirstName string
-	LastName  string
-	Title     string
-	Songs     []Song
-}
-
-type Song struct {
-	Title string
-	Path  string
-}
-
-// Publish publishes a new album
-func (c *Browser) Publish(parent context.Context, album *Album) error {
-	// Create a new tab based on client context
-	ctx, cancel := chromedp.NewContext(c.ctx)
-	defer cancel()
-
-	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	// Navigate to the new album page
-	if err := chromedp.Run(ctx,
-		chromedp.Navigate("https://distrokid.com/new/"),
-		chromedp.WaitVisible("body", chromedp.ByQuery),
-	); err != nil {
-		return fmt.Errorf("distrokid: couldn't navigate to url: %w", err)
-	}
-
-	// Obtain the document
-	var html string
-	if err := chromedp.Run(ctx,
-		chromedp.OuterHTML("html", &html),
-	); err != nil {
-		return fmt.Errorf("distrokid: couldn't get html: %w", err)
-	}
-
-	// Get user ID
-	userID, err := getUserID(html)
-	if err != nil {
-		return fmt.Errorf("distrokid: couldn't get user ID: %w", err)
-	}
-	fmt.Println("user id:", userID)
-
-	// Load the document into goquery
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
-	if err != nil {
-		return fmt.Errorf("distrokid: couldn't parse html: %w", err)
-	}
-
-	// Get album UUID
-	albumUUID, err := getAlbumUUID(doc)
-	if err != nil {
-		return fmt.Errorf("distrokid: couldn't get albumuuid: %w", err)
-	}
-	log.Println("album uuid:", albumUUID)
-
-	time.Sleep(5 * time.Second)
-
-	key := "1 song (a single)"
-	if len(album.Songs) > 1 {
-		key = fmt.Sprintf("%d songs", len(album.Songs))
-	}
-	log.Println("choose number of songs", key)
-	if err := chromedp.Run(ctx,
-		chromedp.SendKeys(`#howManySongsOnThisAlbum`, key, chromedp.ByQuery),
-	); err != nil {
-		return fmt.Errorf("distrokid: couldn't click on select box: %w", err)
-	}
-
-	log.Println("set artist name")
-	if err := chromedp.Run(ctx,
-		chromedp.SetValue(`#artistName`, album.Artist),
-	); err != nil {
-		return fmt.Errorf("distrokid: couldn't set artist name: %w", err)
-	}
-
-	log.Println("set album title")
-	if err := chromedp.Run(ctx,
-		chromedp.SetValue(`#albumTitle`, album.Title),
-	); err != nil {
-		return fmt.Errorf("distrokid: couldn't set album title: %w", err)
-	}
-
-	// Obtain the document
-	if err := chromedp.Run(ctx,
-		chromedp.OuterHTML("html", &html),
-	); err != nil {
-		return fmt.Errorf("distrokid: couldn't get html: %w", err)
-	}
-	doc, err = goquery.NewDocumentFromReader(strings.NewReader(html))
-	if err != nil {
-		return fmt.Errorf("distrokid: couldn't parse html: %w", err)
-	}
-	// Obtain
-	// <input type="hidden" name="tracknum_10db4c2e-880f-cab4-15df-209800d330f5" id="tracknum_10db4c2e-880f-cab4-15df-209800d330f5" value="1">
-	trackIDs := make([]string, len(album.Songs))
-	doc.Find("input[name^=tracknum_]").Each(func(i int, s *goquery.Selection) {
-		v, ok := s.Attr("value")
-		if !ok {
-			log.Println("couldn't find tracknum")
-			return
-		}
-		num, err := strconv.Atoi(v)
-		if err != nil {
-			log.Println("couldn't parse tracknum")
-			return
-		}
-		id, ok := s.Attr("id")
-		if !ok {
-			log.Println("couldn't find id")
-			return
-		}
-		id = strings.TrimPrefix(id, "tracknum_")
-		trackIDs[num-1] = id
-	})
-	for i, id := range trackIDs {
-		if id == "" {
-			return fmt.Errorf("distrokid: couldn't find track id for song %d", i+1)
-		}
-	}
-
-	for i, song := range album.Songs {
-		n := i + 1
-		id := trackIDs[i]
-		log.Printf("set song title %d", n)
-		if err := chromedp.Run(ctx,
-			chromedp.SetValue(fmt.Sprintf("title_%s", id), song.Title),
-		); err != nil {
-			return fmt.Errorf("distrokid: couldn't set song title: %w", err)
-		}
-	}
-	<-time.After(35 * time.Second)
-
-	return nil
-}
-
-func getAlbumUUID(doc *goquery.Document) (string, error) {
-	albumUUID, exists := doc.Find("#albumuuid").Attr("value")
-	if !exists {
-		return "", fmt.Errorf("distrokid: couldn't find albumuuid")
-	}
-	if albumUUID == "" {
-		return "", fmt.Errorf("distrokid: albumuuid is empty")
-	}
-	return albumUUID, nil
 }
 
 func getUserID(html string) (int, error) {
