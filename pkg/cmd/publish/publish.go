@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/distrokid"
-	"github.com/igolaizola/musikai/pkg/sound/aubio"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
 
@@ -46,10 +45,6 @@ func Run(ctx context.Context, cfg *Config) error {
 		log.Printf(format, args...)
 	}
 
-	if _, err := aubio.Version(ctx); err != nil {
-		return fmt.Errorf("publish: couldn't get aubio version: %w", err)
-	}
-
 	store, err := storage.New(cfg.DBType, cfg.DBConn, cfg.Debug)
 	if err != nil {
 		return fmt.Errorf("publish: couldn't create orm store: %w", err)
@@ -70,20 +65,58 @@ func Run(ctx context.Context, cfg *Config) error {
 			Proxy: http.ProxyURL(u),
 		}
 	}
-	client := distrokid.New(&distrokid.Config{
+	/*
+		client := distrokid.New(&distrokid.Config{
+			Wait:        4 * time.Second,
+			Debug:       cfg.Debug,
+			Client:      httpClient,
+			CookieStore: store.NewCookieStore("distrokid", cfg.Account),
+		})
+		if err := client.Start(ctx); err != nil {
+			return fmt.Errorf("publish: couldn't start distrokid: %w", err)
+		}
+		defer func() {
+			if err := client.Stop(ctx); err != nil {
+				log.Printf("publish: couldn't stop distrokid: %v\n", err)
+			}
+		}()
+		if err := client.New(ctx); err != nil {
+			return fmt.Errorf("publish: couldn't distrokid new: %w", err)
+		}
+	*/
+	browser := distrokid.NewBrowser(&distrokid.BrowserConfig{
 		Wait:        4 * time.Second,
-		Debug:       cfg.Debug,
-		Client:      httpClient,
+		Proxy:       cfg.Proxy,
 		CookieStore: store.NewCookieStore("distrokid", cfg.Account),
 	})
-	if err := client.Start(ctx); err != nil {
-		return fmt.Errorf("publish: couldn't start distrokid: %w", err)
+	if err := browser.Start(ctx); err != nil {
+		return fmt.Errorf("publish: couldn't start distrokid browser: %w", err)
 	}
 	defer func() {
-		if err := client.Stop(ctx); err != nil {
-			log.Printf("publish: couldn't stop distrokid: %v\n", err)
+		if err := browser.Stop(); err != nil {
+			log.Printf("publish: couldn't stop distrokid browser: %v\n", err)
 		}
 	}()
+	album := &distrokid.Album{
+		Artist:    "My Music",
+		Title:     "New Album",
+		FirstName: "John",
+		LastName:  "Doe",
+		Songs: []distrokid.Song{
+			{
+				Title: "Song 1",
+				Path:  "",
+			},
+			{
+				Title: "Song 2",
+				Path:  "",
+			},
+		},
+	}
+	if err := browser.Publish(ctx, album); err != nil {
+		return fmt.Errorf("publish: couldn't distrokid publish: %w", err)
+	}
+	return nil
 
 	// Print time stats
 	start := time.Now()
@@ -173,7 +206,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			go func() {
 				defer wg.Done()
 				debug("publish: start %s %s", album.ID, album.Title)
-				err := publish(ctx, album, client, store)
+				err := publish(ctx, album, browser, store)
 				if err != nil {
 					log.Println(err)
 				}
@@ -184,7 +217,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func publish(ctx context.Context, album *storage.Album, client *distrokid.Client, store *storage.Store) error {
+func publish(ctx context.Context, album *storage.Album, b *distrokid.Browser, store *storage.Store) error {
 	// TODO: Implement the publish function
 	return nil
 }
