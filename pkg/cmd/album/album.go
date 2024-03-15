@@ -10,8 +10,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/gocarina/gocsv"
+	"github.com/igolaizola/musikai/pkg/distrokid"
 	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
 	"github.com/igolaizola/musikai/pkg/image"
 	"github.com/igolaizola/musikai/pkg/storage"
@@ -29,12 +32,19 @@ type Config struct {
 	TGChat  int64
 	TGToken string
 
+	Genres   string
 	Type     string
 	MinSongs int
 	MaxSongs int
 	Artist   string
 	Overlay  string
 	Font     string
+}
+
+type typeGenres struct {
+	Type      string `json:"type" csv:"type"`
+	Primary   string `json:"primary" csv:"primary"`
+	Secondary string `json:"secondary" csv:"secondary"`
 }
 
 // Run launches the song generation process.
@@ -69,6 +79,15 @@ func Run(ctx context.Context, cfg *Config) error {
 	// Check if overlay file exists
 	if _, err := os.Stat(cfg.Overlay); err != nil {
 		return fmt.Errorf("album: couldn't find overlay file: %w", err)
+	}
+
+	// Check if genres file exists
+	if _, err := os.Stat(cfg.Genres); err != nil {
+		return fmt.Errorf("album: couldn't find genres file: %w", err)
+	}
+	genres, err := toGenres(ctx, cfg.Genres)
+	if err != nil {
+		return fmt.Errorf("album: couldn't parse genres: %w", err)
 	}
 
 	store, err := storage.New(cfg.DBType, cfg.DBConn, cfg.Debug)
@@ -136,6 +155,14 @@ func Run(ctx context.Context, cfg *Config) error {
 		if err != nil {
 			return fmt.Errorf("album: couldn't get next draft: %w", err)
 		}
+
+		// Get primary and secondary genres
+		gs, ok := genres[next.Draft.Type]
+		if !ok {
+			return fmt.Errorf("album: couldn't find genre %s", next.Draft.Type)
+		}
+		primaryGenre := gs[0]
+		secondaryGenre := gs[1]
 
 		// If volumes is enabled, obtain the last volume
 		var cover *storage.Cover
@@ -260,16 +287,18 @@ func Run(ctx context.Context, cfg *Config) error {
 
 		// Create the album
 		album := &storage.Album{
-			ID:       albumID,
-			CoverID:  cover.ID,
-			DraftID:  next.Draft.ID,
-			Type:     next.Draft.Type,
-			Artist:   cfg.Artist,
-			Title:    next.Draft.Title,
-			Subtitle: next.Draft.Subtitle,
-			Volume:   volume,
-			Cover:    uploadID,
-			State:    storage.Pending,
+			ID:             albumID,
+			CoverID:        cover.ID,
+			DraftID:        next.Draft.ID,
+			Type:           next.Draft.Type,
+			Artist:         cfg.Artist,
+			Title:          next.Draft.Title,
+			Subtitle:       next.Draft.Subtitle,
+			Volume:         volume,
+			Cover:          uploadID,
+			PrimaryGenre:   primaryGenre,
+			SecondaryGenre: secondaryGenre,
+			State:          storage.Pending,
 		}
 		if err := store.SetAlbum(ctx, album); err != nil {
 			return fmt.Errorf("album: couldn't set album: %w", err)
@@ -314,4 +343,72 @@ func Run(ctx context.Context, cfg *Config) error {
 		}
 	}
 
+}
+
+func toGenres(ctx context.Context, input string) (map[string][2]string, error) {
+	b, err := os.ReadFile(input)
+	if err != nil {
+		return nil, fmt.Errorf("album: couldn't read input file: %w", err)
+	}
+
+	ext := filepath.Ext(input)
+	var unmarshal func([]byte) ([]*typeGenres, error)
+	switch ext {
+	case ".json":
+		unmarshal = func(b []byte) ([]*typeGenres, error) {
+			var is []*typeGenres
+			if err := json.Unmarshal(b, &is); err != nil {
+				return nil, fmt.Errorf("couldn't unmarshal items: %w", err)
+			}
+			return is, nil
+		}
+	case ".csv":
+		// Check for inconsistent number of fields in csv
+		lines := strings.Split(string(b), "\n")
+		commas := strings.Count(lines[0], ",")
+		for i, l := range lines {
+			if l == "" {
+				continue
+			}
+			if commas != strings.Count(l, ",") {
+				return nil, fmt.Errorf("album: inconsistent number of fields in csv %d (%s)", i, l)
+			}
+		}
+		unmarshal = func(b []byte) ([]*typeGenres, error) {
+			var is []*typeGenres
+			if err := gocsv.UnmarshalBytes(b, &is); err != nil {
+				return nil, fmt.Errorf("couldn't unmarshal items: %w", err)
+			}
+			return is, nil
+		}
+	default:
+		return nil, fmt.Errorf("album: unsupported output format: %s", ext)
+	}
+	genres, err := unmarshal(b)
+	if err != nil {
+		return nil, fmt.Errorf("album: couldn't unmarshal input: %w", err)
+	}
+
+	// Load distrokid genres
+	dkGenres := distrokid.Genres
+	dkLookup := map[string]struct{}{}
+	for _, g := range dkGenres {
+		dkLookup[g] = struct{}{}
+	}
+
+	// Create lookup table
+	lookup := map[string][2]string{}
+	for _, g := range genres {
+		// Validate genre
+		if _, ok := dkLookup[g.Primary]; !ok {
+			return nil, fmt.Errorf("album: invalid primary genre %s %s", g.Type, g.Primary)
+		}
+		if g.Secondary != "" {
+			if _, ok := dkLookup[g.Secondary]; !ok {
+				return nil, fmt.Errorf("album: invalid secondary genre %s %s", g.Type, g.Primary)
+			}
+		}
+		lookup[g.Type] = [2]string{g.Primary, g.Secondary}
+	}
+	return lookup, nil
 }

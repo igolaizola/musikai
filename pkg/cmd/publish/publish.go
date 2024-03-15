@@ -7,10 +7,14 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/distrokid"
+	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
 
@@ -25,8 +29,14 @@ type Config struct {
 	Limit       int
 	Proxy       string
 
-	Account string
-	Type    string
+	TGChat  int64
+	TGToken string
+
+	Auto      bool
+	Account   string
+	Type      string
+	FirstName string
+	LastName  string
 }
 
 // Run launches the song generation process.
@@ -53,6 +63,11 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("publish: couldn't start orm store: %w", err)
 	}
 
+	tgStore, err := tgstore.New(cfg.TGToken, cfg.TGChat, cfg.Proxy, cfg.Debug)
+	if err != nil {
+		return fmt.Errorf("download: couldn't create file storage: %w", err)
+	}
+
 	httpClient := &http.Client{
 		Timeout: 2 * time.Minute,
 	}
@@ -65,25 +80,6 @@ func Run(ctx context.Context, cfg *Config) error {
 			Proxy: http.ProxyURL(u),
 		}
 	}
-	/*
-		client := distrokid.New(&distrokid.Config{
-			Wait:        4 * time.Second,
-			Debug:       cfg.Debug,
-			Client:      httpClient,
-			CookieStore: store.NewCookieStore("distrokid", cfg.Account),
-		})
-		if err := client.Start(ctx); err != nil {
-			return fmt.Errorf("publish: couldn't start distrokid: %w", err)
-		}
-		defer func() {
-			if err := client.Stop(ctx); err != nil {
-				log.Printf("publish: couldn't stop distrokid: %v\n", err)
-			}
-		}()
-		if err := client.New(ctx); err != nil {
-			return fmt.Errorf("publish: couldn't distrokid new: %w", err)
-		}
-	*/
 	browser := distrokid.NewBrowser(&distrokid.BrowserConfig{
 		Wait:        4 * time.Second,
 		Proxy:       cfg.Proxy,
@@ -97,13 +93,6 @@ func Run(ctx context.Context, cfg *Config) error {
 			log.Printf("publish: couldn't stop distrokid browser: %v\n", err)
 		}
 	}()
-	album := &distrokid.Album{}
-	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
-	defer cancel()
-	if err := browser.Publish(ctx, album); err != nil {
-		return fmt.Errorf("publish: couldn't distrokid publish: %w", err)
-	}
-	return nil
 
 	// Print time stats
 	start := time.Now()
@@ -193,7 +182,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			go func() {
 				defer wg.Done()
 				debug("publish: start %s %s", album.ID, album.Title)
-				err := publish(ctx, album, browser, store)
+				err := publish(ctx, cfg, browser, store, tgStore, album)
 				if err != nil {
 					log.Println(err)
 				}
@@ -204,7 +193,62 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func publish(ctx context.Context, album *storage.Album, b *distrokid.Browser, store *storage.Store) error {
-	// TODO: Implement the publish function
+func publish(ctx context.Context, cfg *Config, b *distrokid.Browser, store *storage.Store, fstore *tgstore.Store, album *storage.Album) error {
+	// Get songs for album
+	songs, err := store.ListSongs(ctx, 1, 100, "", storage.Where("album_id = ?", album.ID))
+	if err != nil {
+		return fmt.Errorf("publish: couldn't get songs: %w", err)
+	}
+
+	// Download cover
+	cover := filepath.Join(os.TempDir(), fmt.Sprintf("%s.jpeg", album.ID))
+	if err := fstore.Download(ctx, album.Cover, cover); err != nil {
+		return fmt.Errorf("publish: couldn't download cover: %w", err)
+	}
+
+	// Create distrokid album data
+	dkAlbum := &distrokid.Album{
+		Artist:         album.Artist,
+		FirstName:      cfg.FirstName,
+		LastName:       cfg.LastName,
+		Title:          album.Title,
+		Cover:          cover,
+		PrimaryGenre:   album.PrimaryGenre,
+		SecondaryGenre: album.SecondaryGenre,
+	}
+
+	// Order songs by track number
+	sort.Slice(songs, func(i, j int) bool {
+		return songs[i].Order < songs[j].Order
+	})
+
+	// Create distrokid song data
+	for _, s := range songs {
+		// Download song
+		out := filepath.Join(os.TempDir(), fmt.Sprintf("%s.mp3", s.ID))
+		if err := fstore.Download(ctx, s.Master, out); err != nil {
+			return fmt.Errorf("publish: couldn't download song: %w", err)
+		}
+		dkSong := &distrokid.Song{
+			Instrumental: s.Instrumental,
+			Title:        s.Title,
+			File:         out,
+		}
+		dkAlbum.Songs = append(dkAlbum.Songs, dkSong)
+	}
+
+	// Publish album
+	dkID, err := b.Publish(ctx, dkAlbum, cfg.Auto)
+	if err != nil {
+		return fmt.Errorf("publish: couldn't distrokid publish %s: %w", album.ID, err)
+	}
+
+	// Update album
+	album.DistrokidID = dkID
+	album.PublishedAt = time.Now().UTC()
+	album.State = storage.Used
+	if err := store.SetAlbum(ctx, album); err != nil {
+		return fmt.Errorf("publish: couldn't set album %s %s: %w", album.ID, dkID, err)
+	}
 	return nil
 }

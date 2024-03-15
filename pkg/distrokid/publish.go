@@ -13,44 +13,6 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-var Genres = []string{
-	"Afrobeat",
-	"Afropop",
-	"Alternative",
-	"Big Band",
-	"Blues",
-	"Children's Music",
-	"Christian/Gospel",
-	"Classical",
-	"Comedy",
-	"Country",
-	"Dance",
-	"Electronic",
-	"Fitness & Workout",
-	"Folk",
-	"French Pop",
-	"German Folk",
-	"German Pop",
-	"Hip Hop/Rap",
-	"Holiday",
-	"J-Pop",
-	"Jazz",
-	"K-Pop",
-	"Latin",
-	"Latin Urban",
-	"Metal",
-	"New Age",
-	"Pop",
-	"Punk",
-	"R&B/Soul",
-	"Reggae",
-	"Rock",
-	"Singer/Songwriter",
-	"Soundtrack",
-	"Spoken Word",
-	"Vocal",
-	"World",
-}
 
 type Album struct {
 	Artist         string
@@ -60,7 +22,7 @@ type Album struct {
 	PrimaryGenre   string
 	SecondaryGenre string
 	Cover          string
-	Songs          []Song
+	Songs          []*Song
 }
 
 type Song struct {
@@ -109,10 +71,10 @@ func (a *Album) Validate() error {
 }
 
 // Publish publishes a new album
-func (c *Browser) Publish(parent context.Context, album *Album) error {
+func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (string, error) {
 	// Validate album
 	if err := album.Validate(); err != nil {
-		return err
+		return "", err
 	}
 
 	// Create a new tab based on client context
@@ -132,12 +94,12 @@ func (c *Browser) Publish(parent context.Context, album *Album) error {
 		chromedp.Navigate("https://distrokid.com/new/"),
 		chromedp.WaitVisible("body", chromedp.ByQuery),
 	); err != nil {
-		return fmt.Errorf("distrokid: couldn't navigate to url: %w", err)
+		return "", fmt.Errorf("distrokid: couldn't navigate to url: %w", err)
 	}
 
 	// Change to english
 	if err := selectOption(ctx, `#sitetran_select`, "en"); err != nil {
-		return err
+		return "", err
 	}
 
 	// Wait for the page to change the language
@@ -145,7 +107,7 @@ func (c *Browser) Publish(parent context.Context, album *Album) error {
 
 	// Select the number of songs
 	if err := selectOption(ctx, `#howManySongsOnThisAlbum`, fmt.Sprintf("%d", len(album.Songs))); err != nil {
-		return err
+		return "", err
 	}
 
 	// Wait for the page to reload
@@ -154,30 +116,30 @@ func (c *Browser) Publish(parent context.Context, album *Album) error {
 	// Obtain the document
 	doc, err := getHTML(ctx, "html")
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Get user ID
 	html, err := doc.Html()
 	if err != nil {
-		return fmt.Errorf("distrokid: couldn't get html from doc: %w", err)
+		return "", fmt.Errorf("distrokid: couldn't get html from doc: %w", err)
 	}
 	userID, err := getUserID(html)
 	if err != nil {
-		return fmt.Errorf("distrokid: couldn't get user ID: %w", err)
+		return "", fmt.Errorf("distrokid: couldn't get user ID: %w", err)
 	}
 	fmt.Println("user id:", userID)
 
 	// Get album UUID
 	albumUUID, err := getAlbumUUID(doc)
 	if err != nil {
-		return fmt.Errorf("distrokid: couldn't get albumuuid: %w", err)
+		return "", fmt.Errorf("distrokid: couldn't get albumuuid: %w", err)
 	}
 	log.Println("album uuid:", albumUUID)
 
 	// Album parameters
 	if err := setValue(ctx, "#artistName", album.Artist); err != nil {
-		return err
+		return "", err
 	}
 
 	// Obtain genre options
@@ -199,39 +161,39 @@ func (c *Browser) Publish(parent context.Context, album *Album) error {
 	// Select primary and secondary genre
 	primaryGenre, ok := genres[album.PrimaryGenre]
 	if !ok {
-		return fmt.Errorf("distrokid: couldn't find primary genre %s in %s", album.PrimaryGenre, strings.Join(all, ","))
+		return "", fmt.Errorf("distrokid: couldn't find primary genre %s in %s", album.PrimaryGenre, strings.Join(all, ","))
 	}
 	if err := selectOption(ctx, "#genrePrimary", primaryGenre); err != nil {
-		return err
+		return "", err
 	}
 	if album.SecondaryGenre != "" {
 		secondaryGenre, ok := genres[album.SecondaryGenre]
 		if !ok {
-			return fmt.Errorf("distrokid: couldn't find secondary genre %s in %s", album.SecondaryGenre, strings.Join(all, ","))
+			return "", fmt.Errorf("distrokid: couldn't find secondary genre %s in %s", album.SecondaryGenre, strings.Join(all, ","))
 		}
 		if err := selectOption(ctx, "#genreSecondary", secondaryGenre); err != nil {
-			return err
+			return "", err
 		}
 	}
 
 	// Upload cover
 	if err := upload(ctx, `#artwork`, album.Cover, "img.artworkPreview"); err != nil {
-		return err
+		return "", err
 	}
 
 	// Obtain the updated document
 	doc, err = getHTML(ctx, "html")
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if len(album.Songs) > 1 {
 		if err := setValue(ctx, "#albumTitle", album.Title); err != nil {
-			return err
+			return "", err
 		}
 		// Obtain the highest album price
 		if err := setMaxPrice(ctx, doc, "#priceAlbum"); err != nil {
-			return err
+			return "", err
 		}
 
 	}
@@ -259,7 +221,7 @@ func (c *Browser) Publish(parent context.Context, album *Album) error {
 	})
 	for i, id := range trackIDs {
 		if id == "" {
-			return fmt.Errorf("distrokid: couldn't find track id for song %d", i+1)
+			return "", fmt.Errorf("distrokid: couldn't find track id for song %d", i+1)
 		}
 	}
 
@@ -268,28 +230,28 @@ func (c *Browser) Publish(parent context.Context, album *Album) error {
 		id := trackIDs[i]
 		// Set song title
 		if err := setValue(ctx, fmt.Sprintf("#title_%s", id), song.Title); err != nil {
-			return err
+			return "", err
 		}
 		// Upload song
 		if err := upload(ctx, fmt.Sprintf("#js-track-upload-%d", n), song.File, fmt.Sprintf("#showFilename_%d", n)); err != nil {
-			return err
+			return "", err
 		}
 
 		// Set song writer
 		if err := setValue(ctx, fmt.Sprintf(`input[name=songwriter_real_name_first%d]`, n), album.FirstName); err != nil {
-			return err
+			return "", err
 		}
 		if err := setValue(ctx, fmt.Sprintf(`input[name=songwriter_real_name_last%d]`, n), album.LastName); err != nil {
-			return err
+			return "", err
 		}
 		// Set song price
 		if err := setMaxPrice(ctx, doc, fmt.Sprintf("#price_%s", id)); err != nil {
-			return err
+			return "", err
 		}
 		// Set instrumental
 		if song.Instrumental {
 			if err := click(ctx, fmt.Sprintf("#js-instrumental-radio-button-%d", n)); err != nil {
-				return err
+				return "", err
 			}
 		}
 	}
@@ -314,24 +276,24 @@ func (c *Browser) Publish(parent context.Context, album *Album) error {
 		if err := chromedp.Run(ctx,
 			chromedp.Evaluate(checkVisibilityScript, &isVisible),
 		); err != nil {
-			return fmt.Errorf("distrokid: couldn't check visibility of checkbox %s: %w", id, err)
+			return "", fmt.Errorf("distrokid: couldn't check visibility of checkbox %s: %w", id, err)
 		}
 		if !isVisible {
 			continue
 		}
 		if err := click(ctx, fmt.Sprintf("#%s", id)); err != nil {
-			return err
+			return "", err
 		}
 	}
 
 	// Taking a screenshot.
 	var buf []byte
 	if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf, 90)); err != nil {
-		return fmt.Errorf("distrokid: couldn't take screenshot: %w", err)
+		return "", fmt.Errorf("distrokid: couldn't take screenshot: %w", err)
 	}
 	if _, err := os.Stat("logs"); os.IsNotExist(err) {
 		if err := os.Mkdir("logs", 0755); err != nil {
-			return fmt.Errorf("distrokid: couldn't create logs folder: %w", err)
+			return "", fmt.Errorf("distrokid: couldn't create logs folder: %w", err)
 		}
 	}
 	out := fmt.Sprintf("logs/%s_%s.png", time.Now().Format("20060102150405"), albumUUID)
@@ -339,11 +301,16 @@ func (c *Browser) Publish(parent context.Context, album *Album) error {
 		log.Fatal(err)
 	}
 
-	// Click on the submit button
-	if err := click(ctx, "#doneButton"); err != nil {
-		return err
+	if auto {
+		// Click on the submit button
+		if err := click(ctx, "#doneButton"); err != nil {
+			return "", err
+		}
+	} else {
+		// Wait for the user to click on the submit button manually and close the browser
+		<-ctx.Done()
 	}
-	return nil
+	return albumUUID, nil
 }
 
 func getHTML(ctx context.Context, sel string) (*goquery.Document, error) {

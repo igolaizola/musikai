@@ -17,12 +17,18 @@ type Album struct {
 	DraftID string `gorm:"not null;default:''"`
 	CoverID string `gorm:"not null;default:''"`
 
-	Type     string `gorm:"not null;default:''"`
-	Title    string `gorm:"not null;default:''"`
-	Subtitle string `gorm:"not null;default:''"`
-	Volume   int    `gorm:"not null;default:0"`
-	Artist   string `gorm:"not null;default:''"`
-	Cover    string `gorm:"not null;default:''"`
+	Type           string `gorm:"not null;default:''"`
+	Title          string `gorm:"not null;default:''"`
+	Subtitle       string `gorm:"not null;default:''"`
+	Volume         int    `gorm:"not null;default:0"`
+	Artist         string `gorm:"not null;default:''"`
+	Cover          string `gorm:"not null;default:''"`
+	PrimaryGenre   string `gorm:"not null;default:''"`
+	SecondaryGenre string `gorm:"not null;default:''"`
+
+	DistrokidID string `gorm:"not null;default:''"`
+	UPC         string `gorm:"not null;default:''"`
+	PublishedAt time.Time
 
 	State State `gorm:"index"`
 }
