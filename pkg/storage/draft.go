@@ -61,7 +61,7 @@ func (s *Store) ListDrafts(ctx context.Context, page, size int, orderBy string, 
 	vs := []*Draft{}
 
 	q := s.db.Offset(offset).Limit(size)
-	q = q.Where("disabled = ?", false)
+	q = q.Where("state != ?", Rejected)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}
@@ -77,7 +77,7 @@ func (s *Store) ListDrafts(ctx context.Context, page, size int, orderBy string, 
 
 func (s *Store) NextDraft(ctx context.Context, filter ...Filter) (*Draft, error) {
 	var v Draft
-	q := s.db.Where("disabled = ?", false)
+	q := s.db.Where("state != ?", Rejected)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}
@@ -111,7 +111,7 @@ func (s *Store) ListDraftCovers(ctx context.Context, min, page, size int, orderB
 	// Query to get drafts with less covers than the minimum
 	q := s.db.Model(&Draft{}).Select(strings.Join(append(columns, "count(*) as covers"), ",")).
 		Joins("LEFT JOIN covers on drafts.title = covers.title AND covers.state IN ?", []State{Pending, Approved}).
-		Where("drafts.disabled = ?", false).
+		Where("drafts.state != ?", Rejected).
 		Group(strings.Join(columns, ",")).
 		Having("count(*) < (drafts.Volumes+1) * ?", min)
 	for _, f := range filter {
