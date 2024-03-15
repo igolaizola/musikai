@@ -140,18 +140,18 @@ func Run(ctx context.Context, cfg *Config) error {
 			case <-time.After(wait):
 			}
 
-			// Get next songs
+			// Get next drafts
 			filters := []storage.Filter{
 				// TODO: add filters
 				storage.Where("drafts.id > ?", currID),
 			}
 			if cfg.Type != "" {
-				filters = append(filters, storage.Where("type LIKE ?", cfg.Type))
+				filters = append(filters, storage.Where("drafts.type LIKE ?", cfg.Type))
 			}
 
 			// Get next draft
 			if len(drafts) == 0 {
-				// Get a songs from the database.
+				// Get a drafts from the database.
 				var err error
 				draftCovers, err := store.ListDraftCovers(ctx, cfg.Minimum, 1, 100, "", filters...)
 				if err != nil {
