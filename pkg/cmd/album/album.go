@@ -32,13 +32,13 @@ type Config struct {
 	TGChat  int64
 	TGToken string
 
-	Genres   string
 	Type     string
 	MinSongs int
 	MaxSongs int
 	Artist   string
 	Overlay  string
 	Font     string
+	Genres   string
 }
 
 type typeGenres struct {
@@ -85,7 +85,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	if _, err := os.Stat(cfg.Genres); err != nil {
 		return fmt.Errorf("album: couldn't find genres file: %w", err)
 	}
-	genres, err := toGenres(ctx, cfg.Genres)
+	genres, err := toGenres(cfg.Genres)
 	if err != nil {
 		return fmt.Errorf("album: couldn't parse genres: %w", err)
 	}
@@ -345,7 +345,7 @@ func Run(ctx context.Context, cfg *Config) error {
 
 }
 
-func toGenres(ctx context.Context, input string) (map[string][2]string, error) {
+func toGenres(input string) (map[string][2]string, error) {
 	b, err := os.ReadFile(input)
 	if err != nil {
 		return nil, fmt.Errorf("album: couldn't read input file: %w", err)

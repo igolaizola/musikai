@@ -462,6 +462,7 @@ func newAlbumCommand() *ffcli.Command {
 	fs.StringVar(&cfg.Font, "font", "", "font file to use")
 	fs.IntVar(&cfg.MinSongs, "min-songs", 6, "minimum number of songs")
 	fs.IntVar(&cfg.MaxSongs, "max-songs", 10, "maximum number of songs")
+	fs.StringVar(&cfg.Genres, "genres", "", "genres file to use (.csv or .json) fields: type,primary,secondary")
 
 	// Telegram parameters
 	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
@@ -528,8 +529,14 @@ func newPublishCommand() *ffcli.Command {
 	fs.DurationVar(&cfg.WaitMax, "wait-max", 1*time.Minute, "maximum wait time between songs")
 	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
 
+	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
+	fs.Int64Var(&cfg.TGChat, "tg-chat", 0, "telegram chat")
+
+	fs.BoolVar(&cfg.Auto, "auto", false, "auto publish (if disabled, the user will need to click the publish button)")
 	fs.StringVar(&cfg.Account, "account", "", "account to use")
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
+	fs.StringVar(&cfg.FirstName, "first-name", "", "songwriter first name to use")
+	fs.StringVar(&cfg.LastName, "last-name", "", "songwriter last name to use")
 
 	return &ffcli.Command{
 		Name:       cmd,
