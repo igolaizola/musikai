@@ -140,7 +140,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			// Get next gens
 			filters := []storage.Filter{
 				//storage.Where("processed = ?", cfg.Reprocess),
-				storage.Where("id > ?", currID),
+				storage.Where("generations.id > ?", currID),
 			}
 			if cfg.Type != "" {
 				filters = append(filters, storage.Where("type LIKE ?", cfg.Type))

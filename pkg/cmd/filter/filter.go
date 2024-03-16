@@ -168,7 +168,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 		for _, s := range songs {
 			g := s.Generation
 			d := time.Duration(int(g.Duration)) * time.Second
-			p := fmt.Sprintf("%s %.f BPM %s", d, g.Tempo, s.Type)
+			p := fmt.Sprintf("%s | %s %.f BPM %s", s.ID, d, g.Tempo, s.Type)
 			if s.Prompt != "" {
 				p += " | " + s.Prompt
 			}
@@ -180,8 +180,8 @@ func Serve(ctx context.Context, cfg *Config) error {
 			}
 
 			audioURL := g.SunoAudio
-			if _, err := os.Stat(fmt.Sprintf(".cache/%s.mp3", s.ID)); err == nil {
-				audioURL = fmt.Sprintf("/cache/%s.mp3", s.ID)
+			if _, err := os.Stat(fmt.Sprintf(".cache/%s.mp3", g.ID)); err == nil {
+				audioURL = fmt.Sprintf("/cache/%s.mp3", g.ID)
 			} else if g.Master != "" {
 				audioURL = g.Master
 				if !strings.HasPrefix(g.Master, "http") {
@@ -195,8 +195,8 @@ func Serve(ctx context.Context, cfg *Config) error {
 			}
 
 			waveURL := g.Wave
-			if _, err := os.Stat(fmt.Sprintf(".cache/%s.jpg", s.ID)); err == nil {
-				waveURL = fmt.Sprintf("/cache/%s.jpg", s.ID)
+			if _, err := os.Stat(fmt.Sprintf(".cache/%s.jpg", g.ID)); err == nil {
+				waveURL = fmt.Sprintf("/cache/%s.jpg", g.ID)
 			} else if g.Wave != "" {
 				waveURL = g.Wave
 				if !strings.HasPrefix(g.Wave, "http") {

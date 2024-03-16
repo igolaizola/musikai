@@ -183,7 +183,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			// Get next generation
 			filters := []storage.Filter{
 				storage.Where("processed = ?", cfg.Reprocess),
-				storage.Where("id > ?", currID),
+				storage.Where("generations.id > ?", currID),
 			}
 			if cfg.Type != "" {
 				filters = append(filters, storage.Where("type LIKE ?", cfg.Type))
@@ -203,6 +203,9 @@ func Run(ctx context.Context, cfg *Config) error {
 			}
 			gen := gens[0]
 			gens = gens[1:]
+			if gen.Song == nil {
+				return fmt.Errorf("process: generation %s has no song", gen.ID)
+			}
 
 			// Launch process in a goroutine
 			wg.Add(1)

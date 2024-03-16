@@ -125,7 +125,7 @@ func RunAlbum(ctx context.Context, cfg *Config) error {
 			// Get next songs
 			filters := []storage.Filter{
 				storage.Where("state = ?", storage.Used),
-				storage.Where("id > ?", currID),
+				storage.Where("songs.id > ?", currID),
 			}
 			if cfg.Type != "" {
 				filters = append(filters, storage.Where("type LIKE ?", cfg.Type))

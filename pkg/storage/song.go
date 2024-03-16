@@ -89,7 +89,7 @@ func (s *Store) ListAllSongs(ctx context.Context, page, size int, orderBy string
 
 	// Process song
 	q := s.db.Preload("Generation")
-	q = q.Joins("INNER JOIN generations ON songs.id = generations.song_id")
+	q = q.Joins("INNER JOIN generations ON songs.generation_id = generations.id")
 
 	q = q.Offset(offset).Limit(size)
 	for _, f := range filter {
