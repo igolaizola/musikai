@@ -57,6 +57,9 @@
         background-color: #43b9d9;
         color: #43b9d9;
       }
+      .x-small {
+          font-size: .750em;
+      }
     </style>
   </head>
 
@@ -134,9 +137,7 @@
               />
             </div>
             <div class="col-md-1">
-              <button type="submit" class="btn btn-primary w-100">
-                👁️
-              </button>
+              <button type="submit" class="btn btn-primary w-100">👁️</button>
             </div>
             <div class="col-md-1">
               <button
@@ -192,9 +193,7 @@
                   id="noflagged"
                   x-model="noflagged"
                 />
-                <label class="form-check-label" for="noflagged"
-                  >!Flagged</label
-                >
+                <label class="form-check-label" for="noflagged">!Flagged</label>
               </div>
               <div class="form-check form-check-inline">
                 <input
@@ -272,10 +271,10 @@
                   <source x-bind:src="img.url" type="audio/mp3" />
                   Your browser does not support the audio element.
                 </audio>
-                <span class="small" x-text="img.prompt"></span>
+                <span class="x-small" x-text="img.prompt"></span>
 
                 <div class="btn-group" role="group">
-                  <template x-if="!img.liked || img.liked === false">
+                  <template x-if="img.selected === true && (!img.liked || img.liked === false)">
                     <button
                       @click="likeImage(index)"
                       type="button"
@@ -285,7 +284,7 @@
                     </button>
                   </template>
 
-                  <template x-if="img.liked === true">
+                  <template x-if="img.selected === true && (img.liked === true)">
                     <button
                       @click="dislikeImage(index)"
                       type="button"
@@ -295,23 +294,32 @@
                     </button>
                   </template>
 
-                  <template x-if="img.state !== 2">
+                  <template x-if="img.selected === true && (img.state !== 2)">
                     <button
                       @click="approveImage(index)"
                       type="button"
                       class="btn btn-success btn-sm"
                     >
-                      Approve
+                    👍
                     </button>
                   </template>
 
-                  <template x-if="img.state !== 1">
+                  <template x-if="img.selected === true && (img.state !== 1)">
                     <button
                       @click="rejectImage(index)"
                       type="button"
                       class="btn btn-danger btn-sm"
                     >
-                      Reject
+                    🗑️
+                    </button>
+                  </template>
+                  <template x-if="img.selected === false">
+                    <button
+                      @click="selectImage(index)"
+                      type="button"
+                      class="btn btn-info btn-sm"
+                    >
+                    🔄
                     </button>
                   </template>
                 </div>

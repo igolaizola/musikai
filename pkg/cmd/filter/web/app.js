@@ -83,6 +83,18 @@ window.app = function () {
         this.images[index].state = 1;
       });
     },
+    selectImage: function (index) {
+      const gID = this.images[index].generation_id;
+      const id = this.images[index].id;
+      this.action("select/"+gID, index, () => {
+        for (let i = 0; i < this.images.length; i++) {
+          if (this.images[i].id === id) {
+            this.images[i].selected = false;
+          }
+        }
+        this.images[index].selected = true;
+      });
+    },
     changeSpeed() {
       if (this.speed === 3) {
         this.speed = 1;

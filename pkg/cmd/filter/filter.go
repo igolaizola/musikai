@@ -158,15 +158,16 @@ func Serve(ctx context.Context, cfg *Config) error {
 			}
 		}
 
-		songs, err := store.ListAllSongs(ctx, page, size, "", filters...)
+		generations, err := store.ListGenerations(ctx, page, size, "songs.id desc", filters...)
 		if err != nil {
-			log.Println("couldn't list videos:", err)
-			http.Error(w, fmt.Sprintf("couldn't list videos: %v", err), http.StatusInternalServerError)
+			log.Println("couldn't list songs:", err)
+			http.Error(w, fmt.Sprintf("couldn't list songs: %v", err), http.StatusInternalServerError)
 			return
 		}
-		var assets []*Asset
-		for _, s := range songs {
-			g := s.Generation
+
+		var assets []*Song
+		for _, g := range generations {
+			s := g.Song
 			d := time.Duration(int(g.Duration)) * time.Second
 			p := fmt.Sprintf("%s | %s %.f BPM %s", s.ID, d, g.Tempo, s.Type)
 			if s.Prompt != "" {
@@ -208,14 +209,16 @@ func Serve(ctx context.Context, cfg *Config) error {
 					}
 				}
 			}
-
-			assets = append(assets, &Asset{
+			fmt.Println(s.ID, g.ID, *s.GenerationID)
+			assets = append(assets, &Song{
 				ID:           s.ID,
+				GenerationID: g.ID,
 				URL:          audioURL,
 				ThumbnailURL: waveURL,
 				Prompt:       p,
 				State:        s.State,
 				Liked:        s.Likes > 0,
+				Selected:     g.ID == *s.GenerationID,
 			})
 		}
 		if err := json.NewEncoder(w).Encode(assets); err != nil {
@@ -247,6 +250,14 @@ func Serve(ctx context.Context, cfg *Config) error {
 	r.Put("/api/songs/{id}/dislike", func(w http.ResponseWriter, r *http.Request) {
 		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
 			s.Likes = 0
+			return s
+		})
+	})
+	r.Put("/api/songs/{id}/select/{gid}", func(w http.ResponseWriter, r *http.Request) {
+		gid := chi.URLParam(r, "gid")
+		fmt.Println("gid:", gid)
+		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
+			s.Generation.ID = gid
 			return s
 		})
 	})
@@ -529,6 +540,17 @@ func updateAlbum(w http.ResponseWriter, r *http.Request, store *storage.Store, u
 		http.Error(w, fmt.Sprintf("couldn't set album: %v", err), http.StatusInternalServerError)
 		return
 	}
+}
+
+type Song struct {
+	ID           string        `json:"id"`
+	GenerationID string        `json:"generation_id"`
+	URL          string        `json:"url"`
+	ThumbnailURL string        `json:"thumbnail_url"`
+	Prompt       string        `json:"prompt"`
+	State        storage.State `json:"state"`
+	Liked        bool          `json:"liked"`
+	Selected     bool          `json:"selected"`
 }
 
 type Asset struct {
