@@ -14,8 +14,8 @@ type Generation struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
-	SongID string `gorm:"not null;default:''"`
-	Song   *Song  `gorm:"foreignKey:GenerationID"`
+	SongID *string
+	Song   *Song `gorm:"foreignKey:GenerationID"`
 
 	SunoID      string `gorm:"not null;default:''"`
 	SunoAudio   string `gorm:"not null;default:''"`

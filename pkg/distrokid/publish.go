@@ -17,6 +17,7 @@ type Album struct {
 	Artist         string
 	FirstName      string
 	LastName       string
+	RecordLabel    string
 	Title          string
 	PrimaryGenre   string
 	SecondaryGenre string
@@ -104,6 +105,24 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 	// Wait for the page to change the language
 	time.Sleep(1 * time.Second)
 
+	// Set the artist name
+	if err := setValue(ctx, "#artistName", album.Artist); err != nil {
+		return "", err
+	}
+
+	// Select the record label
+	if err := selectOption(ctx, `#recordLabel`, album.RecordLabel); err != nil {
+		return "", err
+	}
+
+	// Click on snapchat
+	if err := clickCheck(ctx, "#chksnap", false); err != nil {
+		return "", err
+	}
+	if err := click(ctx, ".snapSAConfirmButton"); err != nil {
+		return "", err
+	}
+
 	// Select the number of songs
 	if err := selectOption(ctx, `#howManySongsOnThisAlbum`, fmt.Sprintf("%d", len(album.Songs))); err != nil {
 		return "", err
@@ -135,11 +154,6 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 		return "", fmt.Errorf("distrokid: couldn't get albumuuid: %w", err)
 	}
 	log.Println("album uuid:", albumUUID)
-
-	// Album parameters
-	if err := setValue(ctx, "#artistName", album.Artist); err != nil {
-		return "", err
-	}
 
 	// Obtain genre options
 	genres := map[string]string{}
@@ -187,7 +201,7 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 	}
 
 	if len(album.Songs) > 1 {
-		if err := setValue(ctx, "#albumTitle", album.Title); err != nil {
+		if err := setValue(ctx, "#albumTitleInput", album.Title); err != nil {
 			return "", err
 		}
 		// Obtain the highest album price
@@ -248,42 +262,47 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 		}
 		// Set instrumental
 		if song.Instrumental {
-			if err := click(ctx, fmt.Sprintf("#js-instrumental-radio-button-%d", n)); err != nil {
+			if err := clickCheck(ctx, fmt.Sprintf("#js-instrumental-radio-button-%d", n), false); err != nil {
 				return "", err
 			}
 		}
 	}
 
+	// Click on doesn't yet have a profile only if visible
+	if err := clickCheck(ctx, "#js-spotify-artist-id-zero-matches-new", true); err != nil {
+		return "", err
+	}
+	if err := clickCheck(ctx, "#js-apple-artist-id-zero-matches-new", true); err != nil {
+		return "", err
+	}
+	if err := clickCheck(ctx, "#js-google-artist-id-zero-matches-new", true); err != nil {
+		return "", err
+	}
+	if err := clickCheck(ctx, "#js-instagramProfile-artist-id-zero-matches-new", true); err != nil {
+		return "", err
+	}
+	if err := clickCheck(ctx, "#js-facebookProfile-artist-id-zero-matches-new", true); err != nil {
+		return "", err
+	}
+
 	// Click on all mandatory checkboxes
-	for i := 1; i <= 2; i++ {
-		time.Sleep(200 * time.Millisecond)
-		var checkboxes []string
-		doc.Find("input[class=areyousure]").Each(func(i int, s *goquery.Selection) {
-			style, ok := s.Attr("style")
-			if ok && strings.Contains(strings.ReplaceAll(style, " ", ""), "display:none") {
-				return
-			}
-			id, ok := s.Attr("id")
-			if !ok {
-				log.Println("distrokid: couldn't find id")
-				return
-			}
-			checkboxes = append(checkboxes, id)
-		})
-		for _, id := range checkboxes {
-			var isVisible bool
-			checkVisibilityScript := fmt.Sprintf(`document.getElementById('%s').checkVisibility()`, id)
-			if err := chromedp.Run(ctx,
-				chromedp.Evaluate(checkVisibilityScript, &isVisible),
-			); err != nil {
-				return "", fmt.Errorf("distrokid: couldn't check visibility of checkbox %s: %w", id, err)
-			}
-			if !isVisible {
-				continue
-			}
-			if err := click(ctx, fmt.Sprintf("#%s", id)); err != nil {
-				return "", err
-			}
+	time.Sleep(150 * time.Millisecond)
+	var checkboxes []string
+	doc.Find("input[class=areyousure]").Each(func(i int, s *goquery.Selection) {
+		style, ok := s.Attr("style")
+		if ok && strings.Contains(strings.ReplaceAll(style, " ", ""), "display:none") {
+			return
+		}
+		id, ok := s.Attr("id")
+		if !ok {
+			log.Println("distrokid: couldn't find id")
+			return
+		}
+		checkboxes = append(checkboxes, id)
+	})
+	for _, id := range checkboxes {
+		if err := clickCheck(ctx, fmt.Sprintf("#%s", id), true); err != nil {
+			return "", err
 		}
 	}
 
@@ -307,9 +326,29 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 		if err := click(ctx, "#doneButton"); err != nil {
 			return "", err
 		}
-	} else {
-		// Wait for the user to click on the submit button manually and close the browser
-		<-ctx.Done()
+
+		// This will take more than 1 second, but the click will wait for it
+		time.Sleep(1 * time.Second)
+
+		// Click on the no mastering button
+		if err := click(ctx, "#noButton.masterMyAlbum"); err != nil {
+			return "", err
+		}
+	}
+
+	// Wait for the final page with the preview link
+	if err := chromedp.Run(ctx,
+		chromedp.WaitVisible("#pre-save-page", chromedp.ByQuery),
+	); err != nil {
+		return "", fmt.Errorf("distrokid: couldn't wait for preview link: %w", err)
+	}
+
+	// Obtain the preview link from the href attribute
+	var previewLink string
+	if err := chromedp.Run(ctx,
+		chromedp.AttributeValue("#pre-save-page", "href", &previewLink, nil),
+	); err != nil {
+		return "", fmt.Errorf("distrokid: couldn't get preview link: %w", err)
 	}
 	return albumUUID, nil
 }
@@ -349,6 +388,36 @@ func click(ctx context.Context, sel string) error {
 		chromedp.Click(sel, chromedp.ByQuery),
 	); err != nil {
 		return fmt.Errorf("distrokid: couldn't click %s: %w", sel, err)
+	}
+	return nil
+}
+
+func clickCheck(ctx context.Context, sel string, visible bool) error {
+	if visible {
+		var isVisible bool
+		checkVisibilityScript := fmt.Sprintf(`document.querySelector('%s').checkVisibility()`, sel)
+		if err := chromedp.Run(ctx,
+			chromedp.Evaluate(checkVisibilityScript, &isVisible),
+		); err != nil {
+			return fmt.Errorf("distrokid: couldn't check visibility of checkbox %s: %w", sel, err)
+		}
+		if !isVisible {
+			return nil
+		}
+	}
+	if err := click(ctx, sel); err != nil {
+		return err
+	}
+	time.Sleep(150 * time.Millisecond)
+	var isChecked bool
+	err := chromedp.Run(ctx,
+		chromedp.Evaluate(fmt.Sprintf(`document.querySelector('%s').checked`, sel), &isChecked),
+	)
+	if err != nil {
+		return fmt.Errorf("distrokid: couldn't check if checkbox %s is checked: %w", sel, err)
+	}
+	if !isChecked {
+		return fmt.Errorf("distrokid: checkbox %s is not checked", sel)
 	}
 	return nil
 }

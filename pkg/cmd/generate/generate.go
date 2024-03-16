@@ -238,7 +238,7 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 			}
 			if err := store.SetGeneration(ctx, &storage.Generation{
 				ID:          genID,
-				SongID:      song.ID,
+				SongID:      &song.ID,
 				SunoID:      g.ID,
 				SunoAudio:   g.Audio,
 				SunoImage:   g.Image,
@@ -249,7 +249,7 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 				return fmt.Errorf("generate: couldn't save generation to database: %w", err)
 			}
 		}
-		song.GenerationID = firstGenID
+		song.GenerationID = &firstGenID
 		if err := store.SetSong(ctx, song); err != nil {
 			return fmt.Errorf("generate: couldn't save song to database: %w", err)
 		}

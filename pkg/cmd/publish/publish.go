@@ -32,11 +32,12 @@ type Config struct {
 	TGChat  int64
 	TGToken string
 
-	Auto      bool
-	Account   string
-	Type      string
-	FirstName string
-	LastName  string
+	Auto        bool
+	Account     string
+	Type        string
+	FirstName   string
+	LastName    string
+	RecordLabel string
 }
 
 // Run launches the song generation process.
@@ -211,6 +212,7 @@ func publish(ctx context.Context, cfg *Config, b *distrokid.Browser, store *stor
 		Artist:         album.Artist,
 		FirstName:      cfg.FirstName,
 		LastName:       cfg.LastName,
+		RecordLabel:    cfg.RecordLabel,
 		Title:          album.Title,
 		Cover:          cover,
 		PrimaryGenre:   album.PrimaryGenre,

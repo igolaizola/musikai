@@ -32,7 +32,7 @@ type Song struct {
 	Style        string `gorm:"not null;default:''"`
 	Instrumental bool   `gorm:"not null;default:false"`
 
-	GenerationID string
+	GenerationID *string
 	Generation   *Generation   `gorm:"foreignKey:GenerationID"`
 	Generations  []*Generation `gorm:"foreignKey:SongID"`
 

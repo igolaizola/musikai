@@ -537,6 +537,7 @@ func newPublishCommand() *ffcli.Command {
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
 	fs.StringVar(&cfg.FirstName, "first-name", "", "songwriter first name to use")
 	fs.StringVar(&cfg.LastName, "last-name", "", "songwriter last name to use")
+	fs.StringVar(&cfg.RecordLabel, "record-label", "", "record label to use")
 
 	return &ffcli.Command{
 		Name:       cmd,
