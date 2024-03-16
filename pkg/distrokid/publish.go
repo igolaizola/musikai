@@ -13,7 +13,6 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-
 type Album struct {
 	Artist         string
 	FirstName      string
@@ -128,7 +127,7 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 	if err != nil {
 		return "", fmt.Errorf("distrokid: couldn't get user ID: %w", err)
 	}
-	fmt.Println("user id:", userID)
+	log.Println("user id:", userID)
 
 	// Get album UUID
 	albumUUID, err := getAlbumUUID(doc)
@@ -195,7 +194,6 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 		if err := setMaxPrice(ctx, doc, "#priceAlbum"); err != nil {
 			return "", err
 		}
-
 	}
 
 	// Obtain the track IDs
@@ -257,32 +255,35 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 	}
 
 	// Click on all mandatory checkboxes
-	var checkboxes []string
-	doc.Find("input[class=areyousure]").Each(func(i int, s *goquery.Selection) {
-		style, ok := s.Attr("style")
-		if ok && strings.Contains(strings.ReplaceAll(style, " ", ""), "display:none") {
-			return
-		}
-		id, ok := s.Attr("id")
-		if !ok {
-			log.Println("distrokid: couldn't find id")
-			return
-		}
-		checkboxes = append(checkboxes, id)
-	})
-	for _, id := range checkboxes {
-		var isVisible bool
-		checkVisibilityScript := fmt.Sprintf(`document.getElementById('%s').checkVisibility()`, id)
-		if err := chromedp.Run(ctx,
-			chromedp.Evaluate(checkVisibilityScript, &isVisible),
-		); err != nil {
-			return "", fmt.Errorf("distrokid: couldn't check visibility of checkbox %s: %w", id, err)
-		}
-		if !isVisible {
-			continue
-		}
-		if err := click(ctx, fmt.Sprintf("#%s", id)); err != nil {
-			return "", err
+	for i := 1; i <= 2; i++ {
+		time.Sleep(200 * time.Millisecond)
+		var checkboxes []string
+		doc.Find("input[class=areyousure]").Each(func(i int, s *goquery.Selection) {
+			style, ok := s.Attr("style")
+			if ok && strings.Contains(strings.ReplaceAll(style, " ", ""), "display:none") {
+				return
+			}
+			id, ok := s.Attr("id")
+			if !ok {
+				log.Println("distrokid: couldn't find id")
+				return
+			}
+			checkboxes = append(checkboxes, id)
+		})
+		for _, id := range checkboxes {
+			var isVisible bool
+			checkVisibilityScript := fmt.Sprintf(`document.getElementById('%s').checkVisibility()`, id)
+			if err := chromedp.Run(ctx,
+				chromedp.Evaluate(checkVisibilityScript, &isVisible),
+			); err != nil {
+				return "", fmt.Errorf("distrokid: couldn't check visibility of checkbox %s: %w", id, err)
+			}
+			if !isVisible {
+				continue
+			}
+			if err := click(ctx, fmt.Sprintf("#%s", id)); err != nil {
+				return "", err
+			}
 		}
 	}
 

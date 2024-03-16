@@ -239,8 +239,6 @@ func getUserID(html string) (int, error) {
 	re = regexp.MustCompile(`\s*(,)\s*}`)
 	js = re.ReplaceAllString(js, "\n}")
 
-	fmt.Println(js)
-
 	var me meResponse
 	if err := json.Unmarshal([]byte(js), &me); err != nil {
 		return 0, fmt.Errorf("distrokid: couldn't unmarshal me response: %w", err)
