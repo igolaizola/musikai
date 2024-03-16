@@ -193,7 +193,7 @@ func Run(ctx context.Context, cfg *Config) error {
 				storage.Where("upscaled = ?", true),
 				storage.Where("title = ?", next.Draft.Title),
 			}
-			covers, err := store.ListCovers(ctx, 1, 1, "liked desc, random()", coverFilters...)
+			covers, err := store.ListCovers(ctx, 1, 1, "likes desc, random()", coverFilters...)
 			if err != nil {
 				return fmt.Errorf("album: couldn't get cover: %w", err)
 			}
@@ -220,7 +220,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			storage.Where("type LIKE ?", next.Draft.Type),
 			storage.Where("album_id = ?", ""),
 		}
-		songs, err := store.ListSongs(ctx, 1, n, "liked desc, random()", songsFilters...)
+		songs, err := store.ListSongs(ctx, 1, n, "likes desc, random()", songsFilters...)
 		if err != nil {
 			return fmt.Errorf("album: couldn't get songs: %w", err)
 		}

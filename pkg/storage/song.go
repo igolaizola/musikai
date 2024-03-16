@@ -32,33 +32,24 @@ type Song struct {
 	Style        string `gorm:"not null;default:''"`
 	Instrumental bool   `gorm:"not null;default:false"`
 
-	SunoID    string `gorm:"not null;default:''"`
-	SunoAudio string `gorm:"not null;default:''"`
-	SunoImage string `gorm:"not null;default:''"`
-	SunoTitle string `gorm:"not null;default:''"`
-
-	Duration float32 `gorm:"not null;default:0"`
-	Wave     string  `gorm:"not null;default:''"`
-	Tempo    float32 `gorm:"not null;default:0"`
-	Flags    string  `gorm:"not null;default:''"`
-	Master   string  `gorm:"not null;default:''"`
+	GenerationID string
+	Generation   *Generation   `gorm:"foreignKey:GenerationID"`
+	Generations  []*Generation `gorm:"foreignKey:SongID"`
 
 	Title   string `gorm:"not null;default:''"`
 	AlbumID string `gorm:"index,not null;default:''"`
 	Order   int    `gorm:"not null;default:0"`
 
-	ProcessedAt time.Time
-	Processed   bool `gorm:"index"`
-
-	Ends    bool
-	Flagged bool `gorm:"index"`
-	Liked   bool
-	State   State `gorm:"not null;default:0"`
+	Likes int   `gorm:"not null;default:0"`
+	State State `gorm:"not null;default:0"`
 }
 
 func (s *Store) GetSong(ctx context.Context, id string) (*Song, error) {
+	// Process song
+	q := s.db.Preload("Generation")
+
 	var v Song
-	if err := s.db.First(&v, "id = ?", id).Error; err != nil {
+	if err := q.First(&v, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}
@@ -96,7 +87,11 @@ func (s *Store) ListAllSongs(ctx context.Context, page, size int, orderBy string
 	offset := (page - 1) * size
 	vs := []*Song{}
 
-	q := s.db.Offset(offset).Limit(size)
+	// Process song
+	q := s.db.Preload("Generation")
+	q = q.Joins("INNER JOIN generations ON songs.id = generations.song_id")
+
+	q = q.Offset(offset).Limit(size)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}
@@ -112,7 +107,11 @@ func (s *Store) ListAllSongs(ctx context.Context, page, size int, orderBy string
 
 func (s *Store) NextSong(ctx context.Context, filter ...Filter) (*Song, error) {
 	var v Song
-	q := s.db.Where("state != ?", Rejected)
+
+	// Process song
+	q := s.db.Preload("Generation")
+
+	q = q.Where("state != ?", Rejected)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}

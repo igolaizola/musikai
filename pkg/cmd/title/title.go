@@ -130,6 +130,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			ID:    ulid.Make().String(),
 			Type:  typ,
 			Title: t.Title,
+			State: storage.Approved,
 		}); err != nil {
 			return fmt.Errorf("process: couldn't set title: %w", err)
 		}

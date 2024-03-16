@@ -74,9 +74,24 @@ func (s *Store) Start(ctx context.Context) error {
 	return nil
 }
 
+type seed struct {
+	ID string `gorm:"primaryKey"`
+}
+
+func (s *seed) TableName() string {
+	return "songs"
+}
+
 func (s *Store) Migrate(ctx context.Context) error {
+	if err := s.db.Limit(1).Find(&Song{}).Error; err != nil {
+		if err := s.db.Migrator().CreateTable(&seed{}); err != nil {
+			return fmt.Errorf("storage: failed to create table songs: %w", err)
+		}
+	}
+
 	if err := s.db.AutoMigrate(
 		&Song{},
+		&Generation{},
 		&Title{},
 		&Draft{},
 		&Cover{},

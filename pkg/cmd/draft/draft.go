@@ -143,6 +143,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			Title:    d.Title,
 			Subtitle: d.Subtitle,
 			Volumes:  volumes,
+			State:    storage.Approved,
 		}); err != nil {
 			return fmt.Errorf("draft: couldn't set draft: %w", err)
 		}

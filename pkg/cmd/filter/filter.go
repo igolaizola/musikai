@@ -120,15 +120,24 @@ func Serve(ctx context.Context, cfg *Config) error {
 			size = 100
 		}
 		filters := []storage.Filter{
-			storage.Where("processed = ?", true),
+			storage.Where("generations.processed = ?", true),
 		}
-		options := []string{"flagged", "liked", "ends"}
+		options := []string{"flagged", "ends"}
 		for _, o := range options {
 			if v := r.URL.Query().Get(o); v != "" {
 				b := v == "true"
 				filters = append(filters, storage.Where(fmt.Sprintf("%s = ?", o), b))
 			}
 		}
+		if v := r.URL.Query().Get("liked"); v != "" {
+			c := "="
+			b := v == "true"
+			if b {
+				c = ">"
+			}
+			filters = append(filters, storage.Where(fmt.Sprintf("likes %s 0", c)))
+		}
+
 		var values []int
 		states := []string{"pending", "rejected", "approved"}
 		for i, s := range states {
@@ -157,25 +166,26 @@ func Serve(ctx context.Context, cfg *Config) error {
 		}
 		var assets []*Asset
 		for _, s := range songs {
-			d := time.Duration(int(s.Duration)) * time.Second
-			p := fmt.Sprintf("%s %.f BPM %s", d, s.Tempo, s.Type)
+			g := s.Generation
+			d := time.Duration(int(g.Duration)) * time.Second
+			p := fmt.Sprintf("%s %.f BPM %s", d, g.Tempo, s.Type)
 			if s.Prompt != "" {
 				p += " | " + s.Prompt
 			}
 			if s.Style != "" {
 				p += " | " + s.Style
 			}
-			if s.Flags != "" {
-				p += " " + s.Flags
+			if g.Flags != "" {
+				p += " " + g.Flags
 			}
 
-			audioURL := s.SunoAudio
+			audioURL := g.SunoAudio
 			if _, err := os.Stat(fmt.Sprintf(".cache/%s.mp3", s.ID)); err == nil {
 				audioURL = fmt.Sprintf("/cache/%s.mp3", s.ID)
-			} else if s.Master != "" {
-				audioURL = s.Master
-				if !strings.HasPrefix(s.Master, "http") {
-					audioURL, err = tgStore.Get(ctx, s.Master)
+			} else if g.Master != "" {
+				audioURL = g.Master
+				if !strings.HasPrefix(g.Master, "http") {
+					audioURL, err = tgStore.Get(ctx, g.Master)
 					if err != nil {
 						log.Println("couldn't get master:", err)
 						http.Error(w, fmt.Sprintf("couldn't get master: %v", err), http.StatusInternalServerError)
@@ -184,13 +194,13 @@ func Serve(ctx context.Context, cfg *Config) error {
 				}
 			}
 
-			waveURL := s.Wave
+			waveURL := g.Wave
 			if _, err := os.Stat(fmt.Sprintf(".cache/%s.jpg", s.ID)); err == nil {
 				waveURL = fmt.Sprintf("/cache/%s.jpg", s.ID)
-			} else if s.Wave != "" {
-				waveURL = s.Wave
-				if !strings.HasPrefix(s.Wave, "http") {
-					audioURL, err = tgStore.Get(ctx, s.Wave)
+			} else if g.Wave != "" {
+				waveURL = g.Wave
+				if !strings.HasPrefix(g.Wave, "http") {
+					audioURL, err = tgStore.Get(ctx, g.Wave)
 					if err != nil {
 						log.Println("couldn't get wave:", err)
 						http.Error(w, fmt.Sprintf("couldn't get wave: %v", err), http.StatusInternalServerError)
@@ -205,7 +215,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 				ThumbnailURL: waveURL,
 				Prompt:       p,
 				State:        s.State,
-				Liked:        s.Liked,
+				Liked:        s.Likes > 0,
 			})
 		}
 		if err := json.NewEncoder(w).Encode(assets); err != nil {
@@ -230,13 +240,13 @@ func Serve(ctx context.Context, cfg *Config) error {
 	r.Put("/api/songs/{id}/like", func(w http.ResponseWriter, r *http.Request) {
 		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
 			s.State = storage.Approved
-			s.Liked = true
+			s.Likes = 1
 			return s
 		})
 	})
 	r.Put("/api/songs/{id}/dislike", func(w http.ResponseWriter, r *http.Request) {
 		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
-			s.Liked = false
+			s.Likes = 0
 			return s
 		})
 	})
@@ -257,12 +267,13 @@ func Serve(ctx context.Context, cfg *Config) error {
 			filters = append(filters, storage.Where(fmt.Sprintf("type LIKE '%s'", query)))
 		}
 
-		options := []string{"liked"}
-		for _, o := range options {
-			if v := r.URL.Query().Get(o); v != "" {
-				b := v == "true"
-				filters = append(filters, storage.Where(fmt.Sprintf("%s = ?", o), b))
+		if v := r.URL.Query().Get("liked"); v != "" {
+			c := "="
+			b := v == "true"
+			if b {
+				c = ">"
 			}
+			filters = append(filters, storage.Where(fmt.Sprintf("likes %s 0", c)))
 		}
 
 		var values []int
@@ -319,13 +330,13 @@ func Serve(ctx context.Context, cfg *Config) error {
 	r.Put("/api/covers/{id}/like", func(w http.ResponseWriter, r *http.Request) {
 		updateCover(w, r, store, func(s *storage.Cover) *storage.Cover {
 			s.State = storage.Approved
-			s.Liked = true
+			s.Likes = 1
 			return s
 		})
 	})
 	r.Put("/api/covers/{id}/dislike", func(w http.ResponseWriter, r *http.Request) {
 		updateCover(w, r, store, func(s *storage.Cover) *storage.Cover {
-			s.Liked = false
+			s.Likes = 0
 			return s
 		})
 	})
@@ -405,16 +416,17 @@ func Serve(ctx context.Context, cfg *Config) error {
 				return
 			}
 			for _, s := range songs {
-				d := time.Duration(int(s.Duration)) * time.Second
-				p := fmt.Sprintf("%d - %s | %s %.f BPM %s", s.Order, s.Title, d, s.Tempo, s.Type)
+				g := s.Generation
+				d := time.Duration(int(g.Duration)) * time.Second
+				p := fmt.Sprintf("%d - %s | %s %.f BPM %s", s.Order, s.Title, d, g.Tempo, s.Type)
 
-				audioURL := s.SunoAudio
+				audioURL := g.SunoAudio
 				if _, err := os.Stat(fmt.Sprintf(".cache/%s.mp3", s.ID)); err == nil {
 					audioURL = fmt.Sprintf("/cache/%s.mp3", s.ID)
-				} else if s.Master != "" {
-					audioURL = s.Master
-					if !strings.HasPrefix(s.Master, "http") {
-						audioURL, err = tgStore.Get(ctx, s.Master)
+				} else if g.Master != "" {
+					audioURL = g.Master
+					if !strings.HasPrefix(g.Master, "http") {
+						audioURL, err = tgStore.Get(ctx, g.Master)
 						if err != nil {
 							log.Println("couldn't get master:", err)
 							http.Error(w, fmt.Sprintf("couldn't get master: %v", err), http.StatusInternalServerError)
@@ -423,13 +435,13 @@ func Serve(ctx context.Context, cfg *Config) error {
 					}
 				}
 
-				waveURL := s.Wave
+				waveURL := g.Wave
 				if _, err := os.Stat(fmt.Sprintf(".cache/%s.jpg", s.ID)); err == nil {
 					waveURL = fmt.Sprintf("/cache/%s.jpg", s.ID)
-				} else if s.Wave != "" {
-					waveURL = s.Wave
-					if !strings.HasPrefix(s.Wave, "http") {
-						audioURL, err = tgStore.Get(ctx, s.Wave)
+				} else if g.Wave != "" {
+					waveURL = g.Wave
+					if !strings.HasPrefix(g.Wave, "http") {
+						audioURL, err = tgStore.Get(ctx, g.Wave)
 						if err != nil {
 							log.Println("couldn't get wave:", err)
 							http.Error(w, fmt.Sprintf("couldn't get wave: %v", err), http.StatusInternalServerError)
@@ -444,7 +456,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 					ThumbnailURL: waveURL,
 					Prompt:       p,
 					State:        s.State,
-					Liked:        s.Liked,
+					Liked:        s.Likes > 0,
 				})
 			}
 		}

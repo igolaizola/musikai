@@ -33,7 +33,7 @@ type Config struct {
 	Type string
 }
 
-// Run launches the song generation process.
+// Run launches the gen generation process.
 func Run(ctx context.Context, cfg *Config) error {
 	var iteration int
 	log.Printf("download: started\n")
@@ -108,7 +108,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
-	var songs []*storage.Song
+	var gens []*storage.Generation
 	var currID string
 	for {
 		select {
@@ -137,7 +137,7 @@ func Run(ctx context.Context, cfg *Config) error {
 				log.Printf("download: iteration %d\n", iteration)
 			}
 
-			// Get next songs
+			// Get next gens
 			filters := []storage.Filter{
 				//storage.Where("processed = ?", cfg.Reprocess),
 				storage.Where("id > ?", currID),
@@ -146,55 +146,55 @@ func Run(ctx context.Context, cfg *Config) error {
 				filters = append(filters, storage.Where("type LIKE ?", cfg.Type))
 			}
 
-			// Get next song
-			if len(songs) == 0 {
-				// Get a songs from the database.
+			// Get next gen
+			if len(gens) == 0 {
+				// Get a gens from the database.
 				var err error
-				songs, err = store.ListAllSongs(ctx, 1, 100, "", filters...)
+				gens, err = store.ListGenerations(ctx, 1, 100, "", filters...)
 				if err != nil {
-					return fmt.Errorf("download: couldn't get song from database: %w", err)
+					return fmt.Errorf("download: couldn't get gen from database: %w", err)
 				}
-				if len(songs) == 0 {
-					return errors.New("download: no songs to process")
+				if len(gens) == 0 {
+					return errors.New("download: no gens to process")
 				}
-				currID = songs[len(songs)-1].ID
+				currID = gens[len(gens)-1].ID
 			}
-			song := songs[0]
-			songs = songs[1:]
+			gen := gens[0]
+			gens = gens[1:]
 
 			// Launch process in a goroutine
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				debug("download: start %s", song.ID)
+				debug("download: start %s", gen.ID)
 
-				if err := download(ctx, song, debug, tgStore, cfg.Output); err != nil {
+				if err := download(ctx, gen, debug, tgStore, cfg.Output); err != nil {
 					log.Println(err)
 				}
-				debug("download: end %s", song.ID)
+				debug("download: end %s", gen.ID)
 				errC <- err
 			}()
 		}
 	}
 }
 
-func download(ctx context.Context, song *storage.Song, debug func(string, ...any), tgStore *tgstore.Store, output string) error {
+func download(ctx context.Context, gen *storage.Generation, debug func(string, ...any), tgStore *tgstore.Store, output string) error {
 	// Download the mastered audio
-	mastered := filepath.Join(output, fmt.Sprintf("%s.mp3", song.ID))
+	mastered := filepath.Join(output, fmt.Sprintf("%s.mp3", gen.ID))
 	if _, err := os.Stat(mastered); err != nil {
-		debug("download: start download master %s", song.ID)
-		if err := tgStore.Download(ctx, song.Master, mastered); err != nil {
+		debug("download: start download master %s", gen.ID)
+		if err := tgStore.Download(ctx, gen.Master, mastered); err != nil {
 			return fmt.Errorf("download: couldn't download master audio: %w", err)
 		}
-		debug("download: end download master %s", song.ID)
+		debug("download: end download master %s", gen.ID)
 	}
-	wave := filepath.Join(output, fmt.Sprintf("%s.jpg", song.ID))
+	wave := filepath.Join(output, fmt.Sprintf("%s.jpg", gen.ID))
 	if _, err := os.Stat(wave); err != nil {
-		debug("download: start download wave %s", song.ID)
-		if err := tgStore.Download(ctx, song.Wave, wave); err != nil {
+		debug("download: start download wave %s", gen.ID)
+		if err := tgStore.Download(ctx, gen.Wave, wave); err != nil {
 			return fmt.Errorf("download: couldn't download wave: %w", err)
 		}
-		debug("download: end download wave %s", song.ID)
+		debug("download: end download wave %s", gen.ID)
 	}
 	return nil
 }

@@ -219,7 +219,7 @@ func downloadSong(ctx context.Context, song *storage.Song, debug func(string, ..
 	mastered := filepath.Join(output, fmt.Sprintf("%s.mp3", name))
 	if _, err := os.Stat(mastered); err != nil {
 		debug("download: start download master %s", song.ID)
-		if err := tgStore.Download(ctx, song.Master, mastered); err != nil {
+		if err := tgStore.Download(ctx, song.Generation.Master, mastered); err != nil {
 			return fmt.Errorf("download: couldn't download master audio: %w", err)
 		}
 		debug("download: end download master %s", song.ID)

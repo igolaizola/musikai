@@ -226,7 +226,7 @@ func publish(ctx context.Context, cfg *Config, b *distrokid.Browser, store *stor
 	for _, s := range songs {
 		// Download song
 		out := filepath.Join(os.TempDir(), fmt.Sprintf("%s.mp3", s.ID))
-		if err := fstore.Download(ctx, s.Master, out); err != nil {
+		if err := fstore.Download(ctx, s.Generation.Master, out); err != nil {
 			return fmt.Errorf("publish: couldn't download song: %w", err)
 		}
 		dkSong := &distrokid.Song{

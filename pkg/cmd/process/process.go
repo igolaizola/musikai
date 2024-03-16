@@ -45,7 +45,7 @@ type Config struct {
 	LongFadeOut  time.Duration
 }
 
-// Run launches the song generation process.
+// Run launches the gen generation process.
 func Run(ctx context.Context, cfg *Config) error {
 	var iteration int
 	action := "process"
@@ -151,7 +151,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	// Phase limiter lock to avoid concurrent calls
 	var phLock sync.Mutex
 
-	var songs []*storage.Song
+	var gens []*storage.Generation
 	var currID string
 	for {
 		select {
@@ -180,7 +180,7 @@ func Run(ctx context.Context, cfg *Config) error {
 				log.Printf("process: iteration %d\n", iteration)
 			}
 
-			// Get next songs
+			// Get next generation
 			filters := []storage.Filter{
 				storage.Where("processed = ?", cfg.Reprocess),
 				storage.Where("id > ?", currID),
@@ -190,36 +190,35 @@ func Run(ctx context.Context, cfg *Config) error {
 			}
 
 			// Get next image
-			if len(songs) == 0 {
-				// Get a songs from the database.
-				var err error
-				songs, err = store.ListAllSongs(ctx, 1, 100, "", filters...)
+			if len(gens) == 0 {
+				// Get a generations
+				gens, err = store.ListGenerations(ctx, 1, 100, "", filters...)
 				if err != nil {
-					return fmt.Errorf("process: couldn't get song from database: %w", err)
+					return fmt.Errorf("process: couldn't get generation from database: %w", err)
 				}
-				if len(songs) == 0 {
-					return errors.New("process: no songs to process")
+				if len(gens) == 0 {
+					return errors.New("process: no generations to process")
 				}
-				currID = songs[len(songs)-1].ID
+				currID = gens[len(gens)-1].ID
 			}
-			song := songs[0]
-			songs = songs[1:]
+			gen := gens[0]
+			gens = gens[1:]
 
 			// Launch process in a goroutine
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				debug("process: start %s", song.ID)
+				debug("process: start %s", gen.ID)
 				var err error
 				if cfg.Reprocess {
-					err = reprocess(ctx, song, debug, store, tgStore)
+					err = reprocess(ctx, gen, debug, store, tgStore)
 				} else {
-					err = process(ctx, song, debug, store, tgStore, &tgLock, httpClient, ph, &phLock, cfg.ShortFadeOut, cfg.LongFadeOut)
+					err = process(ctx, gen, debug, store, tgStore, &tgLock, httpClient, ph, &phLock, cfg.ShortFadeOut, cfg.LongFadeOut)
 				}
 				if err != nil {
 					log.Println(err)
 				}
-				debug("process: end %s", song.ID)
+				debug("process: end %s", gen.ID)
 				errC <- err
 			}()
 		}
@@ -234,36 +233,36 @@ type flags struct {
 	BPMN     bool  `json:"bpm_n,omitempty"`
 }
 
-func process(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store, tgLock *sync.Mutex,
+func process(ctx context.Context, gen *storage.Generation, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store, tgLock *sync.Mutex,
 	client *http.Client, ph *phaselimiter.PhaseLimiter, phLock *sync.Mutex, shortFadeOut, longFadeOut time.Duration) error {
 
 	// Download the audio file
-	debug("process: start download %s", song.ID)
-	b, err := download(ctx, client, song.SunoAudio)
+	debug("process: start download %s", gen.ID)
+	b, err := download(ctx, client, gen.SunoAudio)
 	if err != nil {
-		return fmt.Errorf("process: couldn't download song audio: %w", err)
+		return fmt.Errorf("process: couldn't download gen audio: %w", err)
 	}
-	original := filepath.Join(os.TempDir(), fmt.Sprintf("%s.mp3", song.ID))
+	original := filepath.Join(os.TempDir(), fmt.Sprintf("%s.mp3", gen.ID))
 	defer func() { _ = os.Remove(original) }()
 	if err := os.WriteFile(original, b, 0644); err != nil {
-		return fmt.Errorf("process: couldn't save song audio: %w", err)
+		return fmt.Errorf("process: couldn't save gen audio: %w", err)
 	}
-	debug("process: end download %s", song.ID)
+	debug("process: end download %s", gen.ID)
 
 	// Create master folder if it doesn't exist
 	masterDir := filepath.Join(os.TempDir(), "master")
 	if err := os.MkdirAll(masterDir, 0755); err != nil {
 		return fmt.Errorf("process: couldn't create master folder: %w", err)
 	}
-	mastered := filepath.Join(masterDir, fmt.Sprintf("%s.mp3", song.ID))
+	mastered := filepath.Join(masterDir, fmt.Sprintf("%s.mp3", gen.ID))
 
-	// Master the songs
+	// Master the gens
 	if _, err := os.Stat(mastered); err == nil {
 		if err := os.Remove(mastered); err != nil {
 			return fmt.Errorf("process: couldn't remove old master: %w", err)
 		}
 	}
-	debug("process: start master %s", song.ID)
+	debug("process: start master %s", gen.ID)
 	if err := func() error {
 		// Lock the phase limiter to avoid concurrent calls
 		phLock.Lock()
@@ -273,16 +272,16 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 		}
 
 		if err := ph.Master(ctx, original, mastered); err != nil {
-			return fmt.Errorf("process: couldn't master song: %w", err)
+			return fmt.Errorf("process: couldn't master gen: %w", err)
 		}
 		return nil
 	}(); err != nil {
 		return err
 	}
-	debug("process: end master %s", song.ID)
+	debug("process: end master %s", gen.ID)
 
 	// Create analyzer to get silences
-	debug("process: start cut and fade out %s", song.ID)
+	debug("process: start cut and fade out %s", gen.ID)
 	analyzer, err := sound.NewAnalyzer(mastered)
 	if err != nil {
 		return fmt.Errorf("process: couldn't create analyzer: %w", err)
@@ -310,9 +309,9 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 
 	// Apply fade out
 	if err := ffmpeg.FadeOut(ctx, mastered, mastered, analyzer.Duration(), fadeOut); err != nil {
-		return fmt.Errorf("process: couldn't fade out song: %w", err)
+		return fmt.Errorf("process: couldn't fade out gen: %w", err)
 	}
-	debug("process: end cut and fade out %s", song.ID)
+	debug("process: end cut and fade out %s", gen.ID)
 
 	analyzer, err = sound.NewAnalyzer(mastered)
 	if err != nil {
@@ -320,17 +319,17 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 	}
 
 	// process the wave image
-	waveBytes, err := analyzer.PlotWave(song.Style)
+	waveBytes, err := analyzer.PlotWave(gen.Song.Style)
 	if err != nil {
 		return fmt.Errorf("process: couldn't plot wave: %w", err)
 	}
-	wavePath := filepath.Join(os.TempDir(), fmt.Sprintf("%s.jpg", song.ID))
+	wavePath := filepath.Join(os.TempDir(), fmt.Sprintf("%s.jpg", gen.ID))
 	if err := os.WriteFile(wavePath, waveBytes, 0644); err != nil {
 		return fmt.Errorf("process: couldn't write wave image: %w", err)
 	}
 	defer func() { _ = os.Remove(wavePath) }()
 
-	debug("process: start upload %s", song.ID)
+	debug("process: start upload %s", gen.ID)
 	var masterID string
 	var waveID string
 	if err := func() error {
@@ -357,22 +356,22 @@ func process(ctx context.Context, song *storage.Song, debug func(string, ...any)
 	}(); err != nil {
 		return err
 	}
-	debug("process: end upload %s", song.ID)
+	debug("process: end upload %s", gen.ID)
 
 	// Get the tempo
 	tempo, err := aubio.Tempo(ctx, mastered)
 	if err != nil {
 		return fmt.Errorf("process: couldn't get tempo: %w", err)
 	}
-	return processFlags(ctx, song, mastered, ends, float32(tempo), masterID, waveID, analyzer, debug, store)
+	return processFlags(ctx, gen, mastered, ends, float32(tempo), masterID, waveID, analyzer, debug, store)
 }
 
-func processFlags(ctx context.Context, song *storage.Song, mastered string, ends bool,
+func processFlags(ctx context.Context, gen *storage.Generation, mastered string, ends bool,
 	tempo float32, masterID string, waveID string, analyzer *sound.Analyzer,
 	debug func(string, ...any), store *storage.Store) error {
 
 	// Reload analyzer to process flags
-	debug("process: start flags %s", song.ID)
+	debug("process: start flags %s", gen.ID)
 
 	// Get the silences again
 	silences, err := analyzer.Silences(ctx)
@@ -396,7 +395,7 @@ func processFlags(ctx context.Context, song *storage.Song, mastered string, ends
 		f.Silences = append(f.Silences, p100)
 	}
 
-	// Short song
+	// Short gen
 	if analyzer.Duration() < 2*time.Minute {
 		f.Short = true
 	}
@@ -424,31 +423,31 @@ func processFlags(ctx context.Context, song *storage.Song, mastered string, ends
 	}
 	flagJSON := string(flagsBytes)
 
-	debug("process: end flags %s", song.ID)
+	debug("process: end flags %s", gen.ID)
 	if flagJSON == "{}" {
 		flagJSON = ""
 	}
 
-	// Get the latest version of the song
-	song, err = store.GetSong(ctx, song.ID)
+	// Get the latest version of the gen
+	gen, err = store.GetGeneration(ctx, gen.ID)
 	if err != nil {
-		return fmt.Errorf("process: couldn't get song from database: %w", err)
+		return fmt.Errorf("process: couldn't get gen from database: %w", err)
 	}
 
-	// Update the song
-	song.Master = masterID
-	song.Wave = waveID
-	song.Tempo = float32(tempo)
-	song.Processed = true
-	song.Duration = float32(analyzer.Duration().Seconds())
-	song.Ends = ends
-	song.Flags = flagJSON
-	song.Flagged = flagJSON != ""
+	// Update the gen
+	gen.Master = masterID
+	gen.Wave = waveID
+	gen.Tempo = float32(tempo)
+	gen.Processed = true
+	gen.Duration = float32(analyzer.Duration().Seconds())
+	gen.Ends = ends
+	gen.Flags = flagJSON
+	gen.Flagged = flagJSON != ""
 
 	debug("flags: %s", flagJSON)
 
-	if err := store.SetSong(ctx, song); err != nil {
-		return fmt.Errorf("process: couldn't save song to database: %w", err)
+	if err := store.SetGeneration(ctx, gen); err != nil {
+		return fmt.Errorf("process: couldn't save gen to database: %w", err)
 	}
 	return nil
 }
@@ -471,17 +470,17 @@ func download(ctx context.Context, client *http.Client, url string) ([]byte, err
 	return b, nil
 }
 
-func reprocess(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store) error {
+func reprocess(ctx context.Context, gen *storage.Generation, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store) error {
 	// Download the mastered audio
-	debug("process: start download master %s", song.ID)
-	mastered := filepath.Join(os.TempDir(), fmt.Sprintf("%s.mp3", song.ID))
-	if err := tgStore.Download(ctx, song.Master, mastered); err != nil {
+	debug("process: start download master %s", gen.ID)
+	mastered := filepath.Join(os.TempDir(), fmt.Sprintf("%s.mp3", gen.ID))
+	if err := tgStore.Download(ctx, gen.Master, mastered); err != nil {
 		return fmt.Errorf("process: couldn't download master audio: %w", err)
 	}
-	debug("process: end download master %s", song.ID)
+	debug("process: end download master %s", gen.ID)
 	f := flags{}
-	if song.Flags != "" {
-		if err := json.Unmarshal([]byte(song.Flags), &f); err != nil {
+	if gen.Flags != "" {
+		if err := json.Unmarshal([]byte(gen.Flags), &f); err != nil {
 			return fmt.Errorf("process: couldn't unmarshal flags: %w", err)
 		}
 	}
@@ -489,5 +488,5 @@ func reprocess(ctx context.Context, song *storage.Song, debug func(string, ...an
 	if err != nil {
 		return fmt.Errorf("process: couldn't create analyzer: %w", err)
 	}
-	return processFlags(ctx, song, mastered, song.Ends, song.Tempo, song.Master, song.Wave, analyzer, debug, store)
+	return processFlags(ctx, gen, mastered, gen.Ends, gen.Tempo, gen.Master, gen.Wave, analyzer, debug, store)
 }

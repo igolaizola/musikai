@@ -2,6 +2,7 @@ package generate
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -210,19 +211,46 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 	}
 
 	// Save the generated songs to the database.
-	for _, s := range songs {
-		if err := store.SetSong(ctx, &storage.Song{
-			ID:        ulid.Make().String(),
-			Type:      t.Type,
-			Prompt:    t.Prompt,
-			Style:     s.Style,
-			Duration:  s.Duration,
-			SunoID:    s.ID,
-			SunoAudio: s.Audio,
-			SunoImage: s.Image,
-			SunoTitle: s.Title,
-			Notes:     notes,
-		}); err != nil {
+	for _, gens := range songs {
+		if len(gens) == 0 {
+			continue
+		}
+		song := &storage.Song{
+			ID:           ulid.Make().String(),
+			Type:         t.Type,
+			Notes:        notes,
+			Prompt:       t.Prompt,
+			Style:        gens[0].Style,
+			Instrumental: t.Instrumental,
+		}
+		if err := store.SetSong(ctx, song); err != nil {
+			return fmt.Errorf("generate: couldn't save song to database: %w", err)
+		}
+		var firstGenID string
+		for i, g := range gens {
+			genID := ulid.Make().String()
+			if i == 0 {
+				firstGenID = genID
+			}
+			history, err := json.Marshal(g.History)
+			if err != nil {
+				return fmt.Errorf("generate: couldn't marshal history: %w", err)
+			}
+			if err := store.SetGeneration(ctx, &storage.Generation{
+				ID:          genID,
+				SongID:      song.ID,
+				SunoID:      g.ID,
+				SunoAudio:   g.Audio,
+				SunoImage:   g.Image,
+				SunoTitle:   g.Title,
+				SunoHistory: string(history),
+				Duration:    g.Duration,
+			}); err != nil {
+				return fmt.Errorf("generate: couldn't save generation to database: %w", err)
+			}
+		}
+		song.GenerationID = firstGenID
+		if err := store.SetSong(ctx, song); err != nil {
 			return fmt.Errorf("generate: couldn't save song to database: %w", err)
 		}
 	}

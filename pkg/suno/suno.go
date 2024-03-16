@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -102,7 +103,7 @@ type Song struct {
 	History      []Fragment `json:"history"`
 }
 
-func (c *Client) Generate(ctx context.Context, prompt, style, title string, instrumental bool) ([]Song, error) {
+func (c *Client) Generate(ctx context.Context, prompt, style, title string, instrumental bool) ([][]Song, error) {
 	if err := c.Auth(ctx); err != nil {
 		return nil, err
 	}
@@ -142,7 +143,7 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 	sem := make(chan struct{}, concurrency)
 
 	// Extend fragments
-	var songs []Song
+	songs := [][]Song{}
 	var wg sync.WaitGroup
 	var lck sync.Mutex
 	for _, fragment := range fragments {
@@ -161,31 +162,35 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			clp, err := c.extend(ctx, f)
+			clips, err := c.extend(ctx, f)
 			if err != nil {
 				log.Printf("❌ %v\n", err)
 				return
 			}
-			var history []Fragment
-			for _, h := range clp.Metadata.ConcatHistory {
-				history = append(history, Fragment{
-					ID:         h.ID,
-					ContinueAt: h.ContinueAt,
+			ss := []Song{}
+			for _, clp := range clips {
+				var history []Fragment
+				for _, h := range clp.Metadata.ConcatHistory {
+					history = append(history, Fragment{
+						ID:         h.ID,
+						ContinueAt: h.ContinueAt,
+					})
+				}
+				ss = append(ss, Song{
+					ID:           clp.ID,
+					Title:        clp.Title,
+					Style:        clp.Metadata.Tags,
+					Audio:        clp.AudioURL,
+					Image:        clp.ImageURL,
+					Video:        clp.VideoURL,
+					Duration:     clp.Metadata.Duration,
+					Instrumental: instrumental,
+					History:      history,
 				})
 			}
 			lck.Lock()
 			defer lck.Unlock()
-			songs = append(songs, Song{
-				ID:           clp.ID,
-				Title:        clp.Title,
-				Style:        clp.Metadata.Tags,
-				Audio:        clp.AudioURL,
-				Image:        clp.ImageURL,
-				Video:        clp.VideoURL,
-				Duration:     clp.Metadata.Duration,
-				Instrumental: instrumental,
-				History:      history,
-			})
+			songs = append(songs, ss)
 		}()
 	}
 
@@ -197,7 +202,7 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 	return songs, nil
 }
 
-func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
+func (c *Client) extend(ctx context.Context, clp *clip) ([]*clip, error) {
 	// Initialize variables
 	clips := []clip{*clp}
 	originalStyle := clp.Metadata.Tags
@@ -341,25 +346,34 @@ func (c *Client) extend(ctx context.Context, clp *clip) (*clip, error) {
 
 	// If there are no extensions, return the original clip
 	if extensions == 0 {
-		return clp, nil
+		return []*clip{clp}, nil
 	}
 
+	// Sort clips putting clp first
+	sort.Slice(clips, func(i, j int) bool {
+		return clips[i].ID == clp.ID
+	})
+
 	// Concatenate clips
-	req := &concatRequest{
-		ClipID: clp.ID,
+	var concats []*clip
+	for _, clp := range clips {
+		req := &concatRequest{
+			ClipID: clp.ID,
+		}
+		var resp clip
+		if _, err := c.do(ctx, "POST", "generate/concat/v2/", req, &resp); err != nil {
+			return nil, fmt.Errorf("suno: couldn't concat song: %w", err)
+		}
+		if resp.Metadata.ErrorType != nil {
+			return nil, fmt.Errorf("suno: song concat error: (%v) %s", *resp.Metadata.ErrorType, *resp.Metadata.ErrorMessage)
+		}
+		concat, err := c.waitClips(ctx, []string{resp.ID})
+		if err != nil {
+			return nil, err
+		}
+		concats = append(concats, &concat[0])
 	}
-	var resp clip
-	if _, err := c.do(ctx, "POST", "generate/concat/v2/", req, &resp); err != nil {
-		return nil, fmt.Errorf("suno: couldn't concat song: %w", err)
-	}
-	if resp.Metadata.ErrorType != nil {
-		return nil, fmt.Errorf("suno: song concat error: (%v) %s", *resp.Metadata.ErrorType, *resp.Metadata.ErrorMessage)
-	}
-	clips, err := c.waitClips(ctx, []string{resp.ID})
-	if err != nil {
-		return nil, err
-	}
-	return &clips[0], nil
+	return concats, nil
 }
 
 func (c *Client) waitClips(ctx context.Context, ids []string) ([]clip, error) {

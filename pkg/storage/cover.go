@@ -25,7 +25,7 @@ type Cover struct {
 	DraftID string `gorm:"not null;default:''"`
 
 	State State `gorm:"not null;default:0"`
-	Liked bool  `gorm:"not null;default:false"`
+	Likes int   `gorm:"not null;default:0"`
 
 	UpscaleAt time.Time
 	UpscaleID string `gorm:"not null;default:''"`
