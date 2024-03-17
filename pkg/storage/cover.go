@@ -105,7 +105,8 @@ func (s *Store) DeleteCover(ctx context.Context, id string) error {
 }
 
 func (s *Store) ListCovers(ctx context.Context, page, size int, orderBy string, filter ...Filter) ([]*Cover, error) {
-	return s.ListAllCovers(ctx, page, size, orderBy, Where("state != ?", Rejected))
+	filter = append(filter, Where("state != ?", Rejected))
+	return s.ListAllCovers(ctx, page, size, orderBy, filter...)
 }
 
 func (s *Store) ListAllCovers(ctx context.Context, page, size int, orderBy string, filter ...Filter) ([]*Cover, error) {

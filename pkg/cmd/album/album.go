@@ -153,15 +153,15 @@ func Run(ctx context.Context, cfg *Config) error {
 		if cfg.Type != "" {
 			filters = append(filters, storage.Where("drafts.type LIKE ?", cfg.Type))
 		}
-		next, err := store.NextDraftSongs(ctx, cfg.MinSongs, "", filters...)
+		draft, err := store.NextDraftCandidate(ctx, cfg.MinSongs, "", filters...)
 		if err != nil {
 			return fmt.Errorf("album: couldn't get next draft: %w", err)
 		}
 
 		// Get primary and secondary genres
-		gs, ok := genres[next.Draft.Type]
+		gs, ok := genres[draft.Type]
 		if !ok {
-			return fmt.Errorf("album: couldn't find genre %s", next.Draft.Type)
+			return fmt.Errorf("album: couldn't find genre %s", draft.Type)
 		}
 		primaryGenre := gs[0]
 		secondaryGenre := gs[1]
@@ -169,10 +169,10 @@ func Run(ctx context.Context, cfg *Config) error {
 		// If volumes is enabled, obtain the last volume
 		var cover *storage.Cover
 		var volume int
-		if next.Volumes > 0 {
+		if draft.Volumes > 0 {
 			volume = 1
 			albumFilters := []storage.Filter{
-				storage.Where("draft_id = ?", next.ID),
+				storage.Where("draft_id = ?", draft.ID),
 			}
 			albums, err := store.ListAlbums(ctx, 1, 1, "volume desc", albumFilters...)
 			if err != nil {
@@ -193,7 +193,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			coverFilters := []storage.Filter{
 				storage.Where("state = ?", storage.Approved),
 				storage.Where("upscaled = ?", true),
-				storage.Where("title = ?", next.Draft.Title),
+				storage.Where("title = ?", draft.Title),
 			}
 			covers, err := store.ListCovers(ctx, 1, 1, "likes desc, random()", coverFilters...)
 			if err != nil {
@@ -205,35 +205,34 @@ func Run(ctx context.Context, cfg *Config) error {
 			cover = covers[0]
 		}
 
-		// Choose randomly number of songs
-		min := cfg.MinSongs
-		max := cfg.MaxSongs
-		if max > next.Songs {
-			max = next.Songs
-		}
-		n := max
-		if max > min {
-			n = rand.Intn(max-min) + min
+		if cover.Title != draft.Title {
+			return fmt.Errorf("album: cover title doesn't match draft title %s %s", cover.Title, draft.Title)
 		}
 
 		// Get random songs matching the type
 		songsFilters := []storage.Filter{
 			storage.Where("state = ?", storage.Approved),
-			storage.Where("type LIKE ?", next.Draft.Type),
+			storage.Where("type LIKE ?", draft.Type),
 			storage.Where("album_id = ?", ""),
 		}
-		songs, err := store.ListSongs(ctx, 1, n, "likes desc, random()", songsFilters...)
+		songs, err := store.ListSongs(ctx, 1, cfg.MaxSongs, "likes desc, random()", songsFilters...)
 		if err != nil {
 			return fmt.Errorf("album: couldn't get songs: %w", err)
 		}
-		if len(songs) < min {
+		if len(songs) < cfg.MinSongs {
 			return fmt.Errorf("album: not enough songs")
 		}
-		n = len(songs)
+
+		// Choose randomly number of songs
+		n := len(songs)
+		if n > cfg.MinSongs {
+			n = rand.Intn(n-cfg.MinSongs) + cfg.MinSongs
+		}
+		songs = songs[:n]
 
 		// Get random titles matching the type
 		titleFilters := []storage.Filter{
-			storage.Where("type LIKE ?", next.Draft.Type),
+			storage.Where("type LIKE ?", draft.Type),
 			storage.Where("state = ?", storage.Approved),
 		}
 		titles, err := store.ListTitles(ctx, 1, n, "random()", titleFilters...)
@@ -259,7 +258,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		defer func() { _ = os.Remove(output) }()
 
 		// Add subtitle to cover
-		subtitle := next.Draft.Subtitle
+		subtitle := draft.Subtitle
 		if volume > 0 {
 			if subtitle != "" {
 				subtitle += "\n"
@@ -291,11 +290,11 @@ func Run(ctx context.Context, cfg *Config) error {
 		album := &storage.Album{
 			ID:             albumID,
 			CoverID:        cover.ID,
-			DraftID:        next.Draft.ID,
-			Type:           next.Draft.Type,
+			DraftID:        draft.ID,
+			Type:           draft.Type,
 			Artist:         cfg.Artist,
-			Title:          next.Draft.Title,
-			Subtitle:       next.Draft.Subtitle,
+			Title:          draft.Title,
+			Subtitle:       draft.Subtitle,
 			Volume:         volume,
 			Cover:          uploadID,
 			PrimaryGenre:   primaryGenre,
@@ -329,9 +328,9 @@ func Run(ctx context.Context, cfg *Config) error {
 		}
 
 		// Mark draft as used if max volume is reached
-		if next.Volumes == 0 || volume >= next.Volumes {
-			next.Draft.State = storage.Used
-			if err := store.SetDraft(ctx, &next.Draft); err != nil {
+		if draft.Volumes == 0 || volume >= draft.Volumes {
+			draft.State = storage.Used
+			if err := store.SetDraft(ctx, draft); err != nil {
 				return fmt.Errorf("album: couldn't set draft: %w", err)
 			}
 		}

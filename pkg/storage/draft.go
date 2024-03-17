@@ -110,10 +110,10 @@ func (s *Store) ListDraftCovers(ctx context.Context, min, page, size int, orderB
 
 	// Query to get drafts with less covers than the minimum
 	q := s.db.Model(&Draft{}).Select(strings.Join(append(columns, "count(*) as covers"), ",")).
-		Joins("INNER JOIN covers on drafts.title = covers.title AND covers.state = ?", Approved).
+		Joins("LEFT JOIN covers on drafts.title = covers.title AND covers.state IN ?", []State{Pending, Approved}).
 		Where("drafts.state != ?", Rejected).
-		Where("(select id from albums where albums.draft_id = drafts.id) < CASE WHEN drafts.volumes = 0 THEN 1 ELSE draft.volumes END").
-		Group(strings.Join(columns, ","))
+		Group(strings.Join(columns, ",")).
+		Having("count(*) < (drafts.Volumes+1) * ?", min)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}
@@ -130,44 +130,22 @@ func (s *Store) ListDraftCovers(ctx context.Context, min, page, size int, orderB
 	return vs, nil
 }
 
-type DraftSongs struct {
-	Draft
-	Songs int `gorm:"column:count_songs"`
-}
-
-func (s *Store) NextDraftSongs(ctx context.Context, min int, orderBy string, filter ...Filter) (*DraftSongs, error) {
-	var vs []*DraftSongs
-
-	// Getting DB column names
-	stmt := &gorm.Statement{DB: s.db}
-	if err := stmt.Parse(&Draft{}); err != nil {
-		return nil, fmt.Errorf("storage: couldn't parse draft: %w", err)
-	}
-	columns := []string{}
-	for _, dbField := range stmt.Schema.DBNames {
-		columns = append(columns, fmt.Sprintf("drafts.%s", dbField))
-	}
-
-	// Query to get drafts with less covers than the minimum
-	q := s.db.Model(&Draft{}).Select(strings.Join(append(columns, "count(*) as count_songs"), ",")).
-		Joins(`LEFT JOIN "songs" ON drafts.type = songs.type AND songs.state = ?`, Approved).
-		Where("EXISTS (select id from covers WHERE drafts.title = covers.title AND covers.upscaled AND covers.state = ?)", Approved).
-		Where("drafts.state = ?", Approved).
-		Group(strings.Join(columns, ",")).
-		Having("count(*) > ?", min)
+func (s *Store) NextDraftCandidate(ctx context.Context, min int, orderBy string, filter ...Filter) (*Draft, error) {
+	var v Draft
+	q := s.db.Where("state != ?", Rejected)
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}
-	// Order by
-	if orderBy != "" {
-		q = q.Order(orderBy)
+	q = q.Where("drafts.state != ?", Rejected).
+		Where("(select count(*) from albums where albums.draft_id = drafts.id) < CASE WHEN drafts.volumes = 0 THEN 1 ELSE drafts.volumes END").
+		Where("EXISTS (select id from covers where drafts.title = covers.title AND covers.state = ?)", Approved).
+		Where("(select count(*) from songs where drafts.type = songs.type AND songs.state = ?) > ?", Approved, min)
+	if err := q.First(&v, q).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("storage: failed to get next draft candidate: %w", err)
 	}
-	q = q.Limit(1)
-	if err := q.Scan(&vs).Error; err != nil {
-		return nil, fmt.Errorf("storage: couldn't list draft covers: %w", err)
-	}
-	if len(vs) == 0 {
-		return nil, ErrNotFound
-	}
-	return vs[0], nil
+	return &v, nil
+
 }
