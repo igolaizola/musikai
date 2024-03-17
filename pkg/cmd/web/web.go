@@ -1,4 +1,4 @@
-package filter
+package web
 
 import (
 	"context"
@@ -32,8 +32,8 @@ type Config struct {
 	TGToken string
 }
 
-//go:embed web/*
-var webContent embed.FS
+//go:embed static/*
+var staticContent embed.FS
 
 // Serve starts the filter service.
 func Serve(ctx context.Context, cfg *Config) error {
@@ -65,10 +65,10 @@ func Serve(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("process: couldn't create file storage: %w", err)
 	}
 
-	// Create web static content
-	webFS, err := fs.Sub(webContent, "web")
+	// Create static content
+	staticFS, err := fs.Sub(staticContent, "static")
 	if err != nil {
-		return fmt.Errorf("filter: couldn't load web content: %w", err)
+		return fmt.Errorf("filter: couldn't load static content: %w", err)
 	}
 
 	// Create router
@@ -105,7 +105,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 	}()
 
 	// Handler to serve the static files
-	mux.Get("/*", http.StripPrefix("/", http.FileServer(http.FS(webFS))).ServeHTTP)
+	mux.Get("/*", http.StripPrefix("/", http.FileServer(http.FS(staticFS))).ServeHTTP)
 
 	// Handler to serve cached files "cache folder"
 	mux.Get("/cache/*", http.StripPrefix("/cache/", http.FileServer(http.Dir(".cache"))).ServeHTTP)

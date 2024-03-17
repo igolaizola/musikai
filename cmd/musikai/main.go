@@ -17,13 +17,13 @@ import (
 	"github.com/igolaizola/musikai/pkg/cmd/cover"
 	"github.com/igolaizola/musikai/pkg/cmd/download"
 	"github.com/igolaizola/musikai/pkg/cmd/draft"
-	"github.com/igolaizola/musikai/pkg/cmd/filter"
 	"github.com/igolaizola/musikai/pkg/cmd/generate"
 	"github.com/igolaizola/musikai/pkg/cmd/migrate"
 	"github.com/igolaizola/musikai/pkg/cmd/process"
 	"github.com/igolaizola/musikai/pkg/cmd/publish"
 	"github.com/igolaizola/musikai/pkg/cmd/title"
 	"github.com/igolaizola/musikai/pkg/cmd/upscale"
+	"github.com/igolaizola/musikai/pkg/cmd/web"
 	"github.com/igolaizola/musikai/pkg/imageai"
 	"github.com/peterbourgon/ff/ffyaml"
 	"github.com/peterbourgon/ff/v3"
@@ -66,7 +66,7 @@ func newCommand() *ffcli.Command {
 			newDraftCommand(),
 			newCoverCommand(),
 			newUpscaleCommand(),
-			newFilterCommand(),
+			newWebCommand(),
 			newAlbumCommand(),
 			newDeleteAlbumCommand(),
 			newPublishCommand(),
@@ -247,12 +247,12 @@ func newProcessCommand() *ffcli.Command {
 	}
 }
 
-func newFilterCommand() *ffcli.Command {
-	cmd := "filter"
+func newWebCommand() *ffcli.Command {
+	cmd := "web"
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	_ = fs.String("config", "", "config file (optional)")
 
-	cfg := &filter.Config{}
+	cfg := &web.Config{}
 
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
@@ -275,7 +275,7 @@ func newFilterCommand() *ffcli.Command {
 		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
-			return filter.Serve(ctx, cfg)
+			return web.Serve(ctx, cfg)
 		},
 	}
 }
