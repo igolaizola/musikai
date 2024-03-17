@@ -108,8 +108,19 @@ func Run(ctx context.Context, cfg *Config) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
-	var gens []*storage.Generation
+	// Search last id in the output directory to avoid downloading the same files
+	files, err := os.ReadDir(cfg.Output)
+	if err != nil {
+		return fmt.Errorf("download: couldn't read output directory: %w", err)
+	}
 	var currID string
+	for _, file := range files {
+		if filepath.Ext(file.Name()) == ".mp3" {
+			currID = file.Name()[:len(file.Name())-4]
+		}
+	}
+
+	var gens []*storage.Generation
 	for {
 		select {
 		case <-ctx.Done():
@@ -155,7 +166,7 @@ func Run(ctx context.Context, cfg *Config) error {
 					return fmt.Errorf("download: couldn't get gen from database: %w", err)
 				}
 				if len(gens) == 0 {
-					return errors.New("download: no gens to process")
+					return errors.New("download: no gens to download")
 				}
 				currID = gens[len(gens)-1].ID
 			}
