@@ -210,7 +210,6 @@ func Serve(ctx context.Context, cfg *Config) error {
 					}
 				}
 			}
-			fmt.Println(s.ID, g.ID, *s.GenerationID)
 			assets = append(assets, &Song{
 				ID:           s.ID,
 				GenerationID: g.ID,
