@@ -174,60 +174,6 @@
                 />
                 <label class="form-check-label" for="rejected">Rejected</label>
               </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="flagged"
-                  x-model="flagged"
-                />
-                <label class="form-check-label" for="flagged">Flagged</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="noflagged"
-                  x-model="noflagged"
-                />
-                <label class="form-check-label" for="noflagged">!Flagged</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="ends"
-                  x-model="ends"
-                />
-                <label class="form-check-label" for="ends">Ends</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="noends"
-                  x-model="noends"
-                />
-                <label class="form-check-label" for="noends">!Ends</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="liked"
-                  x-model="liked"
-                />
-                <label class="form-check-label" for="liked">Liked</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="noliked"
-                  x-model="noliked"
-                />
-                <label class="form-check-label" for="noliked">!Liked</label>
-              </div>
             </div>
           </form>
           <div
@@ -253,20 +199,14 @@
           </div>
 
           <!-- Gallery -->
+          <template x-if="album">
+
           <div class="gallery mb-4">
             <div class="gallery-item card">
               <a target="_blank" x-bind:href="album.url">
                 <img x-bind:src="album.thumbnail_url" />
               </a>
-              <audio
-                controls
-                class="my-2"
-                style="height: 30px; width: 100%"
-                x-bind:onplay="play(index)"
-              >
-                <source x-bind:src="album.url" type="audio/mp3" />
-                Your browser does not support the audio element.
-              </audio>
+              <code x-text="album.id"></code>
               <span class="small" x-text="album.prompt"></span>
 
               <div class="btn-group" role="group">
@@ -289,6 +229,13 @@
                     Disapprove
                   </button>
                 </template>
+                <button
+                  @click="deleteAlbum()"
+                  type="button"
+                  class="btn btn-danger btn-sm"
+                >
+                  🗑️
+                </button>
               </div>
             </div>
             <template x-for="(img, index) in images">
@@ -305,6 +252,7 @@
                   <source x-bind:src="img.url" type="audio/mp3" />
                   Your browser does not support the audio element.
                 </audio>
+                <code x-text="img.id"></code>
                 <span class="small" x-text="img.prompt"></span>
 
                 <div class="btn-group" role="group">
@@ -339,6 +287,7 @@
             </div>
           </div>
 
+          </template>
           <!-- Pagination -->
           <template x-if="images.length > 0 || page > 1">
             <nav aria-label="Page navigation example">

@@ -85,6 +85,11 @@ window.app = function () {
           this.album.state = 0;
         });
       },
+      deleteAlbum: function () {
+        this.action("delete", -1, () => {
+          this.search(this.page);
+        });
+      },
       changeSpeed() {
         if (this.speed === 3) {
           this.speed = 1;
@@ -112,6 +117,7 @@ window.app = function () {
         this.error = "";
         this.loading = false;
         this.images = [];
+        this.album = null;
   
         // URL encode the query string
         style = encodeURIComponent(this.style);

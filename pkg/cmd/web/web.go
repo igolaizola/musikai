@@ -170,7 +170,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 		for _, g := range generations {
 			s := g.Song
 			d := time.Duration(int(g.Duration)) * time.Second
-			p := fmt.Sprintf("%s | %s %.f BPM %s", s.ID, d, g.Tempo, s.Type)
+			p := fmt.Sprintf("%s %.f BPM %s", d, g.Tempo, s.Type)
 			if s.Prompt != "" {
 				p += " | " + s.Prompt
 			}
@@ -416,7 +416,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 			ID:           a.ID,
 			URL:          coverURL,
 			ThumbnailURL: coverURL,
-			Prompt:       fmt.Sprintf("%s | %s | %s | %s", title, a.Artist, a.Type, a.ID),
+			Prompt:       fmt.Sprintf("%s | %s | %s", title, a.Artist, a.Type),
 			State:        a.State,
 		}
 
