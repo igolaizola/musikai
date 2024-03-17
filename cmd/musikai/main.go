@@ -69,6 +69,7 @@ func newCommand() *ffcli.Command {
 			newWebCommand(),
 			newAlbumCommand(),
 			newDeleteAlbumCommand(),
+			newCoverAlbumCommand(),
 			newPublishCommand(),
 			newDownloadCommand(),
 			newDownloadAlbumCommand(),
@@ -508,6 +509,40 @@ func newDeleteAlbumCommand() *ffcli.Command {
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
 			return album.RunDelete(ctx, cfg)
+		},
+	}
+}
+
+func newCoverAlbumCommand() *ffcli.Command {
+	cmd := "cover-album"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &album.CoverConfig{}
+
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.ID, "id", "", "album id")
+	fs.StringVar(&cfg.Cover, "cover", "", "cover file")
+
+	// Telegram parameters
+	fs.StringVar(&cfg.Proxy, "proxy", "", "telegram proxy")
+	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
+	fs.Int64Var(&cfg.TGChat, "tg-chat", 0, "telegram chat id")
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return album.RunCover(ctx, cfg)
 		},
 	}
 }
