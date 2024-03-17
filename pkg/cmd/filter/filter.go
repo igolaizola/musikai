@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/igolaizola/musikai/pkg/cmd/album"
 	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
@@ -358,10 +359,6 @@ func Serve(ctx context.Context, cfg *Config) error {
 		if err != nil {
 			page = 1
 		}
-		size, err := strconv.Atoi(r.URL.Query().Get("size"))
-		if err != nil {
-			size = 100
-		}
 		filters := []storage.Filter{}
 		var values []int
 		states := []string{"pending", "rejected", "approved"}
@@ -383,100 +380,113 @@ func Serve(ctx context.Context, cfg *Config) error {
 			}
 		}
 
-		albums, err := store.ListAlbums(ctx, page, size, "", filters...)
+		albums, err := store.ListAlbums(ctx, page, 1, "", filters...)
 		if err != nil {
 			log.Println("couldn't list videos:", err)
 			http.Error(w, fmt.Sprintf("couldn't list videos: %v", err), http.StatusInternalServerError)
 			return
 		}
-		var assets []*Asset
-		for _, a := range albums {
-			coverURL := a.Cover
-			if _, err := os.Stat(fmt.Sprintf(".cache/%s.jpg", a.ID)); err == nil {
-				coverURL = fmt.Sprintf("/cache/%s.jpg", a.ID)
-			} else if a.Cover != "" {
-				coverURL = a.Cover
-				if !strings.HasPrefix(a.Cover, "http") {
-					if err := tgStore.Download(ctx, a.Cover, fmt.Sprintf(".cache/%s.jpg", a.ID)); err != nil {
-						log.Println("couldn't get cover:", err)
-						http.Error(w, fmt.Sprintf("couldn't get cover: %v", err), http.StatusInternalServerError)
+		if len(albums) == 0 {
+			http.Error(w, "couldn't find albums", http.StatusNotFound)
+			return
+		}
+		a := albums[0]
+		coverURL := a.Cover
+		if _, err := os.Stat(fmt.Sprintf(".cache/%s.jpg", a.ID)); err == nil {
+			coverURL = fmt.Sprintf("/cache/%s.jpg", a.ID)
+		} else if a.Cover != "" {
+			coverURL = a.Cover
+			if !strings.HasPrefix(a.Cover, "http") {
+				if err := tgStore.Download(ctx, a.Cover, fmt.Sprintf(".cache/%s.jpg", a.ID)); err != nil {
+					log.Println("couldn't get cover:", err)
+					http.Error(w, fmt.Sprintf("couldn't get cover: %v", err), http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+
+		title := a.Title
+		if a.Subtitle != "" {
+			title += " - " + a.Subtitle
+		}
+		if a.Volume > 0 {
+			title = fmt.Sprintf("%s - Vol %d", title, a.Volume)
+		}
+
+		resp := &Album{
+			ID:           a.ID,
+			URL:          coverURL,
+			ThumbnailURL: coverURL,
+			Prompt:       fmt.Sprintf("%s | %s | %s | %s", title, a.Artist, a.Type, a.ID),
+			State:        a.State,
+		}
+
+		songs, err := store.ListSongs(ctx, 1, 1000, "\"order\" asc", storage.Where("album_id = ?", a.ID))
+		if err != nil {
+			log.Println("couldn't list songs:", err)
+			http.Error(w, fmt.Sprintf("couldn't list songs: %v", err), http.StatusInternalServerError)
+			return
+		}
+		for _, s := range songs {
+			g := s.Generation
+			d := time.Duration(int(g.Duration)) * time.Second
+			p := fmt.Sprintf("%d - %s | %s %.f BPM %s", s.Order, s.Title, d, g.Tempo, s.Type)
+
+			audioURL := g.SunoAudio
+			if _, err := os.Stat(fmt.Sprintf(".cache/%s.mp3", s.ID)); err == nil {
+				audioURL = fmt.Sprintf("/cache/%s.mp3", s.ID)
+			} else if g.Master != "" {
+				audioURL = g.Master
+				if !strings.HasPrefix(g.Master, "http") {
+					audioURL, err = tgStore.Get(ctx, g.Master)
+					if err != nil {
+						log.Println("couldn't get master:", err)
+						http.Error(w, fmt.Sprintf("couldn't get master: %v", err), http.StatusInternalServerError)
 						return
 					}
 				}
 			}
 
-			title := a.Title
-			if a.Subtitle != "" {
-				title += " - " + a.Subtitle
+			waveURL := g.Wave
+			if _, err := os.Stat(fmt.Sprintf(".cache/%s.jpg", s.ID)); err == nil {
+				waveURL = fmt.Sprintf("/cache/%s.jpg", s.ID)
+			} else if g.Wave != "" {
+				waveURL = g.Wave
+				if !strings.HasPrefix(g.Wave, "http") {
+					audioURL, err = tgStore.Get(ctx, g.Wave)
+					if err != nil {
+						log.Println("couldn't get wave:", err)
+						http.Error(w, fmt.Sprintf("couldn't get wave: %v", err), http.StatusInternalServerError)
+						return
+					}
+				}
 			}
-			if a.Volume > 0 {
-				title = fmt.Sprintf("%s - Vol %d", title, a.Volume)
-			}
-			assets = append(assets, &Asset{
-				ID:           a.ID,
-				URL:          coverURL,
-				ThumbnailURL: coverURL,
-				Prompt:       fmt.Sprintf("%s | %s | %s | %s", title, a.Artist, a.Type, a.ID),
-				State:        a.State,
+			resp.Songs = append(resp.Songs, &AlbumSong{
+				ID:           s.ID,
+				URL:          audioURL,
+				ThumbnailURL: waveURL,
+				Prompt:       p,
+				State:        s.State,
+				Liked:        s.Likes > 0,
 			})
-
-			songs, err := store.ListSongs(ctx, 1, 1000, "\"order\" asc", storage.Where("album_id = ?", a.ID))
-			if err != nil {
-				log.Println("couldn't list songs:", err)
-				http.Error(w, fmt.Sprintf("couldn't list songs: %v", err), http.StatusInternalServerError)
-				return
-			}
-			for _, s := range songs {
-				g := s.Generation
-				d := time.Duration(int(g.Duration)) * time.Second
-				p := fmt.Sprintf("%d - %s | %s %.f BPM %s", s.Order, s.Title, d, g.Tempo, s.Type)
-
-				audioURL := g.SunoAudio
-				if _, err := os.Stat(fmt.Sprintf(".cache/%s.mp3", s.ID)); err == nil {
-					audioURL = fmt.Sprintf("/cache/%s.mp3", s.ID)
-				} else if g.Master != "" {
-					audioURL = g.Master
-					if !strings.HasPrefix(g.Master, "http") {
-						audioURL, err = tgStore.Get(ctx, g.Master)
-						if err != nil {
-							log.Println("couldn't get master:", err)
-							http.Error(w, fmt.Sprintf("couldn't get master: %v", err), http.StatusInternalServerError)
-							return
-						}
-					}
-				}
-
-				waveURL := g.Wave
-				if _, err := os.Stat(fmt.Sprintf(".cache/%s.jpg", s.ID)); err == nil {
-					waveURL = fmt.Sprintf("/cache/%s.jpg", s.ID)
-				} else if g.Wave != "" {
-					waveURL = g.Wave
-					if !strings.HasPrefix(g.Wave, "http") {
-						audioURL, err = tgStore.Get(ctx, g.Wave)
-						if err != nil {
-							log.Println("couldn't get wave:", err)
-							http.Error(w, fmt.Sprintf("couldn't get wave: %v", err), http.StatusInternalServerError)
-							return
-						}
-					}
-				}
-
-				assets = append(assets, &Asset{
-					ID:           s.ID,
-					URL:          audioURL,
-					ThumbnailURL: waveURL,
-					Prompt:       p,
-					State:        s.State,
-					Liked:        s.Likes > 0,
-				})
-			}
 		}
-		if err := json.NewEncoder(w).Encode(assets); err != nil {
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			log.Println("couldn't encode songs:", err)
 			http.Error(w, fmt.Sprintf("couldn't encode songs: %v", err), http.StatusInternalServerError)
 			return
 		}
 	})
+	r.Put("/api/albums/{id}/delete", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		id := chi.URLParam(r, "id")
+		album.RunDelete(ctx, &album.DeleteConfig{
+			Debug:  cfg.Debug,
+			DBType: cfg.DBType,
+			DBConn: cfg.DBConn,
+			ID:     id,
+		})
+	})
+
 	r.Put("/api/albums/{id}/approve", func(w http.ResponseWriter, r *http.Request) {
 		updateAlbum(w, r, store, func(c *storage.Album) *storage.Album {
 			c.State = storage.Approved
@@ -489,14 +499,103 @@ func Serve(ctx context.Context, cfg *Config) error {
 			return c
 		})
 	})
+	r.Put("/api/albums/{aid}/songs/{id}/delete", func(w http.ResponseWriter, r *http.Request) {
+		var title string
+		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
+			title = s.Title
+			s.AlbumID = ""
+			s.Title = ""
+			s.Order = 0
+			s.State = storage.Approved
+			return s
+		})
+		// Get title
+		titles, err := store.ListTitles(ctx, 1, 1, "", storage.Where("title = ?", title))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("couldn't get titles: %v", err), http.StatusNotFound)
+			return
+		}
+		if len(titles) == 0 {
+			http.Error(w, "couldn't find titles", http.StatusNotFound)
+			return
+		}
+		updateTitle(w, r, store, titles[0].ID, func(t *storage.Title) *storage.Title {
+			t.State = storage.Approved
+			return t
+		})
+	})
+	r.Put("/api/albums/{aid}/songs/{id}/add", func(w http.ResponseWriter, r *http.Request) {
+		aid := chi.URLParam(r, "aid")
+		album, err := store.GetAlbum(ctx, aid)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("couldn't get album: %v", err), http.StatusNotFound)
+			return
+		}
+		songs, err := store.ListSongs(ctx, 1, 1000, "", storage.Where("album_id = ?", aid))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("couldn't get songs: %v", err), http.StatusNotFound)
+			return
+		}
+
+		id := chi.URLParam(r, "id")
+		if id == "-" {
+			// Get random songs matching the type
+			songFilters := []storage.Filter{
+				storage.Where("type LIKE ?", album.Type),
+				storage.Where("state = ?", storage.Approved),
+			}
+			songs, err := store.ListSongs(ctx, 1, 1, "random()", songFilters...)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("couldn't get songs: %v", err), http.StatusNotFound)
+				return
+			}
+			if len(songs) == 0 {
+				http.Error(w, "couldn't find songs", http.StatusNotFound)
+				return
+			}
+			id = songs[0].ID
+		}
+
+		// Get random titles matching the type
+		titleFilters := []storage.Filter{
+			storage.Where("type LIKE ?", album.Type),
+			storage.Where("state = ?", storage.Approved),
+		}
+		titles, err := store.ListTitles(ctx, 1, 1, "random()", titleFilters...)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("couldn't get titles: %v", err), http.StatusNotFound)
+			return
+		}
+		if len(titles) == 0 {
+			http.Error(w, "couldn't find titles", http.StatusNotFound)
+			return
+		}
+		title := titles[0]
+
+		updateSongWithID(w, r, store, id, func(s *storage.Song) *storage.Song {
+			s.AlbumID = aid
+			s.Title = title.Title
+			s.Order = len(songs) + 1
+			s.State = storage.Used
+			return s
+		})
+		updateTitle(w, r, store, title.ID, func(t *storage.Title) *storage.Title {
+			t.State = storage.Used
+			return t
+		})
+	})
 
 	<-ctx.Done()
 	return nil
 }
 
 func updateSong(w http.ResponseWriter, r *http.Request, store *storage.Store, update func(s *storage.Song) *storage.Song) {
-	ctx := r.Context()
 	id := chi.URLParam(r, "id")
+	updateSongWithID(w, r, store, id, update)
+}
+
+func updateSongWithID(w http.ResponseWriter, r *http.Request, store *storage.Store, id string, update func(s *storage.Song) *storage.Song) {
+	ctx := r.Context()
 	song, err := store.GetSong(ctx, id)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("couldn't get song: %v", err), http.StatusNotFound)
@@ -542,6 +641,21 @@ func updateAlbum(w http.ResponseWriter, r *http.Request, store *storage.Store, u
 	}
 }
 
+func updateTitle(w http.ResponseWriter, r *http.Request, store *storage.Store, id string, update func(s *storage.Title) *storage.Title) {
+	ctx := r.Context()
+	title, err := store.GetTitle(ctx, id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("couldn't get title: %v", err), http.StatusNotFound)
+		return
+	}
+	title = update(title)
+	if err := store.SetTitle(ctx, title); err != nil {
+		log.Println("couldn't set title:", err)
+		http.Error(w, fmt.Sprintf("couldn't set title: %v", err), http.StatusInternalServerError)
+		return
+	}
+}
+
 type Song struct {
 	ID           string        `json:"id"`
 	GenerationID string        `json:"generation_id"`
@@ -551,6 +665,24 @@ type Song struct {
 	State        storage.State `json:"state"`
 	Liked        bool          `json:"liked"`
 	Selected     bool          `json:"selected"`
+}
+
+type Album struct {
+	ID           string        `json:"id"`
+	URL          string        `json:"url"`
+	ThumbnailURL string        `json:"thumbnail_url"`
+	Prompt       string        `json:"prompt"`
+	State        storage.State `json:"state"`
+	Songs        []*AlbumSong  `json:"songs"`
+}
+
+type AlbumSong struct {
+	ID           string        `json:"id"`
+	URL          string        `json:"url"`
+	ThumbnailURL string        `json:"thumbnail_url"`
+	Prompt       string        `json:"prompt"`
+	State        storage.State `json:"state"`
+	Liked        bool          `json:"liked"`
 }
 
 type Asset struct {

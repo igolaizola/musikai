@@ -254,6 +254,43 @@
 
           <!-- Gallery -->
           <div class="gallery mb-4">
+            <div class="gallery-item card">
+              <a target="_blank" x-bind:href="album.url">
+                <img x-bind:src="album.thumbnail_url" />
+              </a>
+              <audio
+                controls
+                class="my-2"
+                style="height: 30px; width: 100%"
+                x-bind:onplay="play(index)"
+              >
+                <source x-bind:src="album.url" type="audio/mp3" />
+                Your browser does not support the audio element.
+              </audio>
+              <span class="small" x-text="album.prompt"></span>
+
+              <div class="btn-group" role="group">
+                <template x-if="album.state !== 2">
+                  <button
+                    @click="approveImage(-1)"
+                    type="button"
+                    class="btn btn-success btn-sm"
+                  >
+                    Approve
+                  </button>
+                </template>
+
+                <template x-if="album.state !== 0">
+                  <button
+                    @click="disapproveImage(-1)"
+                    type="button"
+                    class="btn btn-danger btn-sm"
+                  >
+                    Disapprove
+                  </button>
+                </template>
+              </div>
+            </div>
             <template x-for="(img, index) in images">
               <div class="gallery-item card">
                 <a target="_blank" x-bind:href="img.url">
@@ -271,48 +308,35 @@
                 <span class="small" x-text="img.prompt"></span>
 
                 <div class="btn-group" role="group">
-                  <template x-if="!img.liked || img.liked === false">
-                    <button
-                      @click="likeImage(index)"
-                      type="button"
-                      class="btn btn-secondary btn-sm"
-                    >
-                      🤍
-                    </button>
-                  </template>
-
-                  <template x-if="img.liked === true">
-                    <button
-                      @click="dislikeImage(index)"
-                      type="button"
-                      class="btn btn-secondary btn-sm"
-                    >
-                      ❤️
-                    </button>
-                  </template>
-
-                  <template x-if="img.state !== 2">
-                    <button
-                      @click="approveImage(index)"
-                      type="button"
-                      class="btn btn-success btn-sm"
-                    >
-                      Approve
-                    </button>
-                  </template>
-
                   <template x-if="img.state !== 0">
                     <button
-                      @click="disapproveImage(index)"
+                      @click="deleteSong(index)"
                       type="button"
                       class="btn btn-danger btn-sm"
                     >
-                      Disapprove
+                      🗑️
                     </button>
                   </template>
                 </div>
               </div>
             </template>
+            <div class="gallery-item card">
+              <input
+                x-model="newsong"
+                type="text"
+                class="form-control mb-3 mt-4"
+                placeholder="ID"
+              />
+              <div class="btn-group" role="group">
+                <button
+                  @click="addSong()"
+                  type="button"
+                  class="btn btn-success btn-sm"
+                >
+                  Add song
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Pagination -->

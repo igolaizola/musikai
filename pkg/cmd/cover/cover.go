@@ -142,8 +142,8 @@ func Run(ctx context.Context, cfg *Config) error {
 
 			// Get next drafts
 			filters := []storage.Filter{
-				// TODO: add filters
 				storage.Where("drafts.id > ?", currID),
+				storage.Where("drafts.state = ?", storage.Approved),
 			}
 			if cfg.Type != "" {
 				filters = append(filters, storage.Where("drafts.type LIKE ?", cfg.Type))

@@ -120,7 +120,11 @@ func Run(ctx context.Context, cfg *Config) error {
 	start := time.Now()
 	defer func() {
 		total := time.Since(start)
-		log.Printf("album: total time %s, average time %s\n", total, total/time.Duration(iteration))
+		i := iteration
+		if i == 0 {
+			i = 1
+		}
+		log.Printf("album: total time %s, average time %s\n", total, total/time.Duration(i))
 	}()
 
 	timeout := cfg.Timeout
@@ -143,8 +147,6 @@ func Run(ctx context.Context, cfg *Config) error {
 		if cfg.Limit > 0 && iteration >= cfg.Limit {
 			return nil
 		}
-
-		iteration++
 
 		// Get next draft
 		filters := []storage.Filter{}
@@ -341,6 +343,7 @@ func Run(ctx context.Context, cfg *Config) error {
 				return fmt.Errorf("album: couldn't set cover: %w", err)
 			}
 		}
+		iteration++
 	}
 
 }

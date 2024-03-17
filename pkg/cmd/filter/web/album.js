@@ -1,5 +1,6 @@
 window.app = function () {
     return {
+      newsong: "",
       speed: 1,
       asset: "albums",
       style: "",
@@ -8,6 +9,7 @@ window.app = function () {
       error: "",
       page: 1,
       loading: false,
+      album: null,
       images: [],
       nav: "home",
       pending: true,
@@ -28,11 +30,16 @@ window.app = function () {
         this.loading = false;
       },
       action: function (action, index, callback) {
-        id = this.images[index].id;
-        console.log(action + " " + id);
         this.error = "";
-        let apiURL = "/api/" + this.asset + "/" + id + "/" + action;
-  
+
+        let apiURL = "/api/" + this.asset + "/" + this.album.id + "/" + action;
+        if (index >= 0) {
+          id = this.images[index].id;
+          apiURL = "/api/" + this.asset + "/" + this.album.id + "/songs/"+ id + "/" + action;
+        }
+        this.fetch(apiURL, index, callback);
+      },
+      fetch: function(apiURL, index, callback) {
         fetch(apiURL, {
           method: "PUT",
           headers: {
@@ -54,25 +61,28 @@ window.app = function () {
             this.error = error.message;
           });
       },
-      likeImage: function (index) {
-        this.action("like", index,  () => {
-          this.images[index].liked = true;
-          this.images[index].state = 2;
+      addSong: function () {
+        id = this.newsong;
+        if (id === "") {
+          id = "-";
+        }
+        this.fetch("/api/albums/" + this.album.id + "/songs/"+id+"/add", 0, () => {
+          this.search(this.page);
         });
       },
-      dislikeImage: function (index) {
-        this.action("dislike", index,  () => {
-          this.images[index].liked = false;
+      deleteSong: function (index) {
+        this.action("delete", index, () => {
+          this.images.splice(index, 1);
         });
       },
       approveImage: function (index) {
         this.action("approve", index,  () => {
-          this.images[index].state = 2;
+          this.album.state = 2;
         });
       },
       disapproveImage: function (index) {
         this.action("disapprove", index, () => {
-          this.images[index].state = 0;
+          this.album.state = 0;
         });
       },
       changeSpeed() {
@@ -165,7 +175,8 @@ window.app = function () {
           })
           .then((data) => {
             console.log(data);
-            this.images = data;
+            this.album = data;
+            this.images = data.songs;
           })
           .catch((error) => {
             // Update the component's data properties with received error and empty summary
