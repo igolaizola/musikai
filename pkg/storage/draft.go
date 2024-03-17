@@ -110,10 +110,10 @@ func (s *Store) ListDraftCovers(ctx context.Context, min, page, size int, orderB
 
 	// Query to get drafts with less covers than the minimum
 	q := s.db.Model(&Draft{}).Select(strings.Join(append(columns, "count(*) as covers"), ",")).
-		Joins("LEFT JOIN covers on drafts.title = covers.title AND covers.state IN ?", []State{Pending, Approved}).
+		Joins("INNER JOIN covers on drafts.title = covers.title AND covers.state = ?", Approved).
 		Where("drafts.state != ?", Rejected).
-		Group(strings.Join(columns, ",")).
-		Having("count(*) < (drafts.Volumes+1) * ?", min)
+		Where("(select id from albums where albums.draft_id = drafts.id) < CASE WHEN drafts.volumes = 0 THEN 1 ELSE draft.volumes END").
+		Group(strings.Join(columns, ","))
 	for _, f := range filter {
 		q = q.Where(f.Query, f.Args...)
 	}
