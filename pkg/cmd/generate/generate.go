@@ -8,9 +8,13 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/gocarina/gocsv"
 	"github.com/igolaizola/musikai/pkg/sound/aubio"
 	"github.com/igolaizola/musikai/pkg/storage"
 	"github.com/igolaizola/musikai/pkg/suno"
@@ -29,6 +33,7 @@ type Config struct {
 	Proxy       string
 
 	Account      string
+	Input        string
 	Type         string
 	Prompt       string
 	Style        string
@@ -43,6 +48,14 @@ type Config struct {
 	MinDuration    time.Duration
 	MaxDuration    time.Duration
 	MaxExtensions  int
+}
+
+type input struct {
+	Weight       int    `json:"weight" csv:"weight"`
+	Type         string `json:"type" csv:"type"`
+	Prompt       string `json:"prompt" csv:"prompt"`
+	Style        string `json:"style" csv:"style"`
+	Instrumental bool   `json:"instrumental" csv:"instrumental"`
 }
 
 // Run launches the song generation process.
@@ -71,6 +84,15 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 	if err := store.Start(ctx); err != nil {
 		return fmt.Errorf("generate: couldn't start orm store: %w", err)
+	}
+
+	// Get the template function
+	var fn func() template
+	if cfg.Input != "" {
+		fn, err = toTemplateFunc(cfg.Input)
+		if err != nil {
+			return err
+		}
 	}
 
 	httpClient := &http.Client{
@@ -177,14 +199,19 @@ func Run(ctx context.Context, cfg *Config) error {
 			}
 
 			// Get a template
-			tmpl := template{
-				Type:         cfg.Type,
-				Prompt:       cfg.Prompt,
-				Style:        cfg.Style,
-				Instrumental: cfg.Instrumental,
-			}
-			if tmpl.Prompt == "" && tmpl.Style == "" {
-				tmpl = nextTemplate()
+			var tmpl template
+			if fn != nil {
+				tmpl = fn()
+			} else {
+				tmpl = template{
+					Type:         cfg.Type,
+					Prompt:       cfg.Prompt,
+					Style:        cfg.Style,
+					Instrumental: cfg.Instrumental,
+				}
+				if tmpl.Prompt == "" && tmpl.Style == "" {
+					tmpl = nextTemplate()
+				}
 			}
 
 			// Launch generate in a goroutine
@@ -255,4 +282,68 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 		}
 	}
 	return nil
+}
+
+func toTemplateFunc(file string) (func() template, error) {
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return nil, fmt.Errorf("generate: couldn't read input file: %w", err)
+	}
+
+	ext := filepath.Ext(file)
+	var unmarshal func([]byte) ([]*input, error)
+	switch ext {
+	case ".json":
+		unmarshal = func(b []byte) ([]*input, error) {
+			var is []*input
+			if err := json.Unmarshal(b, &is); err != nil {
+				return nil, fmt.Errorf("couldn't unmarshal items: %w", err)
+			}
+			return is, nil
+		}
+	case ".csv":
+		// Check for inconsistent number of fields in csv
+		lines := strings.Split(string(b), "\n")
+		commas := strings.Count(lines[0], ",")
+		for i, l := range lines {
+			if l == "" {
+				continue
+			}
+			if commas != strings.Count(l, ",") {
+				return nil, fmt.Errorf("generate: inconsistent number of fields in csv %d (%s)", i, l)
+			}
+		}
+		unmarshal = func(b []byte) ([]*input, error) {
+			var is []*input
+			if err := gocsv.UnmarshalBytes(b, &is); err != nil {
+				return nil, fmt.Errorf("couldn't unmarshal items: %w", err)
+			}
+			return is, nil
+		}
+	default:
+		return nil, fmt.Errorf("generate: unsupported output format: %s", ext)
+	}
+	inputs, err := unmarshal(b)
+	if err != nil {
+		return nil, fmt.Errorf("generate: couldn't unmarshal input: %w", err)
+	}
+	if len(inputs) == 0 {
+		return nil, fmt.Errorf("generate: no inputs found in file")
+	}
+	var opts []template
+	for _, i := range inputs {
+		if i.Prompt == "" && i.Style == "" {
+			log.Println("generate: skipping empty input")
+			continue
+		}
+		opts = append(opts, options(i.Weight, template{
+			Type:         i.Type,
+			Prompt:       i.Prompt,
+			Style:        i.Style,
+			Instrumental: i.Instrumental,
+		})...)
+	}
+	return func() template {
+		return opts[rand.Intn(len(opts))]
+	}, nil
 }
