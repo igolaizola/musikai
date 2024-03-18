@@ -35,8 +35,8 @@ func (s *Store) SetFileRef(ctx context.Context, id, ref string) error {
 		UpdatedAt: time.Now().UTC(),
 	}
 	err := s.db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "id"}},                             // Unique columns
-		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}), // Columns to update
+		Columns:   []clause.Column{{Name: "id"}},                           // Unique columns
+		DoUpdates: clause.AssignmentColumns([]string{"ref", "updated_at"}), // Columns to update
 	}).Create(v).Error
 	if err != nil {
 		return fmt.Errorf("storage: failed to set file %s: %w", id, err)
