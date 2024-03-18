@@ -3,6 +3,11 @@
 echo "Updating package list..."
 sudo apt-get update
 
+# Install python and pip
+echo "Installing python and pip..."
+sudo apt-get install python3 -y
+sudo apt-get install python3-pip -y
+
 # Install pipenv
 echo "Installing pipenv..."
 sudo apt install python3-pip -y
@@ -28,5 +33,9 @@ sudo apt-get install libarmadillo-dev -y
 # Install libsndfile
 echo "Installing libsndfile..."
 sudo apt-get install libsndfile1-dev -y
+
+# Install XZ Utils
+echo "Installing XZ Utils..."
+sudo apt-get install xz-utils -y
 
 echo "All specified dependencies have been installed."
