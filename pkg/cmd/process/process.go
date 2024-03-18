@@ -35,6 +35,7 @@ type Config struct {
 
 	Type         string
 	Reprocess    bool
+	SkipMaster   bool
 	ShortFadeOut time.Duration
 	LongFadeOut  time.Duration
 }
@@ -73,9 +74,13 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("process: couldn't get aubio version: %w", err)
 	}
 
-	ph := phaselimiter.New(&phaselimiter.Config{})
-	if _, err := ph.Version(ctx); err != nil {
-		return fmt.Errorf("process: couldn't get phaselimiter version: %w", err)
+	var ph *phaselimiter.PhaseLimiter
+	master := !cfg.SkipMaster
+	if master {
+		ph = phaselimiter.New(&phaselimiter.Config{})
+		if _, err := ph.Version(ctx); err != nil {
+			return fmt.Errorf("process: couldn't get phaselimiter version: %w", err)
+		}
 	}
 
 	store, err := storage.New(cfg.DBType, cfg.DBConn, cfg.Debug)
@@ -202,7 +207,7 @@ func Run(ctx context.Context, cfg *Config) error {
 				if cfg.Reprocess {
 					err = reprocess(ctx, gen, debug, store, fs)
 				} else {
-					err = process(ctx, gen, debug, store, fs, &tgLock, httpClient, ph, &phLock, cfg.ShortFadeOut, cfg.LongFadeOut)
+					err = process(ctx, gen, debug, store, fs, &tgLock, httpClient, ph, &phLock, cfg.ShortFadeOut, cfg.LongFadeOut, master)
 				}
 				if err != nil {
 					log.Println(err)
@@ -223,7 +228,7 @@ type flags struct {
 }
 
 func process(ctx context.Context, gen *storage.Generation, debug func(string, ...any), store *storage.Store, fs *filestore.Store, tgLock *sync.Mutex,
-	client *http.Client, ph *phaselimiter.PhaseLimiter, phLock *sync.Mutex, shortFadeOut, longFadeOut time.Duration) error {
+	client *http.Client, ph *phaselimiter.PhaseLimiter, phLock *sync.Mutex, shortFadeOut, longFadeOut time.Duration, master bool) error {
 
 	// Download the audio file
 	debug("process: start download %s", gen.ID)
@@ -238,40 +243,44 @@ func process(ctx context.Context, gen *storage.Generation, debug func(string, ..
 	}
 	debug("process: end download %s", gen.ID)
 
-	// Create master folder if it doesn't exist
-	masterDir := filepath.Join(os.TempDir(), "master")
-	if err := os.MkdirAll(masterDir, 0755); err != nil {
-		return fmt.Errorf("process: couldn't create master folder: %w", err)
-	}
-	mastered := filepath.Join(masterDir, fmt.Sprintf("%s.mp3", gen.ID))
+	processed := original
+	if master {
+		// Create master folder if it doesn't exist
+		masterDir := filepath.Join(os.TempDir(), "master")
+		if err := os.MkdirAll(masterDir, 0755); err != nil {
+			return fmt.Errorf("process: couldn't create master folder: %w", err)
+		}
+		mastered := filepath.Join(masterDir, fmt.Sprintf("%s.mp3", gen.ID))
 
-	// Master the gens
-	if _, err := os.Stat(mastered); err == nil {
-		if err := os.Remove(mastered); err != nil {
-			return fmt.Errorf("process: couldn't remove old master: %w", err)
+		// Master the gens
+		if _, err := os.Stat(mastered); err == nil {
+			if err := os.Remove(mastered); err != nil {
+				return fmt.Errorf("process: couldn't remove old master: %w", err)
+			}
 		}
-	}
-	debug("process: start master %s", gen.ID)
-	if err := func() error {
-		// Lock the phase limiter to avoid concurrent calls
-		phLock.Lock()
-		defer phLock.Unlock()
-		if ctx.Err() != nil {
-			return fmt.Errorf("process: %w", ctx.Err())
-		}
+		debug("process: start master %s", gen.ID)
+		if err := func() error {
+			// Lock the phase limiter to avoid concurrent calls
+			phLock.Lock()
+			defer phLock.Unlock()
+			if ctx.Err() != nil {
+				return fmt.Errorf("process: %w", ctx.Err())
+			}
 
-		if err := ph.Master(ctx, original, mastered); err != nil {
-			return fmt.Errorf("process: couldn't master gen: %w", err)
+			if err := ph.Master(ctx, original, mastered); err != nil {
+				return fmt.Errorf("process: couldn't master gen: %w", err)
+			}
+			return nil
+		}(); err != nil {
+			return err
 		}
-		return nil
-	}(); err != nil {
-		return err
+		debug("process: end master %s", gen.ID)
+		processed = mastered
 	}
-	debug("process: end master %s", gen.ID)
 
 	// Create analyzer to get silences
 	debug("process: start cut and fade out %s", gen.ID)
-	analyzer, err := sound.NewAnalyzer(mastered)
+	analyzer, err := sound.NewAnalyzer(processed)
 	if err != nil {
 		return fmt.Errorf("process: couldn't create analyzer: %w", err)
 	}
@@ -288,7 +297,7 @@ func process(ctx context.Context, gen *storage.Generation, debug func(string, ..
 		last := silences[len(silences)-1]
 		if last.Final || last.End > analyzer.Duration()-10*time.Second {
 			// Cut the last silence
-			if err := ffmpeg.Cut(ctx, mastered, mastered, last.Start); err != nil {
+			if err := ffmpeg.Cut(ctx, processed, processed, last.Start); err != nil {
 				return fmt.Errorf("process: couldn't cut last silence: %w", err)
 			}
 		}
@@ -297,12 +306,12 @@ func process(ctx context.Context, gen *storage.Generation, debug func(string, ..
 	}
 
 	// Apply fade out
-	if err := ffmpeg.FadeOut(ctx, mastered, mastered, analyzer.Duration(), fadeOut); err != nil {
+	if err := ffmpeg.FadeOut(ctx, processed, processed, analyzer.Duration(), fadeOut); err != nil {
 		return fmt.Errorf("process: couldn't fade out gen: %w", err)
 	}
 	debug("process: end cut and fade out %s", gen.ID)
 
-	analyzer, err = sound.NewAnalyzer(mastered)
+	analyzer, err = sound.NewAnalyzer(processed)
 	if err != nil {
 		return fmt.Errorf("process: couldn't create analyzer: %w", err)
 	}
@@ -319,8 +328,6 @@ func process(ctx context.Context, gen *storage.Generation, debug func(string, ..
 	defer func() { _ = os.Remove(wavePath) }()
 
 	debug("process: start upload %s", gen.ID)
-	var masterID string
-	var waveID string
 	if err := func() error {
 		// Lock the tg store to avoid concurrent calls
 		tgLock.Lock()
@@ -335,7 +342,7 @@ func process(ctx context.Context, gen *storage.Generation, debug func(string, ..
 		}
 
 		// Upload the mastered audio
-		if err := fs.SetMP3(ctx, mastered, gen.ID); err != nil {
+		if err := fs.SetMP3(ctx, processed, gen.ID); err != nil {
 			return fmt.Errorf("process: couldn't save mastered audio to telegram: %w", err)
 		}
 
@@ -346,15 +353,15 @@ func process(ctx context.Context, gen *storage.Generation, debug func(string, ..
 	debug("process: end upload %s", gen.ID)
 
 	// Get the tempo
-	tempo, err := aubio.Tempo(ctx, mastered)
+	tempo, err := aubio.Tempo(ctx, processed)
 	if err != nil {
 		return fmt.Errorf("process: couldn't get tempo: %w", err)
 	}
-	return processFlags(ctx, gen, mastered, ends, float32(tempo), masterID, waveID, analyzer, debug, store)
+	return processFlags(ctx, gen, processed, ends, float32(tempo), master, analyzer, debug, store)
 }
 
-func processFlags(ctx context.Context, gen *storage.Generation, mastered string, ends bool,
-	tempo float32, masterID string, waveID string, analyzer *sound.Analyzer,
+func processFlags(ctx context.Context, gen *storage.Generation, processed string, ends bool,
+	tempo float32, master bool, analyzer *sound.Analyzer,
 	debug func(string, ...any), store *storage.Store) error {
 
 	// Reload analyzer to process flags
@@ -388,7 +395,7 @@ func processFlags(ctx context.Context, gen *storage.Generation, mastered string,
 	}
 
 	// BPM changes
-	beats, err := aubio.BPM(ctx, mastered)
+	beats, err := aubio.BPM(ctx, processed)
 	if err != nil {
 		return fmt.Errorf("process: couldn't get bpm: %w", err)
 	}
@@ -422,10 +429,10 @@ func processFlags(ctx context.Context, gen *storage.Generation, mastered string,
 	}
 
 	// Update the gen
-	gen.Master = masterID
-	gen.Wave = waveID
+	gen.Mastered = master
 	gen.Tempo = float32(tempo)
 	gen.Processed = true
+	gen.ProcessedAt = time.Now()
 	gen.Duration = float32(analyzer.Duration().Seconds())
 	gen.Ends = ends
 	gen.Flags = flagJSON
@@ -461,8 +468,8 @@ func reprocess(ctx context.Context, gen *storage.Generation, debug func(string, 
 	// Download the mastered audio
 	debug("process: start download master %s", gen.ID)
 	name := filestore.MP3(gen.ID)
-	mastered := filepath.Join(os.TempDir(), name)
-	if err := fs.GetMP3(ctx, mastered, gen.ID); err != nil {
+	processed := filepath.Join(os.TempDir(), name)
+	if err := fs.GetMP3(ctx, processed, gen.ID); err != nil {
 		return fmt.Errorf("process: couldn't download master audio: %w", err)
 	}
 	debug("process: end download master %s", gen.ID)
@@ -472,9 +479,9 @@ func reprocess(ctx context.Context, gen *storage.Generation, debug func(string, 
 			return fmt.Errorf("process: couldn't unmarshal flags: %w", err)
 		}
 	}
-	analyzer, err := sound.NewAnalyzer(mastered)
+	analyzer, err := sound.NewAnalyzer(processed)
 	if err != nil {
 		return fmt.Errorf("process: couldn't create analyzer: %w", err)
 	}
-	return processFlags(ctx, gen, mastered, gen.Ends, gen.Tempo, gen.Master, gen.Wave, analyzer, debug, store)
+	return processFlags(ctx, gen, processed, gen.Ends, gen.Tempo, gen.Mastered, analyzer, debug, store)
 }

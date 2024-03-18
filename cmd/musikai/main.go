@@ -226,6 +226,7 @@ func newProcessCommand() *ffcli.Command {
 	fs.BoolVar(&cfg.Reprocess, "reprocess", false, "reprocess the song")
 	fs.DurationVar(&cfg.ShortFadeOut, "short-fadeout", 0, "short fade out duration")
 	fs.DurationVar(&cfg.LongFadeOut, "long-fadeout", 0, "long fade out duration")
+	fs.BoolVar(&cfg.SkipMaster, "skip-master", false, "skip the master process")
 
 	return &ffcli.Command{
 		Name:       cmd,

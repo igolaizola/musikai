@@ -31,6 +31,7 @@ type Generation struct {
 
 	ProcessedAt time.Time
 	Processed   bool `gorm:"index"`
+	Mastered    bool `gorm:"index"`
 
 	Ends    bool
 	Flagged bool `gorm:"index"`
