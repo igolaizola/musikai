@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Setting struct {
@@ -28,7 +29,11 @@ func (s *Store) GetSetting(ctx context.Context, id string) (*Setting, error) {
 }
 
 func (s *Store) SetSetting(ctx context.Context, v *Setting) error {
-	err := s.db.Model(&Setting{}).Where("id = ?", v.ID).Update("value", v.Value).Error
+	v.UpdatedAt = time.Now().UTC()
+	err := s.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},                             // Unique columns
+		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}), // Columns to update
+	}).Create(v).Error
 	if err != nil {
 		return fmt.Errorf("storage: failed to set setting %s: %w", v.ID, err)
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/igolaizola/musikai/pkg/cmd/migrate"
 	"github.com/igolaizola/musikai/pkg/cmd/process"
 	"github.com/igolaizola/musikai/pkg/cmd/publish"
+	"github.com/igolaizola/musikai/pkg/cmd/setting"
 	"github.com/igolaizola/musikai/pkg/cmd/title"
 	"github.com/igolaizola/musikai/pkg/cmd/upscale"
 	"github.com/igolaizola/musikai/pkg/cmd/web"
@@ -59,6 +60,7 @@ func newCommand() *ffcli.Command {
 		Subcommands: []*ffcli.Command{
 			newVersionCommand(),
 			newMigrateCommand(),
+			newSettingCommand(),
 			newAnalyzeCommand(),
 			newGenerateCommand(),
 			newProcessCommand(),
@@ -127,6 +129,36 @@ func newMigrateCommand() *ffcli.Command {
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
 			return migrate.Run(ctx, cfg)
+		},
+	}
+}
+
+func newSettingCommand() *ffcli.Command {
+	cmd := "setting"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &setting.Config{}
+
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.Service, "service", "", "distrokid or suno")
+	fs.StringVar(&cfg.Account, "account", "", "account name")
+	fs.StringVar(&cfg.Value, "value", "", "value to set")
+	fs.StringVar(&cfg.Type, "type", "cookie", "value type")
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return setting.Run(ctx, cfg)
 		},
 	}
 }
