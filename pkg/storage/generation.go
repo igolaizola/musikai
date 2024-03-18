@@ -24,10 +24,8 @@ type Generation struct {
 	SunoHistory string `gorm:"not null;default:''"`
 
 	Duration float32 `gorm:"not null;default:0"`
-	Wave     string  `gorm:"not null;default:''"`
 	Tempo    float32 `gorm:"not null;default:0"`
 	Flags    string  `gorm:"not null;default:''"`
-	Master   string  `gorm:"not null;default:''"`
 
 	ProcessedAt time.Time
 	Processed   bool `gorm:"index"`

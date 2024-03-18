@@ -22,7 +22,6 @@ type Album struct {
 	Subtitle       string `gorm:"not null;default:''"`
 	Volume         int    `gorm:"not null;default:0"`
 	Artist         string `gorm:"not null;default:''"`
-	Cover          string `gorm:"not null;default:''"`
 	PrimaryGenre   string `gorm:"not null;default:''"`
 	SecondaryGenre string `gorm:"not null;default:''"`
 

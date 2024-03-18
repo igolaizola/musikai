@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -302,17 +301,6 @@ func toTemplateFunc(file string) (func() template, error) {
 			return is, nil
 		}
 	case ".csv":
-		// Check for inconsistent number of fields in csv
-		lines := strings.Split(string(b), "\n")
-		commas := strings.Count(lines[0], ",")
-		for i, l := range lines {
-			if l == "" {
-				continue
-			}
-			if commas != strings.Count(l, ",") {
-				return nil, fmt.Errorf("generate: inconsistent number of fields in csv %d (%s)", i, l)
-			}
-		}
 		unmarshal = func(b []byte) ([]*input, error) {
 			var is []*input
 			if err := gocsv.UnmarshalBytes(b, &is); err != nil {
@@ -332,6 +320,10 @@ func toTemplateFunc(file string) (func() template, error) {
 	}
 	var opts []template
 	for _, i := range inputs {
+		w := i.Weight
+		if w <= 0 {
+			w = 1
+		}
 		if i.Prompt == "" && i.Style == "" {
 			log.Println("generate: skipping empty input")
 			continue
