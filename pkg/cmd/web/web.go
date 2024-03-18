@@ -5,7 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"io/fs"
+	iofs "io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -16,20 +16,20 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/igolaizola/musikai/pkg/cmd/album"
-	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
+	"github.com/igolaizola/musikai/pkg/filestore"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
 
 type Config struct {
-	Debug       bool
-	DBType      string
-	DBConn      string
+	Debug  bool
+	DBType string
+	DBConn string
+	FSType string
+	FSConn string
+	Proxy  string
+
 	Port        int
 	Credentials map[string]string
-
-	Proxy   string
-	TGChat  int64
-	TGToken string
 }
 
 //go:embed static/*
@@ -60,13 +60,13 @@ func Serve(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("scrape: couldn't start orm store: %w", err)
 	}
 
-	tgStore, err := tgstore.New(cfg.TGToken, cfg.TGChat, cfg.Proxy, cfg.Debug)
+	fs, err := filestore.New(cfg.FSType, cfg.FSConn, cfg.Proxy, cfg.Debug, store)
 	if err != nil {
-		return fmt.Errorf("process: couldn't create file storage: %w", err)
+		return fmt.Errorf("download: couldn't create file storage: %w", err)
 	}
 
 	// Create static content
-	staticFS, err := fs.Sub(staticContent, "static")
+	staticFS, err := iofs.Sub(staticContent, "static")
 	if err != nil {
 		return fmt.Errorf("filter: couldn't load static content: %w", err)
 	}
@@ -104,11 +104,42 @@ func Serve(ctx context.Context, cfg *Config) error {
 		}
 	}()
 
+	cache := ".cache"
+	if cfg.FSType == "local" {
+		cache = cfg.FSConn
+	}
+	getMP3 := func(id string) string {
+		name := filestore.MP3(id)
+		u := fmt.Sprintf("/cache/%s", name)
+		if _, err := os.Stat(fmt.Sprintf("%s/%s", cache, name)); err == nil {
+			return u
+		}
+		out := fmt.Sprintf("%s/%s", cache, name)
+		if err := fs.GetMP3(ctx, out, id); err != nil {
+			log.Println("couldn't download mp3:", err)
+			return ""
+		}
+		return u
+	}
+	getJPG := func(id string) string {
+		name := filestore.JPG(id)
+		u := fmt.Sprintf("/cache/%s", name)
+		if _, err := os.Stat(fmt.Sprintf("%s/%s", cache, name)); err == nil {
+			return u
+		}
+		out := fmt.Sprintf("%s/%s", cache, name)
+		if err := fs.GetJPG(ctx, out, id); err != nil {
+			log.Println("couldn't download jpg:", err)
+			return ""
+		}
+		return u
+	}
+
 	// Handler to serve the static files
 	mux.Get("/*", http.StripPrefix("/", http.FileServer(http.FS(staticFS))).ServeHTTP)
 
 	// Handler to serve cached files "cache folder"
-	mux.Get("/cache/*", http.StripPrefix("/cache/", http.FileServer(http.Dir(".cache"))).ServeHTTP)
+	mux.Get("/cache/*", http.StripPrefix("/cache/", http.FileServer(http.Dir(cache))).ServeHTTP)
 
 	r.Get("/api/songs", func(w http.ResponseWriter, r *http.Request) {
 		// Obtain page from query params
@@ -182,34 +213,10 @@ func Serve(ctx context.Context, cfg *Config) error {
 			}
 
 			audioURL := g.SunoAudio
-			if _, err := os.Stat(fmt.Sprintf(".cache/%s.mp3", g.ID)); err == nil {
-				audioURL = fmt.Sprintf("/cache/%s.mp3", g.ID)
-			} else if g.Master != "" {
-				audioURL = g.Master
-				if !strings.HasPrefix(g.Master, "http") {
-					audioURL, err = tgStore.Get(ctx, g.Master)
-					if err != nil {
-						log.Println("couldn't get master:", err)
-						http.Error(w, fmt.Sprintf("couldn't get master: %v", err), http.StatusInternalServerError)
-						return
-					}
-				}
+			if g.Processed {
+				audioURL = getMP3(g.ID)
 			}
-
-			waveURL := g.Wave
-			if _, err := os.Stat(fmt.Sprintf(".cache/%s.jpg", g.ID)); err == nil {
-				waveURL = fmt.Sprintf("/cache/%s.jpg", g.ID)
-			} else if g.Wave != "" {
-				waveURL = g.Wave
-				if !strings.HasPrefix(g.Wave, "http") {
-					audioURL, err = tgStore.Get(ctx, g.Wave)
-					if err != nil {
-						log.Println("couldn't get wave:", err)
-						http.Error(w, fmt.Sprintf("couldn't get wave: %v", err), http.StatusInternalServerError)
-						return
-					}
-				}
-			}
+			waveURL := getJPG(g.ID)
 			assets = append(assets, &Song{
 				ID:           s.ID,
 				GenerationID: g.ID,
@@ -390,19 +397,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 			return
 		}
 		a := albums[0]
-		coverURL := a.Cover
-		if _, err := os.Stat(fmt.Sprintf(".cache/%s.jpg", a.ID)); err == nil {
-			coverURL = fmt.Sprintf("/cache/%s.jpg", a.ID)
-		} else if a.Cover != "" {
-			coverURL = a.Cover
-			if !strings.HasPrefix(a.Cover, "http") {
-				if err := tgStore.Download(ctx, a.Cover, fmt.Sprintf(".cache/%s.jpg", a.ID)); err != nil {
-					log.Println("couldn't get cover:", err)
-					http.Error(w, fmt.Sprintf("couldn't get cover: %v", err), http.StatusInternalServerError)
-					return
-				}
-			}
-		}
+		coverURL := getJPG(a.ID)
 
 		title := a.Title
 		if a.Subtitle != "" {
@@ -432,34 +427,11 @@ func Serve(ctx context.Context, cfg *Config) error {
 			p := fmt.Sprintf("%d - %s | %s %.f BPM %s", s.Order, s.Title, d, g.Tempo, s.Type)
 
 			audioURL := g.SunoAudio
-			if _, err := os.Stat(fmt.Sprintf(".cache/%s.mp3", s.ID)); err == nil {
-				audioURL = fmt.Sprintf("/cache/%s.mp3", s.ID)
-			} else if g.Master != "" {
-				audioURL = g.Master
-				if !strings.HasPrefix(g.Master, "http") {
-					audioURL, err = tgStore.Get(ctx, g.Master)
-					if err != nil {
-						log.Println("couldn't get master:", err)
-						http.Error(w, fmt.Sprintf("couldn't get master: %v", err), http.StatusInternalServerError)
-						return
-					}
-				}
+			if g.Processed {
+				audioURL = getMP3(g.ID)
 			}
+			waveURL := getJPG(g.ID)
 
-			waveURL := g.Wave
-			if _, err := os.Stat(fmt.Sprintf(".cache/%s.jpg", s.ID)); err == nil {
-				waveURL = fmt.Sprintf("/cache/%s.jpg", s.ID)
-			} else if g.Wave != "" {
-				waveURL = g.Wave
-				if !strings.HasPrefix(g.Wave, "http") {
-					audioURL, err = tgStore.Get(ctx, g.Wave)
-					if err != nil {
-						log.Println("couldn't get wave:", err)
-						http.Error(w, fmt.Sprintf("couldn't get wave: %v", err), http.StatusInternalServerError)
-						return
-					}
-				}
-			}
 			resp.Songs = append(resp.Songs, &AlbumSong{
 				ID:           s.ID,
 				URL:          audioURL,
@@ -478,12 +450,15 @@ func Serve(ctx context.Context, cfg *Config) error {
 	r.Put("/api/albums/{id}/delete", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		id := chi.URLParam(r, "id")
-		album.RunDelete(ctx, &album.DeleteConfig{
+		if err := album.RunDelete(ctx, &album.DeleteConfig{
 			Debug:  cfg.Debug,
 			DBType: cfg.DBType,
 			DBConn: cfg.DBConn,
 			ID:     id,
-		})
+		}); err != nil {
+			http.Error(w, fmt.Sprintf("couldn't delete album: %v", err), http.StatusInternalServerError)
+			return
+		}
 	})
 
 	r.Put("/api/albums/{id}/approve", func(w http.ResponseWriter, r *http.Request) {

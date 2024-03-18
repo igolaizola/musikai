@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
+	"github.com/igolaizola/musikai/pkg/filestore"
 	"github.com/igolaizola/musikai/pkg/ratelimit"
 	"github.com/igolaizola/musikai/pkg/storage"
 	"github.com/igolaizola/musikai/pkg/upscale"
@@ -24,21 +24,19 @@ type Config struct {
 	Limit       int
 	Timeout     time.Duration
 	Concurrency int
+	Type        string
 
 	// Database parameters
 	DBType string
 	DBConn string
-	Type   string
+	FSType string
+	FSConn string
+	Proxy  string
 
 	// Upscale parameters
-	UpscaleType string
-	UpscaleBin  string
-
-	// Telegram parameters
-	TelegramToken       string
-	TelegramChat        int64
-	TelegramProxy       string
-	TelegramConcurrency int
+	UpscaleType       string
+	UpscaleBin        string
+	UploadConcurrency int
 }
 
 // Run runs the upscale process.
@@ -62,9 +60,9 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("upscale: couldn't create upscale client: %w", err)
 	}
 
-	fstore, err := tgstore.New(cfg.TelegramToken, cfg.TelegramChat, cfg.TelegramProxy, cfg.Debug)
+	fs, err := filestore.New(cfg.FSType, cfg.FSConn, cfg.Proxy, cfg.Debug, store)
 	if err != nil {
-		return fmt.Errorf("upscale: couldn't create telegram store: %w", err)
+		return fmt.Errorf("download: couldn't create file storage: %w", err)
 	}
 
 	// Print time stats
@@ -108,11 +106,11 @@ func Run(ctx context.Context, cfg *Config) error {
 	var uploads int32
 	var uploadErr int32
 	var rlimits []ratelimit.Lock
-	tgConcurrency := cfg.TelegramConcurrency
-	if tgConcurrency == 0 {
-		tgConcurrency = concurrency
+	upConcurrency := cfg.UploadConcurrency
+	if upConcurrency == 0 {
+		upConcurrency = concurrency
 	}
-	for i := 0; i < tgConcurrency; i++ {
+	for i := 0; i < upConcurrency; i++ {
 		rlimits = append(rlimits, ratelimit.New(50*time.Millisecond))
 	}
 
@@ -179,7 +177,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		go func() {
 			defer wg.Done()
 			rlimit := rlimits[iteration%len(rlimits)]
-			err := upscaleCover(ctx, cfg.Debug, &wg, store, fstore, rlimit, upscaler, &uploads, &uploadErr, addTime, cover)
+			err := upscaleCover(ctx, cfg.Debug, &wg, store, fs, rlimit, upscaler, &uploads, &uploadErr, addTime, cover)
 			if err != nil {
 				log.Println(err)
 			}
@@ -188,19 +186,19 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func upscaleCover(ctx context.Context, isDebug bool, wg *sync.WaitGroup, store *storage.Store, fstore *tgstore.Store, rlimit ratelimit.Lock, upscaler *upscale.Upscaler, uploads *int32, nErr *int32, addTime func(t, u time.Duration), cover *storage.Cover) error {
+func upscaleCover(ctx context.Context, isDebug bool, wg *sync.WaitGroup, store *storage.Store, fs *filestore.Store, rlimit ratelimit.Lock, upscaler *upscale.Upscaler, uploads *int32, nErr *int32, addTime func(t, u time.Duration), cover *storage.Cover) error {
 	start := time.Now()
 	var upscaleTime time.Duration
 	defer func() {
 		addTime(time.Since(start), upscaleTime)
 	}()
 
-	debug := func(fstorageat string, args ...interface{}) {
+	debug := func(msg string, args ...interface{}) {
 		if !isDebug {
 			return
 		}
-		fstorageat += "\n"
-		log.Printf(fstorageat, args...)
+		msg += "\n"
+		log.Printf(msg, args...)
 	}
 
 	// Obtain extension from cover URL
@@ -270,8 +268,7 @@ func upscaleCover(ctx context.Context, isDebug bool, wg *sync.WaitGroup, store *
 
 		// Upload upscaled cover
 		debug("upscale: upload start %s", name)
-		upscaledID, err := fstore.Set(ctx, upscaled)
-		if err != nil {
+		if err := fs.SetJPG(ctx, upscaled, cover.ID); err != nil {
 			log.Println(fmt.Errorf("upscale: couldn't upload cover: %w", err))
 			atomic.AddInt32(nErr, 1)
 			return
@@ -286,7 +283,6 @@ func upscaleCover(ctx context.Context, isDebug bool, wg *sync.WaitGroup, store *
 		// Update cover
 		cover.Upscaled = true
 		cover.UpscaleAt = time.Now().UTC()
-		cover.UpscaleID = upscaledID
 		if err := store.SetCover(ctx, cover); err != nil {
 			log.Println(fmt.Errorf("upscale: couldn't update cover: %w", err))
 			atomic.AddInt32(nErr, 1)

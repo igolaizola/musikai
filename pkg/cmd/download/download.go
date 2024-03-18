@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
+	"github.com/igolaizola/musikai/pkg/filestore"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
 
@@ -20,15 +20,14 @@ type Config struct {
 	Debug       bool
 	DBType      string
 	DBConn      string
+	FSType      string
+	FSConn      string
 	Timeout     time.Duration
 	Concurrency int
 	Limit       int
 	Proxy       string
 
 	Output string
-
-	TGChat  int64
-	TGToken string
 
 	Type string
 }
@@ -61,7 +60,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("download: couldn't start orm store: %w", err)
 	}
 
-	tgStore, err := tgstore.New(cfg.TGToken, cfg.TGChat, cfg.Proxy, cfg.Debug)
+	fs, err := filestore.New(cfg.FSType, cfg.FSConn, cfg.Proxy, cfg.Debug, store)
 	if err != nil {
 		return fmt.Errorf("download: couldn't create file storage: %w", err)
 	}
@@ -179,7 +178,7 @@ func Run(ctx context.Context, cfg *Config) error {
 				defer wg.Done()
 				debug("download: start %s", gen.ID)
 
-				if err := download(ctx, gen, debug, tgStore, cfg.Output); err != nil {
+				if err := download(ctx, gen, debug, fs, cfg.Output); err != nil {
 					log.Println(err)
 				}
 				debug("download: end %s", gen.ID)
@@ -189,20 +188,22 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func download(ctx context.Context, gen *storage.Generation, debug func(string, ...any), tgStore *tgstore.Store, output string) error {
+func download(ctx context.Context, gen *storage.Generation, debug func(string, ...any), fs *filestore.Store, output string) error {
 	// Download the mastered audio
-	mastered := filepath.Join(output, fmt.Sprintf("%s.mp3", gen.ID))
+	name := filestore.MP3(gen.ID)
+	mastered := filepath.Join(output, name)
 	if _, err := os.Stat(mastered); err != nil {
 		debug("download: start download master %s", gen.ID)
-		if err := tgStore.Download(ctx, gen.Master, mastered); err != nil {
+		if err := fs.GetMP3(ctx, mastered, gen.ID); err != nil {
 			return fmt.Errorf("download: couldn't download master audio: %w", err)
 		}
 		debug("download: end download master %s", gen.ID)
 	}
-	wave := filepath.Join(output, fmt.Sprintf("%s.jpg", gen.ID))
+	name = filestore.JPG(gen.ID)
+	wave := filepath.Join(output, name)
 	if _, err := os.Stat(wave); err != nil {
 		debug("download: start download wave %s", gen.ID)
-		if err := tgStore.Download(ctx, gen.Wave, wave); err != nil {
+		if err := fs.GetJPG(ctx, wave, gen.ID); err != nil {
 			return fmt.Errorf("download: couldn't download wave: %w", err)
 		}
 		debug("download: end download wave %s", gen.ID)

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	tgbot "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/igolaizola/musikai/pkg/storage"
 )
 
 type Store struct {
@@ -22,9 +23,10 @@ type Store struct {
 	chat   int64
 	client *http.Client
 	debug  bool
+	store  *storage.Store
 }
 
-func New(token string, chat int64, proxy string, debug bool) (*Store, error) {
+func New(token string, chat int64, proxy string, debug bool, store *storage.Store) (*Store, error) {
 	bot, err := tgbot.NewBotAPI(token)
 	if err != nil {
 		return nil, err
@@ -53,6 +55,7 @@ func New(token string, chat int64, proxy string, debug bool) (*Store, error) {
 		chat:   chat,
 		client: client,
 		debug:  debug,
+		store:  store,
 	}, nil
 }
 
@@ -60,11 +63,7 @@ func (s *Store) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) Stop(ctx context.Context) error {
-	return nil
-}
-
-func (s *Store) Set(ctx context.Context, path string) (string, error) {
+func (s *Store) Upload(ctx context.Context, path, name string) error {
 	doc := tgbot.NewDocumentUpload(s.chat, path)
 
 	// Upload file
@@ -81,7 +80,7 @@ func (s *Store) Set(ctx context.Context, path string) (string, error) {
 		// Increase attempts and check if we should stop
 		attempts++
 		if attempts >= maxAttempts {
-			return "", fmt.Errorf("tgstore: couldn't send file: %w", err)
+			return fmt.Errorf("tgstore: couldn't send file: %w", err)
 		}
 		idx := attempts - 1
 		if idx >= len(backoff) {
@@ -94,7 +93,7 @@ func (s *Store) Set(ctx context.Context, path string) (string, error) {
 		}
 		select {
 		case <-ctx.Done():
-			return "", fmt.Errorf("tgstore: send file cancelled: %w", ctx.Err())
+			return fmt.Errorf("tgstore: send file cancelled: %w", ctx.Err())
 		case <-t.C:
 		}
 	}
@@ -113,13 +112,17 @@ func (s *Store) Set(ctx context.Context, path string) (string, error) {
 	}
 	if fileID == "" {
 		js, _ := json.Marshal(msg)
-		return "", fmt.Errorf("tgstore: message doesn't contain file: %s", string(js))
+		return fmt.Errorf("tgstore: message doesn't contain file: %s", string(js))
 	}
-	return toID(s.chat, msg.MessageID, fileID), nil
+	ref := toRef(s.chat, msg.MessageID, fileID)
+	if err := s.store.SetFileRef(ctx, name, ref); err != nil {
+		return fmt.Errorf("tgstore: couldn't set file %s: %w", name, err)
+	}
+	return nil
 }
 
-func (s *Store) Get(ctx context.Context, id string) (string, error) {
-	_, _, fileID, err := fromID(id)
+func (s *Store) Get(ctx context.Context, ref string) (string, error) {
+	_, _, fileID, err := fromRef(ref)
 	if err != nil {
 		return "", err
 	}
@@ -134,8 +137,8 @@ func (s *Store) Get(ctx context.Context, id string) (string, error) {
 	return fileURL, nil
 }
 
-func (s *Store) Delete(ctx context.Context, id string) error {
-	chat, msgID, _, err := fromID(id)
+func (s *Store) Delete(ctx context.Context, ref string) error {
+	chat, msgID, _, err := fromRef(ref)
 	if err != nil {
 		return err
 	}
@@ -155,8 +158,13 @@ var backoff = []time.Duration{
 	1 * time.Minute,
 }
 
-func (s *Store) Download(ctx context.Context, id, output string) error {
-	u, err := s.Get(ctx, id)
+func (s *Store) Download(ctx context.Context, path, name string) error {
+	ref, err := s.store.GetFileRef(ctx, name)
+	if err != nil {
+		return fmt.Errorf("tgstore: couldn't get file %s: %w", name, err)
+	}
+
+	u, err := s.Get(ctx, ref)
 	if err != nil {
 		return err
 	}
@@ -166,7 +174,7 @@ func (s *Store) Download(ctx context.Context, id, output string) error {
 	attempts := 0
 	var b []byte
 	for {
-		b, err = s.download(id, u)
+		b, err = s.download(ref, u)
 		if err == nil {
 			break
 		}
@@ -193,30 +201,30 @@ func (s *Store) Download(ctx context.Context, id, output string) error {
 	}
 
 	// Write to output
-	if err := os.WriteFile(output, b, 0644); err != nil {
-		return fmt.Errorf("tgstore: couldn't write %s: %w", output, err)
+	if err := os.WriteFile(path, b, 0644); err != nil {
+		return fmt.Errorf("tgstore: couldn't write %s: %w", path, err)
 	}
 	return nil
 }
 
-func (s *Store) download(id, u string) ([]byte, error) {
+func (s *Store) download(ref, u string) ([]byte, error) {
 	resp, err := s.client.Get(u)
 	if err != nil {
-		return nil, fmt.Errorf("tgstore: couldn't download %s: %w", id, err)
+		return nil, fmt.Errorf("tgstore: couldn't download %s: %w", ref, err)
 	}
 	defer resp.Body.Close()
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("tgstore: couldn't read %s: %w", id, err)
+		return nil, fmt.Errorf("tgstore: couldn't read %s: %w", ref, err)
 	}
 	return b, nil
 }
 
-func toID(chat int64, msgID int, fileID string) string {
+func toRef(chat int64, msgID int, fileID string) string {
 	return fmt.Sprintf("%d/%d/%s", chat, msgID, fileID)
 }
 
-func fromID(id string) (int64, int, string, error) {
+func fromRef(id string) (int64, int, string, error) {
 	split := strings.Split(id, "/")
 	if len(split) != 3 {
 		return 0, 0, "", fmt.Errorf("tgstore: invalid id %s", id)

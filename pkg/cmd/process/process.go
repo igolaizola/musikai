@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
+	"github.com/igolaizola/musikai/pkg/filestore"
 	"github.com/igolaizola/musikai/pkg/sound"
 	"github.com/igolaizola/musikai/pkg/sound/aubio"
 	"github.com/igolaizola/musikai/pkg/sound/ffmpeg"
@@ -26,18 +26,12 @@ type Config struct {
 	Debug       bool
 	DBType      string
 	DBConn      string
+	FSType      string
+	FSConn      string
 	Timeout     time.Duration
 	Concurrency int
 	Limit       int
 	Proxy       string
-
-	S3Bucket string
-	S3Region string
-	S3Key    string
-	S3Secret string
-
-	TGChat  int64
-	TGToken string
 
 	Type         string
 	Reprocess    bool
@@ -84,14 +78,6 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("process: couldn't get phaselimiter version: %w", err)
 	}
 
-	// TODO: Allow to use S3 storage
-	/*
-		s3Store := s3.New(cfg.S3Key, cfg.S3Secret, cfg.S3Region, cfg.S3Bucket, cfg.Debug)
-		if err := s3Store.Start(ctx); err != nil {
-			return fmt.Errorf("process: couldn't start s3 store: %w", err)
-		}
-	*/
-
 	store, err := storage.New(cfg.DBType, cfg.DBConn, cfg.Debug)
 	if err != nil {
 		return fmt.Errorf("process: couldn't create orm store: %w", err)
@@ -100,9 +86,9 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("process: couldn't start orm store: %w", err)
 	}
 
-	tgStore, err := tgstore.New(cfg.TGToken, cfg.TGChat, cfg.Proxy, cfg.Debug)
+	fs, err := filestore.New(cfg.FSType, cfg.FSConn, cfg.Proxy, cfg.Debug, store)
 	if err != nil {
-		return fmt.Errorf("process: couldn't create file storage: %w", err)
+		return fmt.Errorf("download: couldn't create file storage: %w", err)
 	}
 	var tgLock sync.Mutex
 
@@ -214,9 +200,9 @@ func Run(ctx context.Context, cfg *Config) error {
 				debug("process: start %s", gen.ID)
 				var err error
 				if cfg.Reprocess {
-					err = reprocess(ctx, gen, debug, store, tgStore)
+					err = reprocess(ctx, gen, debug, store, fs)
 				} else {
-					err = process(ctx, gen, debug, store, tgStore, &tgLock, httpClient, ph, &phLock, cfg.ShortFadeOut, cfg.LongFadeOut)
+					err = process(ctx, gen, debug, store, fs, &tgLock, httpClient, ph, &phLock, cfg.ShortFadeOut, cfg.LongFadeOut)
 				}
 				if err != nil {
 					log.Println(err)
@@ -236,7 +222,7 @@ type flags struct {
 	BPMN     bool  `json:"bpm_n,omitempty"`
 }
 
-func process(ctx context.Context, gen *storage.Generation, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store, tgLock *sync.Mutex,
+func process(ctx context.Context, gen *storage.Generation, debug func(string, ...any), store *storage.Store, fs *filestore.Store, tgLock *sync.Mutex,
 	client *http.Client, ph *phaselimiter.PhaseLimiter, phLock *sync.Mutex, shortFadeOut, longFadeOut time.Duration) error {
 
 	// Download the audio file
@@ -344,14 +330,12 @@ func process(ctx context.Context, gen *storage.Generation, debug func(string, ..
 		}
 
 		// Upload the wave image
-		waveID, err = tgStore.Set(ctx, wavePath)
-		if err != nil {
+		if err := fs.SetJPG(ctx, wavePath, gen.ID); err != nil {
 			return fmt.Errorf("process: couldn't save wave image to telegram: %w", err)
 		}
 
 		// Upload the mastered audio
-		masterID, err = tgStore.Set(ctx, mastered)
-		if err != nil {
+		if err := fs.SetMP3(ctx, mastered, gen.ID); err != nil {
 			return fmt.Errorf("process: couldn't save mastered audio to telegram: %w", err)
 		}
 
@@ -473,11 +457,12 @@ func download(ctx context.Context, client *http.Client, url string) ([]byte, err
 	return b, nil
 }
 
-func reprocess(ctx context.Context, gen *storage.Generation, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store) error {
+func reprocess(ctx context.Context, gen *storage.Generation, debug func(string, ...any), store *storage.Store, fs *filestore.Store) error {
 	// Download the mastered audio
 	debug("process: start download master %s", gen.ID)
-	mastered := filepath.Join(os.TempDir(), fmt.Sprintf("%s.mp3", gen.ID))
-	if err := tgStore.Download(ctx, gen.Master, mastered); err != nil {
+	name := filestore.MP3(gen.ID)
+	mastered := filepath.Join(os.TempDir(), name)
+	if err := fs.GetMP3(ctx, mastered, gen.ID); err != nil {
 		return fmt.Errorf("process: couldn't download master audio: %w", err)
 	}
 	debug("process: end download master %s", gen.ID)

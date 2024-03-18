@@ -214,23 +214,18 @@ func newProcessCommand() *ffcli.Command {
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.FSType, "fs-type", "", "fs type (local, s3, telegram)")
+	fs.StringVar(&cfg.FSConn, "fs-conn", "", "path for local, key:secret@bucker.region for s3, token@chat for telegram")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+
 	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
 	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
 	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
-	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
 
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
 	fs.BoolVar(&cfg.Reprocess, "reprocess", false, "reprocess the song")
 	fs.DurationVar(&cfg.ShortFadeOut, "short-fadeout", 0, "short fade out duration")
 	fs.DurationVar(&cfg.LongFadeOut, "long-fadeout", 0, "long fade out duration")
-
-	fs.StringVar(&cfg.S3Bucket, "s3-bucket", "", "s3 bucket")
-	fs.StringVar(&cfg.S3Region, "s3-region", "", "s3 region")
-	fs.StringVar(&cfg.S3Key, "s3-key", "", "s3 key")
-	fs.StringVar(&cfg.S3Secret, "s3-secret", "", "s3 secret")
-
-	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
-	fs.Int64Var(&cfg.TGChat, "tg-chat", 0, "telegram chat")
 
 	return &ffcli.Command{
 		Name:       cmd,
@@ -258,12 +253,12 @@ func newWebCommand() *ffcli.Command {
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.FSType, "fs-type", "", "fs type (local, s3, telegram)")
+	fs.StringVar(&cfg.FSConn, "fs-conn", "", "path for local, key:secret@bucker.region for s3, token@chat for telegram")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+
 	fs.IntVar(&cfg.Port, "port", 1337, "port to listen on")
 	fsMapVar(fs, &cfg.Credentials, "creds", nil, "credentials to use")
-
-	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
-	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
-	fs.Int64Var(&cfg.TGChat, "tg-chat", 0, "telegram chat")
 
 	return &ffcli.Command{
 		Name:       cmd,
@@ -412,6 +407,10 @@ func newUpscaleCommand() *ffcli.Command {
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.FSType, "fs-type", "", "fs type (local, s3, telegram)")
+	fs.StringVar(&cfg.FSConn, "fs-conn", "", "path for local, key:secret@bucker.region for s3, token@chat for telegram")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+
 	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
 	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number of images to process (0 means no limit)")
 	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
@@ -420,12 +419,7 @@ func newUpscaleCommand() *ffcli.Command {
 	// Upscale parameters
 	fs.StringVar(&cfg.UpscaleType, "upscale-type", "topaz", "upscale type (topaz, esrgan)")
 	fs.StringVar(&cfg.UpscaleBin, "upscale-bin", "", "upscale binary path")
-
-	// Telegram parameters
-	fs.StringVar(&cfg.TelegramToken, "tg-token", "", "telegram token")
-	fs.Int64Var(&cfg.TelegramChat, "tg-chat", 0, "telegram chat id")
-	fs.StringVar(&cfg.TelegramProxy, "tg-proxy", "", "telegram proxy")
-	fs.IntVar(&cfg.TelegramConcurrency, "tg-concurrency", 1, "number of concurrent uploads")
+	fs.IntVar(&cfg.UploadConcurrency, "upload-concurrency", 1, "number of concurrent uploads")
 
 	return &ffcli.Command{
 		Name:       cmd,
@@ -453,9 +447,12 @@ func newAlbumCommand() *ffcli.Command {
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.FSType, "fs-type", "", "fs type (local, s3, telegram)")
+	fs.StringVar(&cfg.FSConn, "fs-conn", "", "path for local, key:secret@bucker.region for s3, token@chat for telegram")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+
 	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
 	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number of images to process (0 means no limit)")
-	fs.StringVar(&cfg.Proxy, "proxy", "", "telegram proxy")
 
 	fs.StringVar(&cfg.Type, "type", "", "filter by type")
 	fs.StringVar(&cfg.Artist, "artist", "", "artist to apply")
@@ -464,10 +461,6 @@ func newAlbumCommand() *ffcli.Command {
 	fs.IntVar(&cfg.MinSongs, "min-songs", 6, "minimum number of songs")
 	fs.IntVar(&cfg.MaxSongs, "max-songs", 10, "maximum number of songs")
 	fs.StringVar(&cfg.Genres, "genres", "", "genres file to use (.csv or .json) fields: type,primary,secondary")
-
-	// Telegram parameters
-	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
-	fs.Int64Var(&cfg.TGChat, "tg-chat", 0, "telegram chat id")
 
 	return &ffcli.Command{
 		Name:       cmd,
@@ -523,13 +516,12 @@ func newCoverAlbumCommand() *ffcli.Command {
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.FSType, "fs-type", "", "fs type (local, s3, telegram)")
+	fs.StringVar(&cfg.FSConn, "fs-conn", "", "path for local, key:secret@bucker.region for s3, token@chat for telegram")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+
 	fs.StringVar(&cfg.ID, "id", "", "album id")
 	fs.StringVar(&cfg.Cover, "cover", "", "cover file")
-
-	// Telegram parameters
-	fs.StringVar(&cfg.Proxy, "proxy", "", "telegram proxy")
-	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
-	fs.Int64Var(&cfg.TGChat, "tg-chat", 0, "telegram chat id")
 
 	return &ffcli.Command{
 		Name:       cmd,
@@ -557,15 +549,15 @@ func newPublishCommand() *ffcli.Command {
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.FSType, "fs-type", "", "fs type (local, s3, telegram)")
+	fs.StringVar(&cfg.FSConn, "fs-conn", "", "path for local, key:secret@bucker.region for s3, token@chat for telegram")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+
 	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
 	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
 	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
 	fs.DurationVar(&cfg.WaitMin, "wait-min", 3*time.Second, "minimum wait time between songs")
 	fs.DurationVar(&cfg.WaitMax, "wait-max", 1*time.Minute, "maximum wait time between songs")
-	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
-
-	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
-	fs.Int64Var(&cfg.TGChat, "tg-chat", 0, "telegram chat")
 
 	fs.BoolVar(&cfg.Auto, "auto", false, "auto publish (if disabled, the user will need to click the publish button)")
 	fs.StringVar(&cfg.Account, "account", "", "account to use")
@@ -614,12 +606,14 @@ func newDownloadCommand() *ffcli.Command {
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.FSType, "fs-type", "", "fs type (local, s3, telegram)")
+	fs.StringVar(&cfg.FSConn, "fs-conn", "", "path for local, key:secret@bucker.region for s3, token@chat for telegram")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+
 	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
 	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
 	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
-	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
-	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
-	fs.Int64Var(&cfg.TGChat, "tg-chat", 0, "telegram chat")
+
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
 	fs.StringVar(&cfg.Output, "output", ".cache", "output folder")
 
@@ -649,12 +643,14 @@ func newDownloadAlbumCommand() *ffcli.Command {
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.FSType, "fs-type", "", "fs type (local, s3, telegram)")
+	fs.StringVar(&cfg.FSConn, "fs-conn", "", "path for local, key:secret@bucker.region for s3, token@chat for telegram")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+
 	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
 	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
 	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
-	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
-	fs.StringVar(&cfg.TGToken, "tg-token", "", "telegram token")
-	fs.Int64Var(&cfg.TGChat, "tg-chat", 0, "telegram chat")
+
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
 	fs.StringVar(&cfg.Output, "output", ".cache", "output folder")
 

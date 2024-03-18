@@ -14,23 +14,23 @@ import (
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/distrokid"
-	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
+	"github.com/igolaizola/musikai/pkg/filestore"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
 
 type Config struct {
-	Debug       bool
-	DBType      string
-	DBConn      string
+	Debug  bool
+	DBType string
+	DBConn string
+	FSType string
+	FSConn string
+	Proxy  string
+
 	Timeout     time.Duration
 	Concurrency int
 	WaitMin     time.Duration
 	WaitMax     time.Duration
 	Limit       int
-	Proxy       string
-
-	TGChat  int64
-	TGToken string
 
 	Auto        bool
 	Account     string
@@ -64,7 +64,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("publish: couldn't start orm store: %w", err)
 	}
 
-	tgStore, err := tgstore.New(cfg.TGToken, cfg.TGChat, cfg.Proxy, cfg.Debug)
+	fs, err := filestore.New(cfg.FSType, cfg.FSConn, cfg.Proxy, cfg.Debug, store)
 	if err != nil {
 		return fmt.Errorf("download: couldn't create file storage: %w", err)
 	}
@@ -183,7 +183,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			go func() {
 				defer wg.Done()
 				debug("publish: start %s %s", album.ID, album.Title)
-				err := publish(ctx, cfg, browser, store, tgStore, album)
+				err := publish(ctx, cfg, browser, store, fs, album)
 				if err != nil {
 					log.Println(err)
 				}
@@ -194,7 +194,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func publish(ctx context.Context, cfg *Config, b *distrokid.Browser, store *storage.Store, fstore *tgstore.Store, album *storage.Album) error {
+func publish(ctx context.Context, cfg *Config, b *distrokid.Browser, store *storage.Store, fs *filestore.Store, album *storage.Album) error {
 	// Get songs for album
 	songs, err := store.ListSongs(ctx, 1, 100, "", storage.Where("album_id = ?", album.ID))
 	if err != nil {
@@ -202,8 +202,9 @@ func publish(ctx context.Context, cfg *Config, b *distrokid.Browser, store *stor
 	}
 
 	// Download cover
-	cover := filepath.Join(os.TempDir(), fmt.Sprintf("%s.jpeg", album.ID))
-	if err := fstore.Download(ctx, album.Cover, cover); err != nil {
+	name := filestore.JPG(album.ID)
+	cover := filepath.Join(os.TempDir(), name)
+	if err := fs.GetJPG(ctx, cover, album.ID); err != nil {
 		return fmt.Errorf("publish: couldn't download cover: %w", err)
 	}
 
@@ -227,8 +228,9 @@ func publish(ctx context.Context, cfg *Config, b *distrokid.Browser, store *stor
 	// Create distrokid song data
 	for _, s := range songs {
 		// Download song
-		out := filepath.Join(os.TempDir(), fmt.Sprintf("%s.mp3", s.ID))
-		if err := fstore.Download(ctx, s.Generation.Master, out); err != nil {
+		name := filestore.MP3(s.ID)
+		out := filepath.Join(os.TempDir(), name)
+		if err := fs.GetMP3(ctx, out, s.ID); err != nil {
 			return fmt.Errorf("publish: couldn't download song: %w", err)
 		}
 		dkSong := &distrokid.Song{

@@ -6,19 +6,19 @@ import (
 	"log"
 	"os"
 
-	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
+	"github.com/igolaizola/musikai/pkg/filestore"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
 
 type CoverConfig struct {
-	Debug   bool
-	DBType  string
-	DBConn  string
-	Proxy   string
-	TGChat  int64
-	TGToken string
-	ID      string
-	Cover   string
+	Debug  bool
+	DBType string
+	DBConn string
+	FSType string
+	FSConn string
+	Proxy  string
+	ID     string
+	Cover  string
 }
 
 func RunCover(ctx context.Context, cfg *CoverConfig) error {
@@ -53,7 +53,7 @@ func RunCover(ctx context.Context, cfg *CoverConfig) error {
 		return fmt.Errorf("album: couldn't start orm store: %w", err)
 	}
 
-	tgStore, err := tgstore.New(cfg.TGToken, cfg.TGChat, cfg.Proxy, cfg.Debug)
+	fs, err := filestore.New(cfg.FSType, cfg.FSConn, cfg.Proxy, cfg.Debug, store)
 	if err != nil {
 		return fmt.Errorf("download: couldn't create file storage: %w", err)
 	}
@@ -75,16 +75,15 @@ func RunCover(ctx context.Context, cfg *CoverConfig) error {
 		}
 	}
 
-	// Upload cover to telegram
+	// Upload cover to file storage
 	debug("album: cover upload start %s", cfg.Cover)
-	uploadID, err := tgStore.Set(ctx, cfg.Cover)
-	if err != nil {
+	if err := fs.SetJPG(ctx, cfg.Cover, album.ID); err != nil {
 		return fmt.Errorf("album: couldn't upload cover image: %w", err)
 	}
 	debug("album: cover upload end %s", cfg.Cover)
 
 	debug("album: updating album")
-	album.CoverID = uploadID
+	album.CoverID = ""
 	if err := store.SetAlbum(ctx, album); err != nil {
 		return fmt.Errorf("album: couldn't update album: %w", err)
 	}

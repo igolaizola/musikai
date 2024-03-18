@@ -15,7 +15,7 @@ import (
 
 	"github.com/gocarina/gocsv"
 	"github.com/igolaizola/musikai/pkg/distrokid"
-	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
+	"github.com/igolaizola/musikai/pkg/filestore"
 	"github.com/igolaizola/musikai/pkg/image"
 	"github.com/igolaizola/musikai/pkg/storage"
 	"github.com/oklog/ulid/v2"
@@ -25,12 +25,11 @@ type Config struct {
 	Debug   bool
 	DBType  string
 	DBConn  string
+	FSType  string
+	FSConn  string
 	Timeout time.Duration
 	Limit   int
 	Proxy   string
-
-	TGChat  int64
-	TGToken string
 
 	Type     string
 	MinSongs int
@@ -98,9 +97,9 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("album: couldn't start orm store: %w", err)
 	}
 
-	tgStore, err := tgstore.New(cfg.TGToken, cfg.TGChat, cfg.Proxy, cfg.Debug)
+	fs, err := filestore.New(cfg.FSType, cfg.FSConn, cfg.Proxy, cfg.Debug, store)
 	if err != nil {
-		return fmt.Errorf("album: couldn't create file storage: %w", err)
+		return fmt.Errorf("download: couldn't create file storage: %w", err)
 	}
 
 	httpClient := &http.Client{
@@ -244,8 +243,9 @@ func Run(ctx context.Context, cfg *Config) error {
 		}
 
 		debug("album: start download cover %s", cover.ID)
-		original := filepath.Join(os.TempDir(), fmt.Sprintf("%s.jpeg", cover.ID))
-		if err := tgStore.Download(ctx, cover.UpscaleID, original); err != nil {
+		name := filestore.JPG(cover.ID)
+		original := filepath.Join(os.TempDir(), name)
+		if err := fs.GetJPG(ctx, original, cover.ID); err != nil {
 			return fmt.Errorf("album: couldn't download cover image: %w", err)
 		}
 		defer func() { _ = os.Remove(original) }()
@@ -280,8 +280,7 @@ func Run(ctx context.Context, cfg *Config) error {
 
 		// Upload cover to telegram
 		debug("album: upload start %s", albumID)
-		uploadID, err := tgStore.Set(ctx, output)
-		if err != nil {
+		if err := fs.GetJPG(ctx, output, albumID); err != nil {
 			return fmt.Errorf("album: couldn't upload cover image: %w", err)
 		}
 		debug("album: upload end %s", albumID)
@@ -296,7 +295,6 @@ func Run(ctx context.Context, cfg *Config) error {
 			Title:          draft.Title,
 			Subtitle:       draft.Subtitle,
 			Volume:         volume,
-			Cover:          uploadID,
 			PrimaryGenre:   primaryGenre,
 			SecondaryGenre: secondaryGenre,
 			State:          storage.Pending,

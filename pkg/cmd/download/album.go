@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/igolaizola/musikai/pkg/filestorage/tgstore"
+	"github.com/igolaizola/musikai/pkg/filestore"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
 
@@ -43,7 +43,7 @@ func RunAlbum(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("download: couldn't start orm store: %w", err)
 	}
 
-	tgStore, err := tgstore.New(cfg.TGToken, cfg.TGChat, cfg.Proxy, cfg.Debug)
+	fs, err := filestore.New(cfg.FSType, cfg.FSConn, cfg.Proxy, cfg.Debug, store)
 	if err != nil {
 		return fmt.Errorf("download: couldn't create file storage: %w", err)
 	}
@@ -160,7 +160,7 @@ func RunAlbum(ctx context.Context, cfg *Config) error {
 				lck.Lock()
 				albumDir, ok := albumLookup[song.AlbumID]
 				if !ok {
-					albumDir, err = downloadCover(ctx, song.AlbumID, debug, store, tgStore, cfg.Output)
+					albumDir, err = downloadCover(ctx, song.AlbumID, debug, store, fs, cfg.Output)
 					if err != nil {
 						log.Println(err)
 						errC <- err
@@ -170,7 +170,7 @@ func RunAlbum(ctx context.Context, cfg *Config) error {
 				}
 				lck.Unlock()
 
-				if err := downloadSong(ctx, song, debug, tgStore, albumDir); err != nil {
+				if err := downloadSong(ctx, song, debug, fs, albumDir); err != nil {
 					log.Println(err)
 				}
 				debug("download: end %s", song.ID)
@@ -180,7 +180,7 @@ func RunAlbum(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func downloadCover(ctx context.Context, albumID string, debug func(string, ...any), store *storage.Store, tgStore *tgstore.Store, output string) (string, error) {
+func downloadCover(ctx context.Context, albumID string, debug func(string, ...any), store *storage.Store, fs *filestore.Store, output string) (string, error) {
 	album, err := store.GetAlbum(ctx, albumID)
 	if err != nil {
 		return "", err
@@ -201,10 +201,11 @@ func downloadCover(ctx context.Context, albumID string, debug func(string, ...an
 	if err := os.MkdirAll(albumDir, 0755); err != nil {
 		return "", fmt.Errorf("download: couldn't create output directory: %w", err)
 	}
-	cover := filepath.Join(albumDir, fmt.Sprintf("%s.jpeg", album.ID))
+	file := filestore.JPG(album.ID)
+	cover := filepath.Join(albumDir, file)
 	if _, err := os.Stat(cover); err != nil {
 		debug("download: start download cover %s", album.ID)
-		if err := tgStore.Download(ctx, album.Cover, cover); err != nil {
+		if err := fs.GetJPG(ctx, cover, album.ID); err != nil {
 			return "", fmt.Errorf("download: couldn't download master audio: %w", err)
 		}
 		debug("download: end download master %s", album.ID)
@@ -212,14 +213,14 @@ func downloadCover(ctx context.Context, albumID string, debug func(string, ...an
 	return albumDir, nil
 }
 
-func downloadSong(ctx context.Context, song *storage.Song, debug func(string, ...any), tgStore *tgstore.Store, output string) error {
+func downloadSong(ctx context.Context, song *storage.Song, debug func(string, ...any), fs *filestore.Store, output string) error {
 	name := fmt.Sprintf("%02d - %s", song.Order, song.Title)
 
 	// Download the mastered audio
 	mastered := filepath.Join(output, fmt.Sprintf("%s.mp3", name))
 	if _, err := os.Stat(mastered); err != nil {
 		debug("download: start download master %s", song.ID)
-		if err := tgStore.Download(ctx, song.Generation.Master, mastered); err != nil {
+		if err := fs.GetMP3(ctx, mastered, song.ID); err != nil {
 			return fmt.Errorf("download: couldn't download master audio: %w", err)
 		}
 		debug("download: end download master %s", song.ID)
