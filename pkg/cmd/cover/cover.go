@@ -2,14 +2,18 @@ package cover
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/gocarina/gocsv"
 	"github.com/igolaizola/bulkai/pkg/ai"
 	"github.com/igolaizola/musikai/pkg/imageai"
 	"github.com/igolaizola/musikai/pkg/storage"
@@ -27,9 +31,15 @@ type Config struct {
 	Limit       int
 	Type        string
 	Template    string
+	Input       string
 	Minimum     int
 
 	Discord *imageai.Config
+}
+
+type input struct {
+	Type     string `json:"type" csv:"type"`
+	Template string `json:"template" csv:"template"`
 }
 
 // Run launches the image generation process.
@@ -48,12 +58,22 @@ func Run(ctx context.Context, cfg *Config) error {
 		log.Printf(format, args...)
 	}
 
-	if cfg.Template == "" {
-		return errors.New("cover: template is required")
+	if cfg.Template == "" && cfg.Input == "" {
+		return errors.New("cover: template or input is required")
 	}
 
 	if cfg.Minimum < 1 {
 		return errors.New("cover: minimum is required")
+	}
+
+	defaultTemplate := cfg.Template
+	lookup := map[string]string{}
+	if cfg.Input != "" {
+		candidate, err := toTemplateLookup(cfg.Input)
+		if err != nil {
+			return fmt.Errorf("cover: couldn't get template lookup: %w", err)
+		}
+		lookup = candidate
 	}
 
 	var err error
@@ -170,12 +190,21 @@ func Run(ctx context.Context, cfg *Config) error {
 			draft := drafts[0]
 			drafts = drafts[1:]
 
+			template, ok := lookup[draft.Type]
+			switch {
+			case !ok && defaultTemplate != "":
+				template = defaultTemplate
+			case !ok:
+				return fmt.Errorf("cover: couldn't find template for (%s, %s)", draft.Type, draft.Title)
+			}
+
 			// Launch generate in a goroutine
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				debug("cover: start (%s, %s)", draft.Type, draft.Title)
-				err := generate(ctx, generator, store, draft, cfg.Template)
+
+				err := generate(ctx, generator, store, draft, template)
 				if err != nil {
 					log.Println(err)
 				}
@@ -225,4 +254,46 @@ func generate(ctx context.Context, generator *imageai.Generator, store *storage.
 		}
 	}
 	return nil
+}
+
+func toTemplateLookup(file string) (map[string]string, error) {
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return nil, fmt.Errorf("generate: couldn't read input file: %w", err)
+	}
+
+	ext := filepath.Ext(file)
+	var unmarshal func([]byte) ([]*input, error)
+	switch ext {
+	case ".json":
+		unmarshal = func(b []byte) ([]*input, error) {
+			var is []*input
+			if err := json.Unmarshal(b, &is); err != nil {
+				return nil, fmt.Errorf("couldn't unmarshal items: %w", err)
+			}
+			return is, nil
+		}
+	case ".csv":
+		unmarshal = func(b []byte) ([]*input, error) {
+			var is []*input
+			if err := gocsv.UnmarshalBytes(b, &is); err != nil {
+				return nil, fmt.Errorf("couldn't unmarshal items: %w", err)
+			}
+			return is, nil
+		}
+	default:
+		return nil, fmt.Errorf("generate: unsupported output format: %s", ext)
+	}
+	inputs, err := unmarshal(b)
+	if err != nil {
+		return nil, fmt.Errorf("generate: couldn't unmarshal input: %w", err)
+	}
+	if len(inputs) == 0 {
+		return nil, fmt.Errorf("generate: no inputs found in file")
+	}
+	lookup := map[string]string{}
+	for _, i := range inputs {
+		lookup[i.Type] = i.Template
+	}
+	return lookup, nil
 }

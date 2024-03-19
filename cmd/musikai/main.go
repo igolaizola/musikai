@@ -321,7 +321,7 @@ func newTitleCommand() *ffcli.Command {
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
 	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
-	fs.StringVar(&cfg.Input, "input", "", "input file")
+	fs.StringVar(&cfg.Input, "input", "", "input csv or json with fields (type,title)")
 	fs.StringVar(&cfg.Type, "type", "", "default type to use (can be override by the input file)")
 
 	return &ffcli.Command{
@@ -351,7 +351,7 @@ func newDraftCommand() *ffcli.Command {
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
 	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
-	fs.StringVar(&cfg.Input, "input", "", "input file")
+	fs.StringVar(&cfg.Input, "input", "", "input csv or json with fields (type,title,subtitle,volumes)")
 	fs.StringVar(&cfg.Type, "type", "", "default type to use (can be override by the input file)")
 	fs.IntVar(&cfg.Volumes, "volumes", 0, "default volumes to use (can be override by the input file)")
 
@@ -379,11 +379,12 @@ func newCoverCommand() *ffcli.Command {
 	cfg := &cover.Config{}
 
 	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
-	fs.StringVar(&cfg.Type, "type", "", "type to use")
-	fs.StringVar(&cfg.Template, "template", "", "template to use")
-	fs.IntVar(&cfg.Minimum, "minimum", 0, "minimum number of covers to generate per album")
 	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
 	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.Type, "type", "", "type to use")
+	fs.StringVar(&cfg.Template, "template", "", "default template to use when there isn't a match on the input file")
+	fs.StringVar(&cfg.Input, "input", "", "input templates in csv or json format (fields: type,template)")
+	fs.IntVar(&cfg.Minimum, "minimum", 0, "minimum number of covers to generate per album")
 	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
 	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
 	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number of images to process (0 means no limit)")

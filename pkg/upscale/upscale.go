@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -26,10 +27,25 @@ func New(upscalerType, bin string) (*Upscaler, error) {
 			return exec.CommandContext(ctx, bin, "-i", file, "-o", output, "-s", "4", "-n", "realesrgan-x4plus")
 		}
 	case "topaz":
-		upscaler.outputExtension = "jpeg"
-		upscaler.cmd = func(ctx context.Context, file, outDir string) *exec.Cmd {
-			return exec.CommandContext(ctx, bin, file, "--output", outDir, "--format", upscaler.outputExtension, "--quality", "100")
+		switch runtime.GOOS {
+		case "windows":
+			if bin == "" {
+				bin = `C:\Program Files\Topaz Labs LLC\Topaz Photo AI\tpai.exe`
+			}
+			upscaler.cmd = func(ctx context.Context, file, outDir string) *exec.Cmd {
+				return exec.CommandContext(ctx, bin, file, "--output", outDir, "--format", upscaler.outputExtension, "--quality", "100")
+			}
+		case "darwin":
+			if bin == "" {
+				bin = "/Applications/Topaz Photo AI.app/Contents/MacOS/Topaz Photo AI"
+			}
+			upscaler.cmd = func(ctx context.Context, file, outDir string) *exec.Cmd {
+				return exec.CommandContext(ctx, bin, "--cli", file, "-o", outDir, "--format", upscaler.outputExtension, "--quality", "100")
+			}
+		default:
+			return nil, fmt.Errorf("upscale: not supported OS: %s", runtime.GOOS)
 		}
+		upscaler.outputExtension = "jpeg"
 	default:
 		return nil, fmt.Errorf("upscale: unknown upscaler type: %s", upscalerType)
 	}
