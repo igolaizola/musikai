@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SHELL             = /bin/bash
-PLATFORMS        ?= linux/amd64 darwin/amd64 darwin/arm64 windows/amd64
+PLATFORMS        ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 IMAGE_PREFIX     ?= igolaizola
 REPO_NAME		 ?= musikai
 COMMIT_SHORT     ?= $(shell git rev-parse --verify --short HEAD)
@@ -72,4 +72,4 @@ docker-buildx:
 # Clean binaries
 .PHONY: clean
 clean:
-	rm -rf bin
+	rm -rf bin/musikai-*

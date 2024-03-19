@@ -24,3 +24,5 @@ logs/
 .cache
 *.csv
 *.json
+README.pdf
+README.html
