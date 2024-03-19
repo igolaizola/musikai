@@ -328,7 +328,7 @@ func toTemplateFunc(file string) (func() template, error) {
 			log.Println("generate: skipping empty input")
 			continue
 		}
-		opts = append(opts, options(i.Weight, template{
+		opts = append(opts, options(w, template{
 			Type:         i.Type,
 			Prompt:       i.Prompt,
 			Style:        i.Style,
