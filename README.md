@@ -6,6 +6,8 @@
 
 Musikai allows users to go from zero to publishing an album in digital music stores.
 
+![](docs/musikai.excalidraw.png)
+
 The steps to generate an album would be this:
 
 1. **Generate**: use generate command to automatically generate hundreds of songs given a style or prompt.
@@ -78,6 +80,15 @@ If set to true, the application will output debug information.
 The `generate` command is used to generate songs.
 You can specify the number of songs to generate, the account to use, the type of song, the prompt, and the style.
 You should use either the prompt or the style, but not both.
+
+Suno generates first a fragment of around 2 minutes. 
+Then you can extend this fragments multiple times.
+There are some parameters to control how this extensions are done:
+ - Duration of the song: `min-duration` and `max-duration` is used to continue extending or stop extending depending on the current total duration.
+ - Number of extensions: `max-extensions` forces to end the generation once the maximum number of extensions is reached.
+ - Final style and lyrics: In order to tell suno that you want to end the song you have to explicitly indicate it in the lyrics and/or style section.
+   - Parameters `end-style`, `end-style-append` and `end-lyrics` are applied when minimum duration is reached and it is the first extension.
+   - Parameters `force-end-style` and `force-end-lyrics` are applied when minimum duration is reached and it isn't the first extension.
 
 ```bash
 ./musikai generate --config generate.yaml
