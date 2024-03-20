@@ -550,7 +550,7 @@ You need to configure a Suno account to generate songs
 
 You need to capture the cookie from Suno website.
 
-1. Go to https://app.sunno.io/
+1. Go to https://app.suno.ai/
 2. Login if you are not already logged in
 3. Open the developer tools (F12)
 4. Go to the "Network" tab
