@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,9 +17,10 @@ import (
 )
 
 type Config struct {
-	Debug  bool
-	Input  string
-	Output string
+	Debug      bool
+	Input      string
+	Output     string
+	SkipMaster bool
 }
 
 type flags struct {
@@ -34,25 +36,34 @@ func Run(ctx context.Context, cfg *Config) error {
 	name := filepath.Base(cfg.Input)
 	name = strings.TrimSuffix(name, filepath.Ext(name))
 	output := cfg.Output
-	if output == "" {
+	if output == "" && !strings.HasPrefix(cfg.Input, "http") {
 		output = filepath.Dir(cfg.Input)
 	}
 	out := filepath.Join(output, name)
 
-	mastered := out + "-master.mp3"
+	input := cfg.Input
+	processed := out + "-processed.mp3"
 
 	// Master the song
-	//if _, err := os.Stat(mastered); errors.Is(err, os.ErrNotExist) {
-	ph := phaselimiter.New(&phaselimiter.Config{})
-	if err := ph.Master(ctx, cfg.Input, mastered); err != nil {
-		return err
+	if !cfg.SkipMaster {
+		ph := phaselimiter.New(&phaselimiter.Config{})
+		if err := ph.Master(ctx, cfg.Input, processed); err != nil {
+			return err
+		}
+		input = processed
 	}
-	//}
 
 	// Analyze the song
-	analyzer, err := sound.NewAnalyzer(mastered)
+	analyzer, err := sound.NewAnalyzer(input)
 	if err != nil {
 		return err
+	}
+
+	// If master was skipped, copy the original file to the processed file
+	if cfg.SkipMaster {
+		if err := copyFile(analyzer.Source(), processed); err != nil {
+			return fmt.Errorf("process: couldn't copy original file: %w", err)
+		}
 	}
 
 	fmt.Println("Duration:", analyzer.Duration(), analyzer.Duration().Seconds())
@@ -65,14 +76,14 @@ func Run(ctx context.Context, cfg *Config) error {
 		fmt.Printf("Silence: (%s, %s) duration %s, final %v\n", s.Start, s.End, s.Duration, s.Final)
 	}
 
-	fadeOut := 5 * time.Second
+	fadeOut := 6 * time.Second
 	noEnd := true
 	// Remove last silence
 	if len(silences) > 0 {
 		last := silences[len(silences)-1]
 		if last.Final || last.End > analyzer.Duration()-10*time.Second {
 			// Cut the last silence
-			if err := ffmpeg.Cut(ctx, mastered, mastered, last.Start); err != nil {
+			if err := ffmpeg.Cut(ctx, processed, processed, last.Start); err != nil {
 				return fmt.Errorf("process: couldn't cut last silence: %w", err)
 			}
 		}
@@ -81,11 +92,11 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 
 	// Apply fade out
-	if err := ffmpeg.FadeOut(ctx, mastered, mastered, analyzer.Duration(), fadeOut); err != nil {
+	if err := ffmpeg.FadeOut(ctx, processed, processed, analyzer.Duration(), fadeOut); err != nil {
 		return fmt.Errorf("process: couldn't fade out song: %w", err)
 	}
 
-	analyzer, err = sound.NewAnalyzer(mastered)
+	analyzer, err = sound.NewAnalyzer(processed)
 	if err != nil {
 		return err
 	}
@@ -108,7 +119,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 
 	// Get the tempo
-	tempo, err := aubio.Tempo(ctx, mastered)
+	tempo, err := aubio.Tempo(ctx, processed)
 	if err != nil {
 		return fmt.Errorf("process: couldn't get tempo: %w", err)
 	}
@@ -133,7 +144,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 
 	// BPM changes
-	beats, err := aubio.BPM(ctx, mastered)
+	beats, err := aubio.BPM(ctx, processed)
 	if err != nil {
 		return fmt.Errorf("process: couldn't get bpm: %w", err)
 	}
@@ -154,4 +165,31 @@ func Run(ctx context.Context, cfg *Config) error {
 	fmt.Println(string(flagsBytes))
 
 	return nil
+}
+
+func copyFile(src, dst string) error {
+	// Open the source file for reading
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	// Get the file information of the source file to obtain its permissions
+	srcFileInfo, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	// Open the destination file for writing. If it does not exist, create it with
+	// the same permissions as the source file. If it exists, truncate it.
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcFileInfo.Mode())
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	// Copy the content from the source file to the destination file
+	_, err = io.Copy(dstFile, srcFile)
+	return err
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"regexp"
 	"strings"
 
@@ -52,8 +51,6 @@ func (c *Client) Auth(ctx context.Context) error {
 	re = regexp.MustCompile(`\s*(,)\s*}`)
 	js = re.ReplaceAllString(js, "\n}")
 
-	fmt.Println(js)
-
 	var me meResponse
 	if err := json.Unmarshal([]byte(js), &me); err != nil {
 		return fmt.Errorf("distrokid: couldn't unmarshal me response: %w", err)
@@ -64,50 +61,48 @@ func (c *Client) Auth(ctx context.Context) error {
 	return nil
 }
 
-type successResponse struct {
-	Success bool `json:"success"`
+type AlbumResponse struct {
+	UUID  string   `json:"uuid"`
+	UPC   string   `json:"upc"`
+	ISRCs []string `json:"isrcs"`
 }
 
-func (c *Client) New(ctx context.Context) error {
-	resp, err := c.do(ctx, "GET", "new/", nil, nil)
+func (c *Client) Album(ctx context.Context, uuid string) (*AlbumResponse, error) {
+	u := fmt.Sprintf("dashboard/album/?albumuuid=%s", uuid)
+	resp, err := c.do(ctx, "GET", u, nil, nil)
 	if err != nil {
-		return fmt.Errorf("distrokid: couldn't get new: %w", err)
+		return nil, fmt.Errorf("distrokid: couldn't get album: %w", err)
 	}
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(resp))
 	if err != nil {
-		return fmt.Errorf("distrokid: couldn't parse new: %w", err)
-	}
-	// Search input
-	// <input type="hidden" name="albumuuid" id="albumuuid" value="4A00DF27-C23E-4CE7-837EEB2B0EA95E57">
-	albumUUID, exists := doc.Find("#albumuuid").Attr("value")
-	if !exists {
-		return fmt.Errorf("distrokid: couldn't find albumuuid")
-	}
-	if albumUUID == "" {
-		return fmt.Errorf("distrokid: albumuuid is empty")
-	}
-	// Search input
-	// <input type="hidden" name="CSRF" id="CSRF" value="523663f7-cb9a-40d3-9cb3-47a529a9f9d2">
-	csrf, exists := doc.Find("#CSRF").Attr("value")
-	if !exists {
-		return fmt.Errorf("distrokid: couldn't find CSRF")
-	}
-	if csrf == "" {
-		return fmt.Errorf("distrokid: CSRF is empty")
+		return nil, fmt.Errorf("distrokid: couldn't parse album: %w", err)
 	}
 
-	// Enable snapchat album
-	form := url.Values{}
-	form.Set("albumuuid", albumUUID)
-	form.Set("action", "add")
-
-	var okResp successResponse
-	if _, err := c.do(ctx, "POST", "api/snap/snapGrant/", form, &okResp); err != nil {
-		return fmt.Errorf("distrokid: couldn't enable snapchat album: %w", err)
+	// Search UPC
+	upc := doc.Find("#js-album-upc").Text()
+	if upc == "" {
+		return nil, fmt.Errorf("distrokid: album UPC is empty")
 	}
-	if !okResp.Success {
-		return fmt.Errorf("distrokid: couldn't enable snapchat album")
-	}
-	return nil
 
+	// Search ISCRs
+	var isrcs []string
+	doc.Find(".myISRC").Each(func(i int, s *goquery.Selection) {
+		isrc := s.Text()
+		isrc = strings.ReplaceAll(isrc, "\n", "")
+		isrc = strings.ReplaceAll(isrc, "\t", "")
+		isrc = strings.Replace(isrc, "ISRC", "", 1)
+		isrc = strings.TrimSpace(isrc)
+		if isrc != "" {
+			isrcs = append(isrcs, isrc)
+		}
+	})
+	if len(isrcs) == 0 {
+		return nil, fmt.Errorf("distrokid: couldn't find album ISRCs")
+	}
+
+	return &AlbumResponse{
+		UUID:  uuid,
+		UPC:   upc,
+		ISRCs: isrcs,
+	}, nil
 }

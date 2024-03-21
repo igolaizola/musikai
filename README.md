@@ -21,6 +21,7 @@ The steps to generate an album would be this:
 9. **Album generation**: A command tool takes everything that has been generated and approved (songs, titles, drafts and covers) and generates albums.
 10. **Filter albums**: Using the web app the user must approve the albums. Songs can be added or deleted during this process.
 11. **Publish**: Albums are published to DistroKid automatically. In case you want to review before submitting, you can choose to press the button manually.
+12. **Sync**: Once albums and songs are processed by DistroKid use sync command to obtain album UPC code and song ISRC codes and store them in the database.
 
 ## 🕹️ Commands
 
@@ -438,6 +439,23 @@ first-name: John
 last-name: Doe
 record-label: Jazz-o-matic
 type: jazz
+```
+
+### Sync
+
+The `sync` command is used to obtain album UPC codes and song ISCR codes from DistroKid.
+The album must have been already published to digital stores in order to obtain the codes.
+
+```bash
+./musikai sync --config sync.yaml
+```
+
+```yaml
+# sync.yaml
+debug: false
+db-type: sqlite
+db-conn: musikai.db
+account: distrokid-account
 ```
 
 ### Download

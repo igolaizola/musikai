@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -27,8 +28,8 @@ type Analyzer struct {
 	source   string
 }
 
-func NewAnalyzer(src string) (*Analyzer, error) {
-	decoder, err := toDecoder(src)
+func NewAnalyzer(u string) (*Analyzer, error) {
+	decoder, src, err := toDecoder(u)
 	if err != nil {
 		return nil, fmt.Errorf("sound: couldn't create decoder: %w", err)
 	}
@@ -67,6 +68,10 @@ func NewAnalyzer(src string) (*Analyzer, error) {
 		rate:     decoder.SampleRate(),
 		duration: duration,
 	}, nil
+}
+
+func (a *Analyzer) Source() string {
+	return a.source
 }
 
 func (a *Analyzer) Duration() time.Duration {
@@ -295,8 +300,9 @@ func makePoints(samples []float64) plotter.XYs {
 	return pts
 }
 
-func toDecoder(u string) (*mp3.Decoder, error) {
-	var reader io.ReadCloser
+func toDecoder(u string) (*mp3.Decoder, string, error) {
+	src := u
+	var b []byte
 	if strings.HasPrefix(u, "http") {
 		// Download MP3 file
 		client := &http.Client{
@@ -304,27 +310,35 @@ func toDecoder(u string) (*mp3.Decoder, error) {
 		}
 		resp, err := client.Get(u)
 		if err != nil {
-			return nil, fmt.Errorf("sound: couldn't download song: %w", err)
+			return nil, "", fmt.Errorf("sound: couldn't download song: %w", err)
 		}
-		reader = resp.Body
+		defer resp.Body.Close()
+		b, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, "", fmt.Errorf("sound: couldn't read song: %w", err)
+		}
+		// Write to temporary file
+		src = filepath.Join(os.TempDir(), filepath.Base(u))
+		if err := os.WriteFile(src, b, 0644); err != nil {
+			return nil, "", fmt.Errorf("sound: couldn't write song: %w", err)
+		}
 	} else {
 		// Open local file
 		file, err := os.Open(u)
 		if err != nil {
-			return nil, fmt.Errorf("sound: couldn't open file: %w", err)
+			return nil, "", fmt.Errorf("sound: couldn't open file: %w", err)
 		}
-		reader = file
+		defer file.Close()
+		b, err = io.ReadAll(file)
+		if err != nil {
+			return nil, "", fmt.Errorf("sound: couldn't read song: %w", err)
+		}
 	}
-	b, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("sound: couldn't read song: %w", err)
-	}
-	defer reader.Close()
 
 	// Decode MP3 to PCM
 	decoder, err := mp3.NewDecoder(bytes.NewReader(b))
 	if err != nil {
-		return nil, fmt.Errorf("sound: couldn't decode mp3: %w", err)
+		return nil, "", fmt.Errorf("sound: couldn't decode mp3: %w", err)
 	}
-	return decoder, nil
+	return decoder, src, nil
 }

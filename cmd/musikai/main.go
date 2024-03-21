@@ -22,6 +22,7 @@ import (
 	"github.com/igolaizola/musikai/pkg/cmd/process"
 	"github.com/igolaizola/musikai/pkg/cmd/publish"
 	"github.com/igolaizola/musikai/pkg/cmd/setting"
+	"github.com/igolaizola/musikai/pkg/cmd/sync"
 	"github.com/igolaizola/musikai/pkg/cmd/title"
 	"github.com/igolaizola/musikai/pkg/cmd/upscale"
 	"github.com/igolaizola/musikai/pkg/cmd/web"
@@ -73,6 +74,7 @@ func newCommand() *ffcli.Command {
 			newDeleteAlbumCommand(),
 			newCoverAlbumCommand(),
 			newPublishCommand(),
+			newSyncCommand(),
 			newDownloadCommand(),
 			newDownloadAlbumCommand(),
 		},
@@ -171,6 +173,7 @@ func newAnalyzeCommand() *ffcli.Command {
 	cfg := &analyze.Config{}
 	fs.StringVar(&cfg.Input, "input", "", "input file")
 	fs.StringVar(&cfg.Output, "output", "", "output folder")
+	fs.BoolVar(&cfg.SkipMaster, "skip-master", false, "skip the master process")
 
 	return &ffcli.Command{
 		Name:       cmd,
@@ -613,6 +616,42 @@ func newPublishCommand() *ffcli.Command {
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
 			return publish.Run(ctx, cfg)
+		},
+	}
+}
+
+func newSyncCommand() *ffcli.Command {
+	cmd := "sync"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &sync.Config{}
+
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+
+	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
+	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
+	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
+	fs.DurationVar(&cfg.WaitMin, "wait-min", 3*time.Second, "minimum wait time between songs")
+	fs.DurationVar(&cfg.WaitMax, "wait-max", 1*time.Minute, "maximum wait time between songs")
+
+	fs.StringVar(&cfg.Account, "account", "", "distrokid account to use")
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return sync.Run(ctx, cfg)
 		},
 	}
 }

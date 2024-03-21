@@ -83,12 +83,20 @@ func Fragments(ctx context.Context, silence bool, input string, duration time.Du
 		thresholdDB = -70
 	}
 	cmd := exec.CommandContext(ctx, BinPath, "quiet", "-i", input, "-s", fmt.Sprintf("%d", thresholdDB))
-	data, err := cmd.Output()
+	data, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := string(data)
 		return nil, fmt.Errorf("aubio: couldn't get silences: %w: %s", err, msg)
 	}
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	allLines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	var lines []string
+	for _, line := range allLines {
+		if !strings.HasPrefix(line, "QUIET: ") && !strings.HasPrefix(line, "NOISY: ") {
+			continue
+		}
+		lines = append(lines, line)
+	}
+
 	if len(lines) == 0 {
 		return nil, fmt.Errorf("aubio: no silences found")
 	}

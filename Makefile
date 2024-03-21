@@ -72,4 +72,16 @@ docker-buildx:
 # Clean binaries
 .PHONY: clean
 clean:
+	rm -rf bin/README.*
 	rm -rf bin/musikai-*
+
+
+# Zip the binaries
+.PHONY: zip
+zip:
+	make clean; \
+	make app-build; \
+	cp README.pdf bin/; \
+	cd bin; \
+	zip -r musikai-$(shell date -u +'%Y%m%d-%H%M').zip README.pdf musikai-*; \
+	
