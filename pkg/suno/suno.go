@@ -379,8 +379,8 @@ func (c *Client) extend(ctx context.Context, clp *clip) ([]*clip, error) {
 func (c *Client) waitClips(ctx context.Context, ids []string) ([]clip, error) {
 	u := fmt.Sprintf("feed/?ids=%s", strings.Join(ids, ","))
 	var last []byte
-	var clips []clip
 	for {
+		var clips []clip
 		select {
 		case <-ctx.Done():
 			log.Println("suno: context done, last response:", string(last))
@@ -393,16 +393,25 @@ func (c *Client) waitClips(ctx context.Context, ids []string) ([]clip, error) {
 		if _, err := c.do(ctx, "GET", u, nil, &clips); err != nil {
 			return nil, fmt.Errorf("suno: couldn't get clips: %w", err)
 		}
-		var pending bool
+		var oks []clip
+		var errs []string
 		for _, clip := range clips {
-			if clip.Status != "complete" {
-				pending = true
-				break
+			switch clip.Status {
+			case "error":
+				errs = append(errs, clip.ID)
+			case "complete":
+				oks = append(oks, clip)
 			}
 		}
-		if !pending {
-			break
+		if len(errs)+len(oks) < len(clips) {
+			continue
 		}
+		for _, id := range errs {
+			log.Printf("❌ suno: clip %s returned error status\n", id)
+		}
+		if len(oks) == 0 {
+			return nil, fmt.Errorf("suno: all clips failed: %v", errs)
+		}
+		return oks, nil
 	}
-	return clips, nil
 }
