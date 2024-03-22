@@ -21,7 +21,7 @@ func FadeOut(ctx context.Context, input, output string, totalDuration, fadeOutDu
 
 	fd := fadeOutDuration.Seconds()
 	st := totalDuration.Seconds() - fadeOutDuration.Seconds()
-	cmd := exec.CommandContext(ctx, BinPath, "-y", "-i", input, "-af", fmt.Sprintf("afade=t=out:st=%f:d=%f", st, fd), tmp)
+	cmd := exec.CommandContext(ctx, BinPath, "-y",  "-i", input, "-b:a", "320k","-af", fmt.Sprintf("afade=t=out:st=%f:d=%f", st, fd), tmp)
 	data, err := cmd.CombinedOutput()
 	if err != nil {
 		if tmp != output {
@@ -49,7 +49,7 @@ func Cut(ctx context.Context, input, output string, end time.Duration) error {
 		tmp = fmt.Sprintf("%s.tmp%s", input, filepath.Ext(input))
 	}
 
-	cmd := exec.CommandContext(ctx, BinPath, "-y", "-i", input, "-to", toText(end), "-acodec", "copy", tmp)
+	cmd := exec.CommandContext(ctx, BinPath, "-y", "-i", input, "-b:a", "320k", "-to", toText(end), "-acodec", "copy", tmp)
 	data, err := cmd.CombinedOutput()
 	if err != nil {
 		if tmp != output {
