@@ -26,3 +26,4 @@ logs/
 *.json
 README.pdf
 README.html
+cfg/

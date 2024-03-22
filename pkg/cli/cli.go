@@ -17,6 +17,7 @@ import (
 	"github.com/igolaizola/musikai/pkg/cmd/download"
 	"github.com/igolaizola/musikai/pkg/cmd/draft"
 	"github.com/igolaizola/musikai/pkg/cmd/generate"
+	"github.com/igolaizola/musikai/pkg/cmd/jamendo"
 	"github.com/igolaizola/musikai/pkg/cmd/migrate"
 	"github.com/igolaizola/musikai/pkg/cmd/process"
 	"github.com/igolaizola/musikai/pkg/cmd/publish"
@@ -57,6 +58,7 @@ func New(version, commit, date string) *ffcli.Command {
 			newCoverAlbumCommand(),
 			newPublishCommand(),
 			newSyncCommand(),
+			newJamendoCommand(),
 			newDownloadCommand(),
 			newDownloadAlbumCommand(),
 		},
@@ -598,6 +600,44 @@ func newPublishCommand() *ffcli.Command {
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
 			return publish.Run(ctx, cfg)
+		},
+	}
+}
+
+func newJamendoCommand() *ffcli.Command {
+	cmd := "jamendo"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &jamendo.Config{}
+
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.FSType, "fs-type", "", "fs type (local, s3, telegram)")
+	fs.StringVar(&cfg.FSConn, "fs-conn", "", "path for local, key:secret@bucker.region for s3, token@chat for telegram")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+
+	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
+	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
+	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
+
+	fs.BoolVar(&cfg.Auto, "auto", false, "auto publish (if disabled, the user will need to click the publish button)")
+	fs.StringVar(&cfg.Account, "account", "", "account to use")
+	fs.StringVar(&cfg.Type, "type", "", "type to use")
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return jamendo.Run(ctx, cfg)
 		},
 	}
 }
