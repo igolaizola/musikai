@@ -624,6 +624,8 @@ func newJamendoCommand() *ffcli.Command {
 
 	fs.BoolVar(&cfg.Auto, "auto", false, "auto publish (if disabled, the user will need to click the publish button)")
 	fs.StringVar(&cfg.Account, "account", "", "account to use")
+	fs.StringVar(&cfg.ArtistName, "artist-name", "", "jamendo artist name")
+	fs.IntVar(&cfg.ArtistID, "artist-id", 0, "jamendo artist id")
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
 
 	return &ffcli.Command{

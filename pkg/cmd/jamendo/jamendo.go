@@ -27,9 +27,11 @@ type Config struct {
 	Concurrency int
 	Limit       int
 
-	Auto    bool
-	Account string
-	Type    string
+	Auto       bool
+	Account    string
+	ArtistName string
+	ArtistID   int
+	Type       string
 }
 
 // Run launches the song generation process.
@@ -46,6 +48,13 @@ func Run(ctx context.Context, cfg *Config) error {
 		}
 		format += "\n"
 		log.Printf(format, args...)
+	}
+
+	if cfg.ArtistID == 0 {
+		return errors.New("publish: artist ID is required")
+	}
+	if cfg.ArtistName == "" {
+		return errors.New("publish: artist name is required")
 	}
 
 	store, err := storage.New(cfg.DBType, cfg.DBConn, cfg.Debug)
@@ -78,6 +87,8 @@ func Run(ctx context.Context, cfg *Config) error {
 		Debug:       cfg.Debug,
 		Client:      httpClient,
 		CookieStore: store.NewCookieStore("jamendo", cfg.Account),
+		Name:        cfg.ArtistName,
+		ID:          cfg.ArtistID,
 	})
 	if err := client.Start(ctx); err != nil {
 		return fmt.Errorf("publish: couldn't start jamendo client: %w", err)

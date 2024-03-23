@@ -3,11 +3,13 @@ package jamendo
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
@@ -24,8 +26,8 @@ type Client struct {
 	debug       bool
 	ratelimit   ratelimit.Lock
 	cookieStore CookieStore
-	userID      int
-	userName    string
+	name        string
+	id          int
 }
 
 type Config struct {
@@ -33,6 +35,8 @@ type Config struct {
 	Debug       bool
 	Client      *http.Client
 	CookieStore CookieStore
+	Name        string
+	ID          int
 }
 
 type cookieStore struct {
@@ -82,6 +86,8 @@ func New(cfg *Config) *Client {
 		ratelimit:   ratelimit.New(wait),
 		debug:       cfg.Debug,
 		cookieStore: cfg.CookieStore,
+		name:        cfg.Name,
+		id:          cfg.ID,
 	}
 }
 
@@ -211,11 +217,34 @@ func (e errStatusCode) Error() string {
 	return fmt.Sprintf("%d", e)
 }
 
+var webkitChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
+
+func webkitID(length int) string {
+	b := make([]byte, length)
+	_, _ = rand.Read(b) // generates len(b) random bytes
+	for i := 0; i < length; i++ {
+		b[i] = webkitChars[int(b[i])%len(webkitChars)]
+	}
+	return string(b)
+}
+
+type form struct {
+	writer          *multipart.Writer
+	data            *bytes.Buffer
+	from, to, total int64
+}
+
 func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any) ([]byte, error) {
 	var body []byte
 	var reqBody io.Reader
+	var contentType string
+	var contentRange string
 	if f, ok := in.(url.Values); ok {
 		reqBody = strings.NewReader(f.Encode())
+	} else if f, ok := in.(*form); ok {
+		reqBody = f.data
+		contentType = f.writer.FormDataContentType()
+		contentRange = fmt.Sprintf("bytes %d-%d/%d", f.from, f.to, f.total)
 	} else if in != nil {
 		var err error
 		body, err = json.Marshal(in)
@@ -231,7 +260,7 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 	c.log("jamendo: do %s %s %s", method, path, logBody)
 
 	// Check if path is absolute
-	u := fmt.Sprintf("https://artists.jamendo.com/%s", path)
+	u := fmt.Sprintf("https://artists.jamendo.com/en/%s", path)
 	if strings.HasPrefix(path, "http") {
 		u = path
 	}
@@ -240,6 +269,12 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 		return nil, fmt.Errorf("jamendo: couldn't create request: %w", err)
 	}
 	c.addHeaders(req, path)
+	if contentType != "" {
+		req.Header.Set("content-type", contentType)
+	}
+	if contentRange != "" {
+		req.Header.Set("content-range", contentRange)
+	}
 
 	unlock := c.ratelimit.Lock(ctx)
 	defer unlock()
@@ -273,24 +308,48 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 }
 
 func (c *Client) addHeaders(req *http.Request, path string) {
-	referer := fmt.Sprintf("https://artists.jamendo.com/%s", path)
-	if strings.HasPrefix(path, "http") {
-		referer = path
-	}
+	referer := fmt.Sprintf("https://artists.jamendo.com/en/%s", path)
 	switch {
-	case strings.HasPrefix(path, "TODO: api requests"):
+	case strings.HasPrefix(path, "https://uploadserver"):
+		referer = "https://artists.jamendo.com/"
+		req.Header.Set("accept", "application/json, text/javascript, */*; q=0.01")
+		req.Header.Set("accept-language", "en-US,en;q=0.9")
+		req.Header.Set("origin", "https://artists.jamendo.com")
+		req.Header.Set("referer", referer)
+		req.Header.Set("sec-ch-ua", `"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"`)
+		req.Header.Set("sec-ch-ua-mobile", "?0")
+		req.Header.Set("sec-ch-ua-platform", `"Windows"`)
+		req.Header.Set("sec-fetch-dest", "empty")
+		req.Header.Set("sec-fetch-mode", "cors")
+		req.Header.Set("sec-fetch-site", "same-origin")
+		req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36`)
+		req.Header.Set("x-requested-with", "XMLHttpRequest")
+	case strings.HasPrefix(path, "trackmanager"):
+		referer = fmt.Sprintf("https://artists.jamendo.com/en/artist/%d/%s/manager", c.id, c.name)
+		req.Header.Set("accept", "application/json, text/javascript, */*; q=0.01")
+		req.Header.Set("accept-language", "en-US,en;q=0.9")
+		req.Header.Set("origin", "https://artists.jamendo.com")
+		req.Header.Set("referer", referer)
+		req.Header.Set("sec-ch-ua", `"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"`)
+		req.Header.Set("sec-ch-ua-mobile", "?0")
+		req.Header.Set("sec-ch-ua-platform", `"Windows"`)
+		req.Header.Set("sec-fetch-dest", "empty")
+		req.Header.Set("sec-fetch-mode", "cors")
+		req.Header.Set("sec-fetch-site", "same-origin")
+		req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36`)
+		req.Header.Set("x-requested-with", "XMLHttpRequest")
 	default:
 		req.Header.Set("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
 		req.Header.Set("accept-language", "en-US,en;q=0.9")
 		req.Header.Set("origin", "https://artists.jamendo.com")
 		req.Header.Set("referer", referer)
-		req.Header.Set("sec-ch-ua", `"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"`)
+		req.Header.Set("sec-ch-ua", `"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"`)
 		req.Header.Set("sec-ch-ua-mobile", "?0")
 		req.Header.Set("sec-ch-ua-platform", `"Windows"`)
 		req.Header.Set("sec-fetch-dest", "document")
 		req.Header.Set("sec-fetch-mode", "navigate")
 		req.Header.Set("sec-fetch-site", "none")
 		req.Header.Set("sec-fetch-user", "?1")
-		req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36`)
+		req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36`)
 	}
 }
