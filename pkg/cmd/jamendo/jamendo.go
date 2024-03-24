@@ -82,20 +82,17 @@ func Run(ctx context.Context, cfg *Config) error {
 			Proxy: http.ProxyURL(u),
 		}
 	}
-	client := jamendo.New(&jamendo.Config{
+	browser := jamendo.NewBrowser(&jamendo.BrowserConfig{
 		Wait:        4 * time.Second,
-		Debug:       cfg.Debug,
-		Client:      httpClient,
+		Proxy:       cfg.Proxy,
 		CookieStore: store.NewCookieStore("jamendo", cfg.Account),
-		Name:        cfg.ArtistName,
-		ID:          cfg.ArtistID,
 	})
-	if err := client.Start(ctx); err != nil {
-		return fmt.Errorf("publish: couldn't start jamendo client: %w", err)
+	if err := browser.Start(ctx); err != nil {
+		return fmt.Errorf("publish: couldn't start jamendo browser: %w", err)
 	}
 	defer func() {
-		if err := client.Stop(ctx); err != nil {
-			log.Printf("publish: couldn't stop jamendo client: %v\n", err)
+		if err := browser.Stop(); err != nil {
+			log.Printf("publish: couldn't stop jamendo browser: %v\n", err)
 		}
 	}()
 
@@ -187,7 +184,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			go func() {
 				defer wg.Done()
 				debug("publish: start %s %s", album.ID, album.Title)
-				err := publish(ctx, cfg, client, store, fs, album)
+				err := publish(ctx, cfg, browser, store, fs, album)
 				if err != nil {
 					log.Println(err)
 				}
@@ -198,10 +195,10 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func publish(ctx context.Context, cfg *Config, c *jamendo.Client, store *storage.Store, fs *filestore.Store, album *storage.Album) error {
+func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storage.Store, fs *filestore.Store, album *storage.Album) error {
 	_ = ctx
 	_ = cfg
-	_ = c
+	_ = b
 	_ = store
 	_ = fs
 	_ = album
