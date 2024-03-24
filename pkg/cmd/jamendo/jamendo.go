@@ -7,11 +7,15 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/filestore"
 	"github.com/igolaizola/musikai/pkg/jamendo"
+	"github.com/igolaizola/musikai/pkg/sound/ffmpeg"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
 
@@ -136,6 +140,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		case err := <-errC:
 			if err != nil {
 				nErr += 1
+				return fmt.Errorf("publish: %w", err)
 			} else {
 				nErr = 0
 			}
@@ -156,7 +161,7 @@ func Run(ctx context.Context, cfg *Config) error {
 
 			// Get next albums
 			filters := []storage.Filter{
-				storage.Where("state = ?", storage.Approved),
+				storage.Where("state = ?", storage.Used),
 				storage.Where("id > ?", currID),
 			}
 			if cfg.Type != "" {
@@ -196,11 +201,72 @@ func Run(ctx context.Context, cfg *Config) error {
 }
 
 func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storage.Store, fs *filestore.Store, album *storage.Album) error {
-	_ = ctx
-	_ = cfg
-	_ = b
-	_ = store
-	_ = fs
-	_ = album
+	// Get songs for album
+	songs, err := store.ListSongs(ctx, 1, 100, "", storage.Where("album_id = ?", album.ID))
+	if err != nil {
+		return fmt.Errorf("publish: couldn't get songs: %w", err)
+	}
+
+	// Download cover
+	name := filestore.JPG(album.ID)
+	cover := filepath.Join(os.TempDir(), name)
+	if err := fs.GetJPG(ctx, cover, album.ID); err != nil {
+		return fmt.Errorf("publish: couldn't download cover: %w", err)
+	}
+
+	// Create jamendo album data
+	jmAlbum := &jamendo.Album{
+		Artist:         album.Artist,
+		Title:          album.Title,
+		Cover:          cover,
+		PrimaryGenre:   album.PrimaryGenre,
+		SecondaryGenre: album.SecondaryGenre,
+		ReleaseDate:    album.PublishedAt,
+		UPC:            album.UPC,
+	}
+
+	// Order songs by track number
+	sort.Slice(songs, func(i, j int) bool {
+		return songs[i].Order < songs[j].Order
+	})
+
+	// Create jamendo song data
+	for _, s := range songs {
+		// Download song
+		name := filestore.MP3(s.ID)
+		mp3 := filepath.Join(os.TempDir(), name)
+		if err := fs.GetMP3(ctx, mp3, s.ID); err != nil {
+			return fmt.Errorf("publish: couldn't download song: %w", err)
+		}
+		// Convert mp3 to wav
+		wav := filepath.Join(os.TempDir(), fmt.Sprintf("%s.wav", s.ID))
+		if err := ffmpeg.Convert(ctx, mp3, wav); err != nil {
+			return fmt.Errorf("publish: couldn't convert mp3 to wav: %w", err)
+		}
+		dkSong := &jamendo.Song{
+			Instrumental: s.Instrumental,
+			Title:        s.Title,
+			ISRC:         s.ISRC,
+			File:         wav,
+		}
+		jmAlbum.Songs = append(jmAlbum.Songs, dkSong)
+		break
+	}
+
+	// Publish album
+	jmID, err := b.Publish(ctx, jmAlbum, cfg.Auto)
+	if err != nil {
+		return fmt.Errorf("publish: couldn't jamendo publish %s: %w", album.ID, err)
+	}
+	_ = jmID
+	// Update album
+	/*
+		album.JamendoID = jmID
+		album.PublishedAt = time.Now().UTC()
+		album.State = storage.Used
+		if err := store.SetAlbum(ctx, album); err != nil {
+			return fmt.Errorf("publish: couldn't set album %s %s: %w", album.ID, dkID, err)
+		}
+	*/
 	return nil
 }

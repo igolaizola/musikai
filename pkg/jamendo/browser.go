@@ -135,12 +135,20 @@ func (b *Browser) Start(parent context.Context) error {
 	if err := chromedp.Run(browserContext,
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			for _, cookie := range cookies {
-				err := network.SetCookie(cookie.Name, cookie.Value).
-					WithDomain("artists.jamendo.com").
-					//WithHTTPOnly(true).
-					Do(ctx)
-				if err != nil {
-					return fmt.Errorf("jamendo: could not set cookie: %w", err)
+				for _, domain := range []string{"artists.jamendo.com", "uploadserver.jamendo.com"} {
+					if domain == "uploadserver.jamendo.com" {
+						switch cookie.Name {
+						case "jamsession", "jamuserid", "jamlang":
+						default:
+							continue
+						}
+					}
+					if err := network.SetCookie(cookie.Name, cookie.Value).
+						WithDomain(domain).
+						//WithHTTPOnly(true).
+						Do(ctx); err != nil {
+						return fmt.Errorf("jamendo: could not set cookie: %w", err)
+					}
 				}
 			}
 			return nil
@@ -228,7 +236,7 @@ func (c *Browser) Stop() error {
 	var cs []*network.Cookie
 	if err := chromedp.Run(c.browserContext,
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			candidate, err := network.GetCookies().WithUrls([]string{"https://artists.jamendo.com"}).Do(ctx)
+			candidate, err := network.GetCookies().WithUrls([]string{"https://artists.jamendo.com", "https://jamendo.com"}).Do(ctx)
 			if err != nil {
 				return fmt.Errorf("jamendo: could not get cookies: %w", err)
 			}

@@ -21,7 +21,7 @@ func FadeOut(ctx context.Context, input, output string, totalDuration, fadeOutDu
 
 	fd := fadeOutDuration.Seconds()
 	st := totalDuration.Seconds() - fadeOutDuration.Seconds()
-	cmd := exec.CommandContext(ctx, BinPath, "-y",  "-i", input, "-b:a", "320k","-af", fmt.Sprintf("afade=t=out:st=%f:d=%f", st, fd), tmp)
+	cmd := exec.CommandContext(ctx, BinPath, "-y", "-i", input, "-b:a", "320k", "-af", fmt.Sprintf("afade=t=out:st=%f:d=%f", st, fd), tmp)
 	data, err := cmd.CombinedOutput()
 	if err != nil {
 		if tmp != output {
@@ -65,6 +65,17 @@ func Cut(ctx context.Context, input, output string, end time.Duration) error {
 		if err := os.Rename(tmp, output); err != nil {
 			return fmt.Errorf("ffmpeg: couldn't rename temporary file: %w", err)
 		}
+	}
+
+	return nil
+}
+
+func Convert(ctx context.Context, input, output string) error {
+	cmd := exec.CommandContext(ctx, BinPath, "-y", "-i", input, "-b:a", "320k", output)
+	data, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := string(data)
+		return fmt.Errorf("ffmpeg: couldn't convert %s to %s: %w: %s", input, output, err, msg)
 	}
 
 	return nil
