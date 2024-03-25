@@ -280,7 +280,7 @@ func Run(ctx context.Context, cfg *Config) error {
 
 		// Upload cover to telegram
 		debug("album: upload start %s", albumID)
-		if err := fs.GetJPG(ctx, output, albumID); err != nil {
+		if err := fs.SetJPG(ctx, output, albumID); err != nil {
 			return fmt.Errorf("album: couldn't upload cover image: %w", err)
 		}
 		debug("album: upload end %s", albumID)
