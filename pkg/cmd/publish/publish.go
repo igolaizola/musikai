@@ -228,7 +228,7 @@ func publish(ctx context.Context, cfg *Config, b *distrokid.Browser, store *stor
 	// Create distrokid song data
 	for _, s := range songs {
 		// Download song
-		name := filestore.MP3(s.GenerationID)
+		name := filestore.MP3(*s.GenerationID)
 		out := filepath.Join(os.TempDir(), name)
 		if err := fs.GetMP3(ctx, out, *s.GenerationID); err != nil {
 			return fmt.Errorf("publish: couldn't download song: %w", err)
