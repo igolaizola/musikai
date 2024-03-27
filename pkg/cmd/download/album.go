@@ -219,11 +219,11 @@ func downloadSong(ctx context.Context, song *storage.Song, debug func(string, ..
 	// Download the mastered audio
 	mastered := filepath.Join(output, fmt.Sprintf("%s.mp3", name))
 	if _, err := os.Stat(mastered); err != nil {
-		debug("download: start download master %s", song.ID)
-		if err := fs.GetMP3(ctx, mastered, song.ID); err != nil {
+		debug("download: start download master %s", song.GenerationID)
+		if err := fs.GetMP3(ctx, mastered, song.GenerationID); err != nil {
 			return fmt.Errorf("download: couldn't download master audio: %w", err)
 		}
-		debug("download: end download master %s", song.ID)
+		debug("download: end download master %s", song.GenerationID)
 	}
 
 	return nil
