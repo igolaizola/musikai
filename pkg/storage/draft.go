@@ -139,7 +139,7 @@ func (s *Store) NextDraftCandidate(ctx context.Context, min int, orderBy string,
 	q = q.Where("drafts.state != ?", Rejected).
 		Where("(select count(*) from albums where albums.draft_id = drafts.id) < CASE WHEN drafts.volumes = 0 THEN 1 ELSE drafts.volumes END").
 		Where("EXISTS (select id from covers where drafts.title = covers.title AND covers.state = ?)", Approved).
-		Where("(select count(*) from songs where drafts.type = songs.type AND songs.state = ?) > ?", Approved, min)
+		Where("(select count(*) from songs where drafts.type = songs.type AND songs.state = ?) >= ?", Approved, min)
 	if err := q.First(&v, q).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
