@@ -208,13 +208,22 @@ func publish(ctx context.Context, cfg *Config, b *distrokid.Browser, store *stor
 		return fmt.Errorf("publish: couldn't download cover: %w", err)
 	}
 
+	// Create album title
+	title := album.Title
+	if album.Subtitle != "" {
+		title += " - " + album.Subtitle
+	}
+	if album.Volume > 0 {
+		title += fmt.Sprintf(", Vol. %d", album.Volume)
+	}
+
 	// Create distrokid album data
 	dkAlbum := &distrokid.Album{
 		Artist:         album.Artist,
 		FirstName:      cfg.FirstName,
 		LastName:       cfg.LastName,
 		RecordLabel:    cfg.RecordLabel,
-		Title:          album.Title,
+		Title:          title,
 		Cover:          cover,
 		PrimaryGenre:   album.PrimaryGenre,
 		SecondaryGenre: album.SecondaryGenre,
