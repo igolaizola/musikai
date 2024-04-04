@@ -275,10 +275,6 @@ func Serve(ctx context.Context, cfg *Config) error {
 		if err != nil {
 			page = 1
 		}
-		size, err := strconv.Atoi(r.URL.Query().Get("size"))
-		if err != nil {
-			size = 100
-		}
 		filters := []storage.Filter{}
 		if query := r.URL.Query().Get("query"); query != "" {
 			fmt.Println("query:", query)
@@ -307,7 +303,22 @@ func Serve(ctx context.Context, cfg *Config) error {
 			filters = append(filters, storage.Where("state IN (?)", values))
 		}
 
-		covers, err := store.ListAllCovers(ctx, page, size, "", filters...)
+		// Paginate by drafts
+		drafts, err := store.ListDrafts(ctx, page, 1, "", storage.Where("state = ?", storage.Approved))
+		if err != nil {
+			log.Println("couldn't list drafts:", err)
+			http.Error(w, fmt.Sprintf("couldn't list drafts: %v", err), http.StatusInternalServerError)
+			return
+		}
+		if len(drafts) == 0 {
+			log.Println("no drafts found")
+			http.Error(w, "Not drafts found", http.StatusNotFound)
+			return
+		}
+		draft := drafts[0]
+		filters = append(filters, storage.Where("draft_id = ?", draft.ID))
+
+		covers, err := store.ListAllCovers(ctx, page, 1000, "", filters...)
 		if err != nil {
 			log.Println("couldn't list covers:", err)
 			http.Error(w, fmt.Sprintf("couldn't list covers: %v", err), http.StatusInternalServerError)
