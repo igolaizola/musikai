@@ -164,7 +164,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			filters := []storage.Filter{
 				storage.Where("drafts.id > ?", currID),
 				storage.Where("drafts.state = ?", storage.Approved),
-				storage.Where("not exists(select id from covers where state = ?)", storage.Approved),
+				storage.Where("not exists(select id from covers where covers.state = ? and covers.draft_id = drafts.id)", storage.Approved),
 			}
 			if cfg.Type != "" {
 				filters = append(filters, storage.Where("drafts.type LIKE ?", cfg.Type))
