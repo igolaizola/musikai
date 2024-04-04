@@ -315,10 +315,11 @@ func Serve(ctx context.Context, cfg *Config) error {
 			http.Error(w, "Not drafts found", http.StatusNotFound)
 			return
 		}
+		log.Println("covers for draft:", drafts[0].Title)
 		draft := drafts[0]
 		filters = append(filters, storage.Where("draft_id = ?", draft.ID))
 
-		covers, err := store.ListAllCovers(ctx, page, 1000, "", filters...)
+		covers, err := store.ListAllCovers(ctx, 1, 1000, "", filters...)
 		if err != nil {
 			log.Println("couldn't list covers:", err)
 			http.Error(w, fmt.Sprintf("couldn't list covers: %v", err), http.StatusInternalServerError)
