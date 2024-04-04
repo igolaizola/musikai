@@ -172,20 +172,54 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 	})
 
 	// Select primary and secondary genre
-	primaryGenre, ok := genres[album.PrimaryGenre]
-	if !ok {
-		return "", fmt.Errorf("distrokid: couldn't find primary genre %s in %s", album.PrimaryGenre, strings.Join(all, ","))
+
+	// Split the primary genre into genre and subgenre if available
+	split := strings.Split(album.PrimaryGenre, ":")
+	primaryGenre := split[0]
+	var primarySubGenre string
+	if len(split) > 1 {
+		primarySubGenre = split[1]
 	}
-	if err := selectOption(ctx, "#genrePrimary", primaryGenre); err != nil {
+
+	// Select the primary genre
+	primaryGenreValue, ok := genres[primaryGenre]
+	if !ok {
+		return "", fmt.Errorf("distrokid: couldn't find primary genre %s in %s", primaryGenre, strings.Join(all, ","))
+	}
+	if err := selectOption(ctx, "#genrePrimary", primaryGenreValue); err != nil {
 		return "", err
 	}
-	if album.SecondaryGenre != "" {
-		secondaryGenre, ok := genres[album.SecondaryGenre]
-		if !ok {
-			return "", fmt.Errorf("distrokid: couldn't find secondary genre %s in %s", album.SecondaryGenre, strings.Join(all, ","))
-		}
-		if err := selectOption(ctx, "#genreSecondary", secondaryGenre); err != nil {
+	if primarySubGenre != "" {
+		time.Sleep(200 * time.Millisecond)
+		// Select the primary subgenre
+		if err := selectSubGenre(ctx, "#subGenrePrimary", primarySubGenre); err != nil {
 			return "", err
+		}
+	}
+
+	if album.SecondaryGenre != "" {
+		// Split the secondary genre into genre and subgenre if available
+		split := strings.Split(album.SecondaryGenre, ":")
+		secondaryGenre := split[0]
+		var secondarySubGenre string
+		if len(split) > 1 {
+			secondarySubGenre = split[1]
+		}
+
+		// Select the secondary genre
+		secondaryGenreValue, ok := genres[secondaryGenre]
+		if !ok {
+			return "", fmt.Errorf("distrokid: couldn't find secondary genre %s in %s", secondaryGenre, strings.Join(all, ","))
+		}
+		if err := selectOption(ctx, "#genreSecondary", secondaryGenreValue); err != nil {
+			return "", err
+		}
+		if secondarySubGenre != "" {
+			time.Sleep(200 * time.Millisecond)
+			// Select the secondary subgenre
+			if err := selectSubGenre(ctx, "#subGenreSecondary", secondarySubGenre); err != nil {
+				return "", err
+			}
 		}
 	}
 
@@ -366,6 +400,38 @@ func getHTML(ctx context.Context, sel string) (*goquery.Document, error) {
 		return nil, fmt.Errorf("distrokid: couldn't parse doc %s: %w", sel, err)
 	}
 	return doc, nil
+}
+
+func selectSubGenre(ctx context.Context, sel, v string) error {
+	// Obtain the document
+	doc, err := getHTML(ctx, "html")
+	if err != nil {
+		return err
+	}
+
+	// Obtain subgenre options
+	subgenres := map[string]string{}
+	var all []string
+	doc.Find(fmt.Sprintf("%s option", sel)).Each(func(i int, s *goquery.Selection) {
+		genre := s.Text()
+		if genre == "" || strings.HasPrefix(genre, "Select ") {
+			return
+		}
+		value, ok := s.Attr("value")
+		if !ok {
+			return
+		}
+		subgenres[genre] = value
+		all = append(all, genre)
+	})
+	val, ok := subgenres[v]
+	if !ok {
+		return fmt.Errorf("distrokid: couldn't find primary subgenre %s in %s", v, strings.Join(all, ","))
+	}
+	if err := selectOption(ctx, sel, val); err != nil {
+		return err
+	}
+	return nil
 }
 
 func selectOption(ctx context.Context, sel, val string) error {
