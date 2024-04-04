@@ -276,9 +276,10 @@ func Serve(ctx context.Context, cfg *Config) error {
 			page = 1
 		}
 		filters := []storage.Filter{}
-		if query := r.URL.Query().Get("query"); query != "" {
-			fmt.Println("query:", query)
-			filters = append(filters, storage.Where(fmt.Sprintf("type LIKE '%s'", query)))
+		draftFilters := []storage.Filter{}
+		if typ := r.URL.Query().Get("type"); typ != "" {
+			fmt.Println("type:", typ)
+			draftFilters = append(draftFilters, storage.Where(fmt.Sprintf("type LIKE '%s'", typ)))
 		}
 
 		if v := r.URL.Query().Get("liked"); v != "" {
@@ -304,7 +305,8 @@ func Serve(ctx context.Context, cfg *Config) error {
 		}
 
 		// Paginate by drafts
-		drafts, err := store.ListDrafts(ctx, page, 1, "", storage.Where("state = ?", storage.Approved))
+		draftFilters = append(draftFilters, storage.Where("state = ?", storage.Approved))
+		drafts, err := store.ListDrafts(ctx, page, 1, "", draftFilters...)
 		if err != nil {
 			log.Println("couldn't list drafts:", err)
 			http.Error(w, fmt.Sprintf("couldn't list drafts: %v", err), http.StatusInternalServerError)
@@ -336,6 +338,11 @@ func Serve(ctx context.Context, cfg *Config) error {
 				Prompt:       fmt.Sprintf("%s %s", cover.Type, cover.Title), //cover.Prompt,
 				State:        cover.State,
 				Liked:        false,
+			})
+		}
+		if len(assets) == 0 {
+			assets = append(assets, &Asset{
+				Prompt: fmt.Sprintf("%s - No covers found", draft.Title),
 			})
 		}
 		if err := json.NewEncoder(w).Encode(assets); err != nil {
