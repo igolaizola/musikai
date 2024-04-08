@@ -28,9 +28,8 @@ type Client struct {
 }
 
 type Config struct {
-	Wait   time.Duration
-	Debug  bool
-	Client *http.Client
+	Wait  time.Duration
+	Debug bool
 }
 
 func New(cfg *Config) *Client {

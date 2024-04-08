@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"sort"
 	"strings"
 )
 
@@ -23,32 +22,8 @@ type analyzeResponse struct {
 		Start  string              `json:"start"`
 	} `json:"golden"`
 	Lyrics json.RawMessage `json:"lyrics"`
-	Music  struct {
-		BPM         float64        `json:"bpm"`
-		Genres      map[string]int `json:"genres"`
-		Instruments []string       `json:"instruments"`
-		Key         string         `json:"key"`
-		MetaArtist  string         `json:"meta_artist"`
-		MetaTitle   string         `json:"meta_title"`
-		Moods       map[string]int `json:"moods"`
-		Styles      map[string]int `json:"styles"`
-		VocalFamily string         `json:"vocal_family"`
-	} `json:"music"`
-	Title string `json:"title"`
-}
-
-type analyzeLyricsResponse struct {
-	Explicit string           `json:"explicit"`
-	Keywords []string         `json:"keywords"`
-	Language string           `json:"language"`
-	Moods    []map[string]int `json:"moods"`
-	Summary  string           `json:"summary"`
-	Themes   []map[string]int `json:"themes"`
-}
-
-type WeigthValue struct {
-	Weigth int
-	Value  string
+	Music  MusicAnalysis   `json:"music"`
+	Title  string          `json:"title"`
 }
 
 type Analysis struct {
@@ -57,25 +32,25 @@ type Analysis struct {
 	Music  MusicAnalysis
 }
 
-type LyricsAnalysis struct {
-	Explicit bool
-	Keywords []string
-	Language string
-	Moods    []WeigthValue
-	Summary  string
-	Themes   []WeigthValue
+type MusicAnalysis struct {
+	BPM         float64        `json:"bpm"`
+	Genres      map[string]int `json:"genres"`
+	Instruments []string       `json:"instruments"`
+	Key         string         `json:"key"`
+	MetaArtist  string         `json:"meta_artist"`
+	MetaTitle   string         `json:"meta_title"`
+	Moods       map[string]int `json:"moods"`
+	Styles      map[string]int `json:"styles"`
+	VocalFamily string         `json:"vocal_family"`
 }
 
-type MusicAnalysis struct {
-	BPM         float64
-	Genres      []WeigthValue
-	Instruments []string
-	Key         string
-	MetaArtist  string
-	MetaTitle   string
-	Moods       []WeigthValue
-	Styles      []WeigthValue
-	VocalFamily string
+type LyricsAnalysis struct {
+	Explicit string           `json:"explicit"`
+	Keywords []string         `json:"keywords"`
+	Language string           `json:"language"`
+	Moods    []map[string]int `json:"moods"`
+	Summary  string           `json:"summary"`
+	Themes   []map[string]int `json:"themes"`
 }
 
 func (c *Client) Analyze(ctx context.Context, u string) (*Analysis, error) {
@@ -93,49 +68,20 @@ func (c *Client) Analyze(ctx context.Context, u string) (*Analysis, error) {
 
 	analysis := Analysis{
 		Title: resp.Title,
-		Music: MusicAnalysis{
-			BPM:         resp.Music.BPM,
-			Genres:      toWeightValues(resp.Music.Genres),
-			Instruments: resp.Music.Instruments,
-			Key:         resp.Music.Key,
-			MetaArtist:  resp.Music.MetaArtist,
-			MetaTitle:   resp.Music.MetaTitle,
-			Moods:       toWeightValues(resp.Music.Moods),
-			Styles:      toWeightValues(resp.Music.Styles),
-			VocalFamily: resp.Music.VocalFamily,
-		},
+		Music: resp.Music,
 	}
 
 	var lyricsErr string
 	if err := json.Unmarshal(resp.Lyrics, &lyricsErr); err != nil {
-		var lyricsResp analyzeLyricsResponse
-		if err := json.Unmarshal(resp.Lyrics, &lyricsResp); err != nil {
+		var lyrics LyricsAnalysis
+		if err := json.Unmarshal(resp.Lyrics, &lyrics); err != nil {
 			return nil, fmt.Errorf("sonoteller: couldn't unmarshal lyrics (%s): %w", string(resp.Lyrics), err)
 		}
-		analysis.Lyrics = &LyricsAnalysis{
-			Explicit: lyricsResp.Explicit == "true",
-			Keywords: lyricsResp.Keywords,
-			Language: lyricsResp.Language,
-			Moods:    toWeightValues(lyricsResp.Moods[0]),
-			Summary:  lyricsResp.Summary,
-			Themes:   toWeightValues(lyricsResp.Themes[0]),
-		}
+		analysis.Lyrics = &lyrics
 	} else if !strings.Contains(strings.ToLower(lyricsErr), "instrumental") {
 		log.Println("sonoteller: error in lyrics analysis:", lyricsErr)
 	}
 	return &analysis, nil
-}
-
-func toWeightValues(m map[string]int) []WeigthValue {
-	var wv []WeigthValue
-	for k, v := range m {
-		wv = append(wv, WeigthValue{Weigth: v, Value: k})
-	}
-	// Sort descending
-	sort.Slice(wv, func(i, j int) bool {
-		return wv[i].Weigth > wv[j].Weigth
-	})
-	return wv
 }
 
 func randomString(n int) string {

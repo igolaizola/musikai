@@ -39,6 +39,10 @@ type Song struct {
 	AlbumID string `gorm:"index,not null;default:''"`
 	Order   int    `gorm:"not null;default:0"`
 	ISRC    string `gorm:"not null;default:''"`
+	Youtube string `gorm:"not null;default:''"`
+
+	Classification string `gorm:"not null;default:''"`
+	Classified     bool   `gorm:"not null;default:false"`
 
 	Likes int   `gorm:"not null;default:0"`
 	State State `gorm:"not null;default:0"`
