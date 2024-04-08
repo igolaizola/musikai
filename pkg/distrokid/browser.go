@@ -151,7 +151,7 @@ func (b *Browser) Start(parent context.Context) error {
 		chromedp.Navigate("https://distrokid.com/profile/"),
 		chromedp.WaitReady("body", chromedp.ByQuery),
 	); err != nil {
-		return fmt.Errorf("distrokid: could not obtain chatgpt data: %w", err)
+		return fmt.Errorf("distrokid: couldn't navigate to profile: %w", err)
 	}
 
 	// Obtain the document
