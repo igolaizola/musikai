@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/ratelimit"
-	ht "github.com/imthaghost/merryGoRound/pkg/http"
+	torttp "github.com/igolaizola/musikai/pkg/tor/http"
 )
 
 var token = "i95evCQoyT8gmwTmXHRewXB7cwXH2X69"
@@ -38,18 +38,11 @@ func New(cfg *Config) *Client {
 	if wait == 0 {
 		wait = 1 * time.Second
 	}
-	/*
-		client := cfg.Client
-		if client == nil {
-			client = &http.Client{
-				Timeout: 2 * time.Minute,
-			}
-		}
-	*/
+
 	// Configure a tor client
-	tor := ht.Tor{
-		MaxTimeout:         20 * time.Second,
-		MaxIdleConnections: 10,
+	// You need to have tor running on your machine on port 9050
+	tor := torttp.Tor{
+		MaxTimeout: 5 * time.Minute,
 	}
 	client := tor.New()
 
@@ -120,6 +113,9 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 				// Retry on these status codes
 				retry = true
 				wait = true
+			case http.StatusForbidden:
+				c.newIP()
+				retry = true
 			default:
 				return nil, err
 			}

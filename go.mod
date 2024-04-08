@@ -18,7 +18,6 @@ require (
 	github.com/gocarina/gocsv v0.0.0-20231116093920-b87c2d0e983a
 	github.com/hajimehoshi/go-mp3 v0.3.4
 	github.com/igolaizola/bulkai v1.3.0
-	github.com/imthaghost/merryGoRound v0.0.0-20230329153357-534b766499f6
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/peterbourgon/ff v1.7.1
 	github.com/peterbourgon/ff/v3 v3.3.0

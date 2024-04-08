@@ -17,7 +17,6 @@ func TestAnalyze(t *testing.T) {
 			if _, err := c.Analyze(context.Background(), tt); err != nil {
 				t.Errorf("Analyze() error = %v", err)
 			}
-			t.Fail()
 		})
 	}
 }
