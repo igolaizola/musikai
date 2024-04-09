@@ -2,6 +2,7 @@ package classify
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -131,7 +132,8 @@ func Run(ctx context.Context, cfg *Config) error {
 			filters := []storage.Filter{
 				storage.Where("classified = ?", false),
 				storage.Where("state = ?", storage.Used),
-				storage.Where("id > ?", currID),
+				storage.Where("youtube != ''"),
+				storage.Where("songs.id > ?", currID),
 			}
 			if cfg.Type != "" {
 				filters = append(filters, storage.Where("type LIKE ?", cfg.Type))
@@ -169,5 +171,22 @@ func Run(ctx context.Context, cfg *Config) error {
 }
 
 func classify(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, sonoClient *sonoteller.Client) error {
+	if song.Youtube == "" {
+		return fmt.Errorf("classify: song %s has no youtube id", song.ID)
+	}
+	analysis, err := sonoClient.Analyze(ctx, song.Youtube)
+	if err != nil {
+		return fmt.Errorf("classify: couldn't analyze song %s: %w", song.ID, err)
+	}
+	js, err := json.Marshal(analysis)
+	if err != nil {
+		return fmt.Errorf("classify: couldn't marshal analysis %v: %w", analysis, err)
+	}
+	debug("classify: %s", js)
+	song.Classification = string(js)
+	song.Classified = true
+	if err := store.SetSong(ctx, song); err != nil {
+		return fmt.Errorf("classify: couldn't update song: %w", err)
+	}
 	return nil
 }

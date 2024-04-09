@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strconv"
 	"strings"
 )
 
@@ -27,9 +28,10 @@ type analyzeResponse struct {
 }
 
 type Analysis struct {
-	Title  string
-	Lyrics *LyricsAnalysis
-	Music  MusicAnalysis
+	Title  string          `json:"title"`
+	Golden float32         `json:"golden"`
+	Lyrics *LyricsAnalysis `json:"lyrics,omitempty"`
+	Music  MusicAnalysis   `json:"music"`
 }
 
 type MusicAnalysis struct {
@@ -53,22 +55,30 @@ type LyricsAnalysis struct {
 	Themes   []map[string]int `json:"themes"`
 }
 
-func (c *Client) Analyze(ctx context.Context, u string) (*Analysis, error) {
+func (c *Client) Analyze(ctx context.Context, id string) (*Analysis, error) {
 	c.newIP()
 	req := &analyzeRequest{
-		URL:         u,
+		URL:         fmt.Sprintf("https://www.youtube.com/watch?v=%s", id),
 		User:        "web",
 		Token:       token,
 		Fingerprint: randomString(7),
 	}
 	var resp analyzeResponse
-	if _, err := c.do(ctx, "POST", "sonoteller_web_yt_api_multi_function", req, &resp); err != nil {
+	b, err := c.do(ctx, "POST", "sonoteller_web_yt_api_multi_function", req, &resp)
+	if err != nil {
 		return nil, fmt.Errorf("sonoteller: couldn't analyze: %w", err)
 	}
 
+	// Parse string to float
+	golden, err := strconv.ParseFloat(resp.Golden.Start, 32)
+	if err != nil {
+		return nil, fmt.Errorf("sonoteller: couldn't parse golden start (%s): %w", string(b), err)
+	}
+
 	analysis := Analysis{
-		Title: resp.Title,
-		Music: resp.Music,
+		Title:  resp.Title,
+		Golden: float32(golden),
+		Music:  resp.Music,
 	}
 
 	var lyricsErr string

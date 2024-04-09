@@ -108,12 +108,14 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 		var errStatus errStatusCode
 		if errors.As(err, &errStatus) {
 			switch int(errStatus) {
-			case http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusTooManyRequests, 520:
+			case http.StatusBadGateway, http.StatusGatewayTimeout, 520:
 				// Retry on these status codes
 				retry = true
 				wait = true
-			case http.StatusForbidden:
+			case http.StatusForbidden, http.StatusTooManyRequests:
+				maxAttempts = 1000
 				c.newIP()
+				err = nil
 				retry = true
 			default:
 				return nil, err
@@ -193,7 +195,7 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 		if len(errMessage) > 100 {
 			errMessage = errMessage[:100] + "..."
 		}
-		_ = os.WriteFile(fmt.Sprintf("logs/debug_%s.json", time.Now().Format("20060102_150405")), respBody, 0644)
+		//_ = os.WriteFile(fmt.Sprintf("logs/debug_%s.json", time.Now().Format("20060102_150405")), respBody, 0644)
 		return nil, fmt.Errorf("sonoteller: %s %s returned (%s): %w", method, u, errMessage, errStatusCode(resp.StatusCode))
 	}
 	if out != nil {
