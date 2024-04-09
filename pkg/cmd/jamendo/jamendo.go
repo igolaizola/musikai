@@ -139,7 +139,8 @@ func Run(ctx context.Context, cfg *Config) error {
 			return nil
 		case err := <-errC:
 			if err != nil {
-				nErr += 1
+				// TODO: exit on first error for now
+				//nErr += 1
 				return fmt.Errorf("publish: %w", err)
 			} else {
 				nErr = 0
@@ -231,6 +232,8 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 	})
 
 	// Create jamendo song data
+	// TODO: limit to 1 song for now
+	songs = songs[:1]
 	for _, s := range songs {
 		// Download song
 		name := filestore.MP3(s.ID)
@@ -250,7 +253,6 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 			File:         wav,
 		}
 		jmAlbum.Songs = append(jmAlbum.Songs, dkSong)
-		break
 	}
 
 	// Publish album

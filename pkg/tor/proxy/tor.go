@@ -5,7 +5,6 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
-	"time"
 )
 
 /*
@@ -37,8 +36,6 @@ import (
 // TODO: what if we run out of available ports on the machine? create a stream manager possibly...
 // TODO: determine if tor socks proxy is running on host machine
 func TorProxy() func(*http.Request) (*url.URL, error) {
-	// a source of uniformly-distributed pseudo-random
-	rand.Seed(time.Now().UnixNano())
 	// pseudo-random int value
 	num := rand.Intn(0x7fffffff-10000) + 10000
 	// base url localhost for now

@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -220,8 +219,6 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 		singleLookup[id] = struct{}{}
 	})
 
-	var songIDs []string
-
 	for _, song := range album.Songs {
 		// Upload song
 		name := filepath.Base(song.File)
@@ -262,7 +259,6 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 			return "", fmt.Errorf("jamendo: couldn't find song id")
 		}
 		log.Println("song id", songID)
-		songIDs = append(songIDs, songID)
 
 		// TODO: Edit song data here
 
@@ -347,105 +343,12 @@ func notVisible(ctx context.Context, sel string) error {
 	return nil
 }
 
-func clickParent(ctx context.Context, child string) error {
-	script := fmt.Sprintf(
-		`document.querySelector('%s').parentNode.click();`,
-		child)
-
-	if err := chromedp.Run(ctx,
-		chromedp.WaitVisible(child),
-		chromedp.Evaluate(script, nil),
-	); err != nil {
-		return fmt.Errorf("jamendo: couldn't click parent of %s: %w", child, err)
-	}
-	return nil
-}
-
-func clickCheck(ctx context.Context, sel string, visible bool) error {
-	if visible {
-		var isVisible bool
-		checkVisibilityScript := fmt.Sprintf(`document.querySelector('%s').checkVisibility()`, sel)
-		if err := chromedp.Run(ctx,
-			chromedp.Evaluate(checkVisibilityScript, &isVisible),
-		); err != nil {
-			return fmt.Errorf("jamendo: couldn't check visibility of checkbox %s: %w", sel, err)
-		}
-		if !isVisible {
-			return nil
-		}
-	}
-	if err := click(ctx, sel); err != nil {
-		return err
-	}
-	time.Sleep(150 * time.Millisecond)
-	var isChecked bool
-	err := chromedp.Run(ctx,
-		chromedp.Evaluate(fmt.Sprintf(`document.querySelector('%s').checked`, sel), &isChecked),
-	)
-	if err != nil {
-		return fmt.Errorf("jamendo: couldn't check if checkbox %s is checked: %w", sel, err)
-	}
-	if !isChecked {
-		return fmt.Errorf("jamendo: checkbox %s is not checked", sel)
-	}
-	return nil
-}
-
-func clickCheckParent(ctx context.Context, sel string) error {
-	if err := clickParent(ctx, sel); err != nil {
-		return err
-	}
-	time.Sleep(150 * time.Millisecond)
-	var isChecked bool
-	err := chromedp.Run(ctx,
-		chromedp.Evaluate(fmt.Sprintf(`document.querySelector('%s').checked`, sel), &isChecked),
-	)
-	if err != nil {
-		return fmt.Errorf("jamendo: couldn't check if checkbox %s is checked: %w", sel, err)
-	}
-	if !isChecked {
-		return fmt.Errorf("jamendo: checkbox %s is not checked", sel)
-	}
-	return nil
-}
-
 func setValue(ctx context.Context, sel, val string) error {
 	if err := chromedp.Run(ctx,
 		chromedp.WaitVisible(sel, chromedp.ByQuery),
 		chromedp.SetValue(sel, val, chromedp.ByQuery),
 	); err != nil {
 		return fmt.Errorf("jamendo: couldn't set value %s %s: %w", sel, val, err)
-	}
-	return nil
-}
-
-func setMaxPrice(ctx context.Context, doc *goquery.Document, sel string) error {
-	var maxPrice float64
-	var maxPriceKey string
-	doc.Find(fmt.Sprintf("%s option", sel)).Each(func(i int, s *goquery.Selection) {
-		// Parse the price
-		txt := s.Text()
-		txt = strings.Trim(txt, "$ ")
-		price, err := strconv.ParseFloat(txt, 64)
-		if err != nil {
-			log.Printf("couldn't parse price %s: %v\n", txt, err)
-			return
-		}
-		key, ok := s.Attr("value")
-		if !ok {
-			log.Println("couldn't find value")
-			return
-		}
-		if price > maxPrice {
-			maxPrice = price
-			maxPriceKey = key
-		}
-	})
-	if maxPriceKey == "" {
-		return fmt.Errorf("jamendo: couldn't find max price %s", sel)
-	}
-	if err := selectOption(ctx, sel, maxPriceKey); err != nil {
-		return err
 	}
 	return nil
 }
@@ -463,15 +366,4 @@ func upload(ctx context.Context, sel, file, wait string) error {
 		return fmt.Errorf("jamendo: couldn't wait for %s: %w", wait, err)
 	}
 	return nil
-}
-
-func getAlbumUUID(doc *goquery.Document) (string, error) {
-	albumUUID, exists := doc.Find("#albumuuid").Attr("value")
-	if !exists {
-		return "", fmt.Errorf("jamendo: couldn't find albumuuid")
-	}
-	if albumUUID == "" {
-		return "", fmt.Errorf("jamendo: albumuuid is empty")
-	}
-	return albumUUID, nil
 }
