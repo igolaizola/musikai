@@ -140,7 +140,7 @@ func (c *Client) Start(ctx context.Context) error {
 	if cookie == "" {
 		return fmt.Errorf("suno: cookie is empty")
 	}
-	if err := session.SetCookies(c.client, "https://clerk.suno.ai", cookie, nil); err != nil {
+	if err := session.SetCookies(c.client, "https://clerk.suno.com", cookie, nil); err != nil {
 		return fmt.Errorf("suno: couldn't set cookie: %w", err)
 	}
 
@@ -153,7 +153,7 @@ func (c *Client) Start(ctx context.Context) error {
 }
 
 func (c *Client) Stop(ctx context.Context) error {
-	cookie, err := session.GetCookies(c.client, "https://clerk.suno.ai")
+	cookie, err := session.GetCookies(c.client, "https://clerk.suno.com")
 	if err != nil {
 		return fmt.Errorf("suno: couldn't get cookie: %w", err)
 	}
@@ -330,14 +330,18 @@ func (c *Client) addHeaders(req *http.Request, path string) {
 	// Custom headers for different paths
 	var token string
 	var contentType string
+	var origin string
 	switch {
-	case strings.HasPrefix(path, "https://clerk.suno.ai"):
+	case strings.HasPrefix(path, "https://clerk.suno.com"):
 		contentType = "application/x-www-form-urlencoded"
+		origin = "https://suno.com"
 	case strings.HasPrefix(path, "feed"):
 		token = c.token
+		origin = "https://app.suno.ai"
 	default:
 		token = c.token
 		contentType = "text/plain;charset=UTF-8"
+		origin = "https://app.suno.ai"
 	}
 	// Set headers
 	req.Header.Set("accept", "*/*")
@@ -348,7 +352,7 @@ func (c *Client) addHeaders(req *http.Request, path string) {
 	if contentType != "" {
 		req.Header.Set("content-type", contentType)
 	}
-	req.Header.Set("origin", "https://app.suno.ai")
+	req.Header.Set("origin", origin)
 	req.Header.Set("referer", "https://app.suno.ai/")
 	req.Header.Set("sec-ch-ua", `"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"`)
 	req.Header.Set("sec-ch-ua-mobile", "?0")

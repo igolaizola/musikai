@@ -89,11 +89,11 @@ type clientSession struct {
 }
 
 // TODO: obtain this version from redirect response of https://clerk.suno.ai/npm/@clerk/clerk-js@4/dist/clerk.browser.js
-const clerkVersion = "4.70.0"
+const clerkVersion = "4.72.0-snapshot.vc141245"
 
 func (c *Client) sessionID(ctx context.Context) (string, error) {
 	var resp clerkClientResponse
-	u := fmt.Sprintf("https://clerk.suno.ai/v1/client?_clerk_js_version=%s", clerkVersion)
+	u := fmt.Sprintf("https://clerk.suno.com/v1/client?_clerk_js_version=%s", clerkVersion)
 	if _, err := c.do(ctx, "GET", u, nil, &resp); err != nil {
 		return "", fmt.Errorf("suno: couldn't get client: %w", err)
 	}
@@ -122,7 +122,7 @@ func (c *Client) sessionToken(ctx context.Context, path string) (string, time.Ti
 	if path != "" {
 		path = fmt.Sprintf("/%s", path)
 	}
-	u := fmt.Sprintf("https://clerk.suno.ai/v1/client/sessions/%s/tokens%s?_clerk_js_version=%s", c.session, path, clerkVersion)
+	u := fmt.Sprintf("https://clerk.suno.com/v1/client/sessions/%s/tokens%s?_clerk_js_version=%s", c.session, path, clerkVersion)
 	var resp clerkTokenResponse
 	if _, err := c.do(ctx, "POST", u, nil, &resp); err != nil {
 		return "", time.Time{}, fmt.Errorf("suno: couldn't get clerk token: %w", err)
