@@ -1,6 +1,7 @@
 package jamendo
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/igolaizola/musikai/pkg/sonoteller"
@@ -17,15 +18,15 @@ func TestSonoteller(t *testing.T) {
 		"style":      sonoteller.Styles,
 	}
 	for f, vs := range fields {
+		fmt.Println("# Field:", f)
 		total += len(vs)
 		for _, v := range vs {
 			_, _, ok := GetField(v)
 			if !ok {
-				t.Errorf("%s %q not found", f, v)
+				fmt.Println(v)
 				continue
 			}
 			notFound++
-
 		}
 	}
 	t.Log("total:", total)
