@@ -1,16 +1,12 @@
 package jamendo
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/igolaizola/musikai/pkg/sonoteller"
 )
 
 func TestSonoteller(t *testing.T) {
-	tags := toMap(Tags)
-	genres := toMap(Genres)
-
 	var notFound int
 	var total int
 
@@ -23,14 +19,8 @@ func TestSonoteller(t *testing.T) {
 	for f, vs := range fields {
 		total += len(vs)
 		for _, v := range vs {
-			v = strings.ToLower(v)
-			if c, ok := convert[v]; ok {
-				v = c
-			}
-			v = strings.ToLower(v)
-			_, ok1 := genres[v]
-			_, ok2 := tags[v]
-			if !ok1 && !ok2 {
+			_, _, ok := GetField(v)
+			if !ok {
 				t.Errorf("%s %q not found", f, v)
 				continue
 			}
@@ -40,13 +30,4 @@ func TestSonoteller(t *testing.T) {
 	}
 	t.Log("total:", total)
 	t.Log("not found:", notFound)
-}
-
-func toMap(v []string) map[string]struct{} {
-	m := make(map[string]struct{})
-	for _, s := range v {
-		s = strings.ToLower(s)
-		m[s] = struct{}{}
-	}
-	return m
 }

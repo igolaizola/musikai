@@ -1,5 +1,7 @@
 package jamendo
 
+import "strings"
+
 var Genres = []string{
 	"8bit",
 	"acidhouse",
@@ -586,6 +588,43 @@ var Tags = []string{
 	"zen (meditative)",
 }
 
+type FieldType int
+
+const (
+	Genre FieldType = iota
+	Tag
+)
+
+func toLookup(v []string) map[string]string {
+	m := map[string]string{}
+	for _, s := range v {
+		m[strings.ToLower(s)] = s
+		m[s] = s
+	}
+	return m
+}
+
+func GetField(v string) (string, FieldType, bool) {
+	genreLookup := toLookup(Genres)
+	tagLookup := toLookup(Tags)
+	v = strings.ToLower(v)
+	// Use conversion when available
+	if val, ok := convert[v]; ok {
+		v = val
+	}
+	v1 := v
+	v2 := strings.ReplaceAll(v, " ", "")
+	for _, v := range []string{v1, v2} {
+		if _, ok := genreLookup[v]; ok {
+			return genreLookup[v], Genre, true
+		}
+		if _, ok := tagLookup[v]; ok {
+			return tagLookup[v], Tag, true
+		}
+	}
+	return "", 0, false
+}
+
 var convert = map[string]string{
 	// genres
 	"alternative rock":  "alternativerock",
@@ -603,13 +642,13 @@ var convert = map[string]string{
 	"r&b":               "rnb",
 	// instruments
 	"bass guitar":       "Bass",
-	"bass synth":        "bass synthesizer",
 	"brass instruments": "brass",
 	"brass section":     "brass",
 	"drum machine":      "drummachine",
 	"electric guitar":   "Electric Guitar (electricguitar)",
 	"electric piano":    "electricpiano",
 	"keyboard":          "Keyboard (synthesizer)",
+	"keyboards":         "keyboards (synthesizer)",
 	"synth":             "synth (synthesizer)",
 	// moods
 	"calming":       "Calm",
@@ -617,29 +656,29 @@ var convert = map[string]string{
 	"innovative":    "",
 	"intense":       "",
 	"intriguing":    "",
-	"melancholy":    "",
-	"mellow":        "",
+	"melancholy":    "melancholic",
+	"mellow":        "", //"mellow jazz",
 	"mysterious":    "",
 	"playful":       "",
 	"reflective":    "",
-	"relaxed":       "",
-	"seductive":     "",
-	"sensual":       "",
-	"smooth":        "",
+	"relaxed":       "Relaxing",
+	"seductive":     "sensual (sexy)",
+	"sensual":       "sensual (sexy)",
+	"smooth":        "", //"smoothjazz",
 	"soothing":      "",
 	"sophisticated": "",
-	"soulful":       "",
+	"soulful":       "soulful blues",
 	"spacey":        "",
 	"sublime":       "",
-	"tranquil":      "",
+	"tranquil":      "Relaxing",
 	"triumphant":    "",
 	// styles
 	"abstract":                  "",
-	"acid jazz":                 "",
+	"acid jazz":                 "acidjazz",
 	"acoustic":                  "",
-	"acoustic blues":            "",
-	"acoustic guitar":           "",
-	"acoustic jazz":             "",
+	"acoustic blues":            "Blues",
+	"acoustic guitar":           "guitar",
+	"acoustic jazz":             "Jazz",
 	"acoustic pop":              "",
 	"alternative":               "",
 	"ambient electronic":        "",
@@ -655,7 +694,7 @@ var convert = map[string]string{
 	"blues rock":                "",
 	"chamber jazz":              "",
 	"chamber music":             "",
-	"chicago blues":             "",
+	"chicago blues":             "Blues",
 	"chill out":                 "",
 	"chill-out":                 "",
 	"cinematic":                 "",
@@ -667,16 +706,16 @@ var convert = map[string]string{
 	"contemporary jazz":         "",
 	"cool jazz":                 "",
 	"deep house":                "",
-	"delta blues":               "",
+	"delta blues":               "Blues",
 	"doom metal":                "",
 	"dream pop":                 "",
 	"drum focused":              "",
 	"drum and bass":             "",
-	"electric blues":            "",
+	"electric blues":            "Blues",
 	"electro funk":              "",
 	"electronic jazz":           "",
 	"electronic rock":           "",
-	"folk blues":                "",
+	"folk blues":                "Blues",
 	"folk jazz":                 "",
 	"folk rock":                 "",
 	"fusion jazz":               "",
