@@ -353,7 +353,7 @@ func (c *Client) addHeaders(req *http.Request, path string) {
 		req.Header.Set("content-type", contentType)
 	}
 	req.Header.Set("origin", origin)
-	req.Header.Set("referer", "https://app.suno.ai/")
+	req.Header.Set("referer", "https://suno.com/")
 	req.Header.Set("sec-ch-ua", `"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"`)
 	req.Header.Set("sec-ch-ua-mobile", "?0")
 	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
