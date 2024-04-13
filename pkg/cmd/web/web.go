@@ -30,6 +30,7 @@ type Config struct {
 
 	Port        int
 	Credentials map[string]string
+	Volumes     map[string]string
 }
 
 //go:embed static/*
@@ -137,6 +138,16 @@ func Serve(ctx context.Context, cfg *Config) error {
 
 	// Handler to serve the static files
 	mux.Get("/*", http.StripPrefix("/", http.FileServer(http.FS(staticFS))).ServeHTTP)
+
+	// Handler to serve static files defined via volumes
+	if len(cfg.Volumes) > 0 {
+		for local, path := range cfg.Volumes {
+			if !strings.HasPrefix(path, "/") {
+				path = "/" + path
+			}
+			mux.Get(path, http.StripPrefix(path, http.FileServer(http.Dir(local))).ServeHTTP)
+		}
+	}
 
 	// Handler to serve cached files "cache folder"
 	mux.Get("/cache/*", http.StripPrefix("/cache/", http.FileServer(http.Dir(cache))).ServeHTTP)

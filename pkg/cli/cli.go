@@ -317,7 +317,8 @@ func newWebCommand() *ffcli.Command {
 	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
 
 	fs.IntVar(&cfg.Port, "port", 1337, "port to listen on")
-	fsMapVar(fs, &cfg.Credentials, "creds", nil, "credentials to use")
+	fsMapVar(fs, &cfg.Credentials, "creds", nil, "credentials to use (comma separated) Example: user1:pass1,user2:pass2")
+	fsMapVar(fs, &cfg.Volumes, "volumes", nil, "volumes to mount (comma separated) Example: ./Pictures:/pics,./Videos:/vids")
 
 	return &ffcli.Command{
 		Name:       cmd,

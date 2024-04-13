@@ -169,6 +169,8 @@ long-fadeout: 6s
 
 The `web` command is used to launch a web application to manage the songs, covers and albums.
 This is used to manually approve or reject songs, covers and albums.
+Use the `creds` option to set the username and password to access the web app.
+Use the `volumes` option to mount external directories in the web app.
 
 ```bash
 ./musikai web --config web.yaml
@@ -183,6 +185,8 @@ db-conn: musikai.db
 fs-type: local
 fs-conn: /path/to/directory
 port: 1337
+creds: user1:pass1,user2:pass2
+volumes: ./my-data:/data,./my-app:/app
 ```
 
 ### Setting
