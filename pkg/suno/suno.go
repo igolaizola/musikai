@@ -287,6 +287,16 @@ func (c *Client) extend(ctx context.Context, clp *clip) ([]*clip, error) {
 			break
 		}
 
+		// Check if the song is over the max extensions
+		if extensions >= c.maxExtensions {
+			break
+		}
+
+		// Check if the extensions is less than 30 seconds
+		if extensions > 0 && clp.Metadata.Duration < 30.0 {
+			break
+		}
+
 		// If we are extending the song, recalculate duration
 		duration = prevDuration + continueAt
 
