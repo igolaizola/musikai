@@ -254,6 +254,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 	})
 	r.Put("/api/songs/{id}/reject", func(w http.ResponseWriter, r *http.Request) {
 		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
+			s.Likes = 0
 			s.State = storage.Rejected
 			return s
 		})
@@ -267,6 +268,13 @@ func Serve(ctx context.Context, cfg *Config) error {
 	})
 	r.Put("/api/songs/{id}/dislike", func(w http.ResponseWriter, r *http.Request) {
 		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
+			s.Likes = 0
+			return s
+		})
+	})
+	r.Put("/api/songs/{id}/undo", func(w http.ResponseWriter, r *http.Request) {
+		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
+			s.State = storage.Pending
 			s.Likes = 0
 			return s
 		})
@@ -372,20 +380,28 @@ func Serve(ctx context.Context, cfg *Config) error {
 	r.Put("/api/covers/{id}/reject", func(w http.ResponseWriter, r *http.Request) {
 		updateCover(w, r, store, func(c *storage.Cover) *storage.Cover {
 			c.State = storage.Rejected
+			c.Likes = 0
 			return c
 		})
 	})
 	r.Put("/api/covers/{id}/like", func(w http.ResponseWriter, r *http.Request) {
-		updateCover(w, r, store, func(s *storage.Cover) *storage.Cover {
-			s.State = storage.Approved
-			s.Likes = 1
-			return s
+		updateCover(w, r, store, func(c *storage.Cover) *storage.Cover {
+			c.State = storage.Approved
+			c.Likes = 1
+			return c
 		})
 	})
 	r.Put("/api/covers/{id}/dislike", func(w http.ResponseWriter, r *http.Request) {
-		updateCover(w, r, store, func(s *storage.Cover) *storage.Cover {
-			s.Likes = 0
-			return s
+		updateCover(w, r, store, func(c *storage.Cover) *storage.Cover {
+			c.Likes = 0
+			return c
+		})
+	})
+	r.Put("/api/covers/{id}/undo", func(w http.ResponseWriter, r *http.Request) {
+		updateCover(w, r, store, func(c *storage.Cover) *storage.Cover {
+			c.State = storage.Pending
+			c.Likes = 0
+			return c
 		})
 	})
 
@@ -492,15 +508,21 @@ func Serve(ctx context.Context, cfg *Config) error {
 	})
 
 	r.Put("/api/albums/{id}/approve", func(w http.ResponseWriter, r *http.Request) {
-		updateAlbum(w, r, store, func(c *storage.Album) *storage.Album {
-			c.State = storage.Approved
-			return c
+		updateAlbum(w, r, store, func(a *storage.Album) *storage.Album {
+			a.State = storage.Approved
+			return a
 		})
 	})
 	r.Put("/api/albums/{id}/disapprove", func(w http.ResponseWriter, r *http.Request) {
-		updateAlbum(w, r, store, func(c *storage.Album) *storage.Album {
-			c.State = storage.Pending
-			return c
+		updateAlbum(w, r, store, func(a *storage.Album) *storage.Album {
+			a.State = storage.Pending
+			return a
+		})
+	})
+	r.Put("/api/albums/{id}/undo", func(w http.ResponseWriter, r *http.Request) {
+		updateAlbum(w, r, store, func(a *storage.Album) *storage.Album {
+			a.State = storage.Pending
+			return a
 		})
 	})
 	r.Put("/api/albums/{aid}/songs/{id}/delete", func(w http.ResponseWriter, r *http.Request) {
