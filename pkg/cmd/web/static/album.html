@@ -6,18 +6,9 @@
     <meta name="robots" content="noindex" />
     <title>Filter</title>
     <script defer src="album.js"></script>
-    <script
-      defer
-      src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
-    ></script>
-    <script
-      defer
-      src="https://getbootstrap.com/docs/5.0/dist/js/bootstrap.bundle.min.js"
-    ></script>
-    <link
-      href="https://getbootstrap.com/docs/5.0/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
+    <script defer src="alpinejs-3.x.x.min.js"></script>
+    <script defer src="bootstrap.bundle-5.0.min.js"></script>
+    <link href="bootstrap-5.0.min.css" rel="stylesheet" />
     <style>
       div.gallery {
         display: grid;
@@ -200,93 +191,91 @@
 
           <!-- Gallery -->
           <template x-if="album">
-
-          <div class="gallery mb-4">
-            <div class="gallery-item card">
-              <a target="_blank" x-bind:href="album.url">
-                <img x-bind:src="album.thumbnail_url" />
-              </a>
-              <code x-text="album.id"></code>
-              <span class="small" x-text="album.prompt"></span>
-
-              <div class="btn-group" role="group">
-                <template x-if="album.state !== 2">
-                  <button
-                    @click="approveImage(-1)"
-                    type="button"
-                    class="btn btn-success btn-sm"
-                  >
-                    Approve
-                  </button>
-                </template>
-
-                <template x-if="album.state !== 0">
-                  <button
-                    @click="disapproveImage(-1)"
-                    type="button"
-                    class="btn btn-danger btn-sm"
-                  >
-                    Disapprove
-                  </button>
-                </template>
-                <button
-                  @click="deleteAlbum()"
-                  type="button"
-                  class="btn btn-danger btn-sm"
-                >
-                  🗑️
-                </button>
-              </div>
-            </div>
-            <template x-for="(img, index) in images">
+            <div class="gallery mb-4">
               <div class="gallery-item card">
-                <a target="_blank" x-bind:href="img.url">
-                  <img x-bind:src="img.thumbnail_url" />
+                <a target="_blank" x-bind:href="album.url">
+                  <img x-bind:src="album.thumbnail_url" />
                 </a>
-                <audio
-                  controls
-                  class="my-2"
-                  style="height: 30px; width: 100%"
-                  x-bind:onplay="play(index)"
-                >
-                  <source x-bind:src="img.url" type="audio/mp3" />
-                  Your browser does not support the audio element.
-                </audio>
-                <code x-text="img.id"></code>
-                <span class="small" x-text="img.prompt"></span>
+                <code x-text="album.id"></code>
+                <span class="small" x-text="album.prompt"></span>
 
                 <div class="btn-group" role="group">
-                  <template x-if="img.state !== 0">
+                  <template x-if="album.state !== 2">
                     <button
-                      @click="deleteSong(index)"
+                      @click="approveImage(-1)"
+                      type="button"
+                      class="btn btn-success btn-sm"
+                    >
+                      Approve
+                    </button>
+                  </template>
+
+                  <template x-if="album.state !== 0">
+                    <button
+                      @click="disapproveImage(-1)"
                       type="button"
                       class="btn btn-danger btn-sm"
                     >
-                      🗑️
+                      Disapprove
                     </button>
                   </template>
+                  <button
+                    @click="deleteAlbum()"
+                    type="button"
+                    class="btn btn-danger btn-sm"
+                  >
+                    🗑️
+                  </button>
                 </div>
               </div>
-            </template>
-            <div class="gallery-item card">
-              <input
-                x-model="newsong"
-                type="text"
-                class="form-control mb-3 mt-4"
-                placeholder="ID"
-              />
-              <div class="btn-group" role="group">
-                <button
-                  @click="addSong()"
-                  type="button"
-                  class="btn btn-success btn-sm"
-                >
-                  Add song
-                </button>
+              <template x-for="(img, index) in images">
+                <div class="gallery-item card">
+                  <a target="_blank" x-bind:href="img.url">
+                    <img x-bind:src="img.thumbnail_url" />
+                  </a>
+                  <audio
+                    controls
+                    class="my-2"
+                    style="height: 30px; width: 100%"
+                    x-bind:onplay="play(index)"
+                  >
+                    <source x-bind:src="img.url" type="audio/mp3" />
+                    Your browser does not support the audio element.
+                  </audio>
+                  <code x-text="img.id"></code>
+                  <span class="small" x-text="img.prompt"></span>
+
+                  <div class="btn-group" role="group">
+                    <template x-if="img.state !== 0">
+                      <button
+                        @click="deleteSong(index)"
+                        type="button"
+                        class="btn btn-danger btn-sm"
+                      >
+                        🗑️
+                      </button>
+                    </template>
+                  </div>
+                </div>
+              </template>
+              <div class="gallery-item card">
+                <input
+                  x-model="newsong"
+                  type="text"
+                  class="form-control mb-3 mt-4"
+                  placeholder="ID"
+                />
+                <div class="btn-group" role="group">
+                  <button
+                    @click="addSong()"
+                    type="button"
+                    class="btn btn-success btn-sm"
+                  >
+                    Add song
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-
           </template>
           <!-- Pagination -->
           <template x-if="images.length > 0 || page > 1">
