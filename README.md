@@ -184,7 +184,7 @@ db-type: sqlite
 db-conn: musikai.db
 fs-type: local
 fs-conn: /path/to/directory
-port: 1337
+addr: :1337
 creds: user1:pass1,user2:pass2
 volumes: ./my-data:/data,./my-app:/app
 ```

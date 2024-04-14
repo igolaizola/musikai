@@ -28,7 +28,7 @@ type Config struct {
 	FSConn string
 	Proxy  string
 
-	Port        int
+	Addr        string
 	Credentials map[string]string
 	Volumes     map[string]string
 }
@@ -93,12 +93,25 @@ func Serve(ctx context.Context, cfg *Config) error {
 	})
 
 	// Create server
+	split := strings.Split(cfg.Addr, ":")
+	if len(split) != 2 {
+		return fmt.Errorf("filter: invalid address: %s", cfg.Addr)
+	}
+	host := split[0]
+	port, err := strconv.Atoi(split[1])
+	if err != nil {
+		return fmt.Errorf("filter: invalid port: %s", split[1])
+	}
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Port),
+		Addr:    fmt.Sprintf("%s:%d", host, port),
 		Handler: mux,
 	}
 	go func() {
-		log.Printf("Starting server on http://localhost:%d", cfg.Port)
+		note := fmt.Sprintf("http://%s:%d", host, port)
+		if host == "" {
+			note = fmt.Sprintf("all interfaces http://localhost:%d", port)
+		}
+		log.Printf("Starting server on %s", note)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("failed to start server: %v\n", err)
 			cancel()
