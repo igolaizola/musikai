@@ -142,10 +142,9 @@ func Serve(ctx context.Context, cfg *Config) error {
 	// Handler to serve static files defined via volumes
 	if len(cfg.Volumes) > 0 {
 		for local, path := range cfg.Volumes {
-			if !strings.HasPrefix(path, "/") {
-				path = "/" + path
-			}
-			mux.Get(path, http.StripPrefix(path, http.FileServer(http.Dir(local))).ServeHTTP)
+			path = strings.Trim(path, "/")
+			path = fmt.Sprintf("/%s/", path)
+			mux.Get(path+"*", http.StripPrefix(path, http.FileServer(http.Dir(local))).ServeHTTP)
 		}
 	}
 
