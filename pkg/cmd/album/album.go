@@ -229,17 +229,28 @@ func Run(ctx context.Context, cfg *Config) error {
 		}
 		songs = songs[:n]
 
-		// Get random titles matching the type
-		titleFilters := []storage.Filter{
-			storage.Where("type LIKE ?", draft.Type),
-			storage.Where("state = ?", storage.Approved),
-		}
-		titles, err := store.ListTitles(ctx, 1, n, "random()", titleFilters...)
-		if err != nil {
-			return fmt.Errorf("album: couldn't get titles: %w", err)
-		}
-		if len(titles) < n {
-			return fmt.Errorf("album: not enough titles")
+		// Assign titles to songs
+		var titles []*storage.Title
+		for _, song := range songs {
+			if song.Title != "" {
+				continue
+			}
+			// Get random title matching the type
+			titleFilters := []storage.Filter{
+				storage.Where("type LIKE ?", draft.Type),
+				storage.Where("state = ?", storage.Approved),
+			}
+			// Order so the titles with a matching style are first
+			orderBy := fmt.Sprintf("CASE WHEN style = '%s' THEN 1 ELSE 2 END, random()", song.Style)
+			resp, err := store.ListTitles(ctx, 1, 1, orderBy, titleFilters...)
+			if err != nil {
+				return fmt.Errorf("album: couldn't get titles: %w", err)
+			}
+			if len(resp) == 0 {
+				return fmt.Errorf("album: not enough titles")
+			}
+			song.Title = resp[0].Title
+			titles = append(titles, resp[0])
 		}
 
 		debug("album: start download cover %s", cover.ID)
@@ -306,10 +317,9 @@ func Run(ctx context.Context, cfg *Config) error {
 		js, _ := json.MarshalIndent(album, "", "  ")
 		fmt.Println(string(js))
 
-		// Assign album id, order and title to songs
+		// Assign album id and order (title has already been assigned)
 		for i, song := range songs {
 			song.AlbumID = album.ID
-			song.Title = titles[i].Title
 			song.Order = i + 1
 			song.State = storage.Used
 			if err := store.SetSong(ctx, song); err != nil {

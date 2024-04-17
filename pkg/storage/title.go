@@ -15,6 +15,7 @@ type Title struct {
 	UpdatedAt time.Time
 
 	Type  string `gorm:"not null;default:''"`
+	Style string `gorm:"not null;default:''"`
 	Title string `gorm:"not null;default:''"`
 	State State  `gorm:"index"`
 }

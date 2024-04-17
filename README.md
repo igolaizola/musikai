@@ -223,6 +223,18 @@ db-conn: musikai.db
 input: /path/to/file.csv
 ```
 
+The file must have the following fields:
+
+ - Type is the classification of the songs.
+ - Style is the style of the song (optional).
+ - Title is the name of the song.
+
+```csv
+type,style,title
+jazz,nostalgic mood ambient jazz,Blue Moon Over The City
+jazz,nostalgic mood ambient jazz,The Night We Met
+```
+
 ### Draft
 
 The `draft` command is used to import album drafts from a csv or json file.

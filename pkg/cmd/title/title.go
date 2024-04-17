@@ -26,6 +26,7 @@ type Config struct {
 
 type title struct {
 	Type  string `json:"type" csv:"type"`
+	Style string `json:"style" csv:"style"`
 	Title string `json:"title" csv:"title"`
 }
 
@@ -129,6 +130,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		if err := store.SetTitle(ctx, &storage.Title{
 			ID:    ulid.Make().String(),
 			Type:  typ,
+			Style: t.Style,
 			Title: t.Title,
 			State: storage.Approved,
 		}); err != nil {
