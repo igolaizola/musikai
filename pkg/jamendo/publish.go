@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,8 +28,12 @@ type Album struct {
 type Song struct {
 	Instrumental bool
 	Title        string
+	Description  string
+	Genres       []string
+	Tags         []string
 	ISRC         string
 	File         string
+	BPM          float32
 }
 
 func (a *Album) Validate() error {
@@ -219,6 +224,7 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 		singleLookup[id] = struct{}{}
 	})
 
+	var songIDs []string
 	for _, song := range album.Songs {
 		// Upload song
 		name := filepath.Base(song.File)
@@ -259,8 +265,7 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 			return "", fmt.Errorf("jamendo: couldn't find song id")
 		}
 		log.Println("song id", songID)
-
-		// TODO: Edit song data here
+		songIDs = append(songIDs, songID)
 
 		// Click on select
 		if err := click(ctx, fmt.Sprintf(`li[data-jam-track-id="%s"] input.js-batch-actions`, songID)); err != nil {
@@ -283,10 +288,183 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 	if err := click(ctx, `#move_track_form input[value="move"]`); err != nil {
 		return "", err
 	}
+	time.Sleep(2000 * time.Millisecond)
 
 	// Click on the album tab
 	if err := click(ctx, "#albumsTab"); err != nil {
 		return "", err
+	}
+	time.Sleep(2000 * time.Millisecond)
+
+	// Click on the album tab
+	if err := click(ctx, "#albumsTab"); err != nil {
+		return "", err
+	}
+
+	// Edit songs
+	for i, songID := range songIDs {
+		song := album.Songs[i]
+
+		// Click on edit track
+		if err := click(ctx, fmt.Sprintf(`li[data-jam-track-id="%s"] .edit button`, songID)); err != nil {
+			return "", err
+		}
+
+		// Set name
+		if err := setValue(ctx, "#edit_track_form #name", song.Title); err != nil {
+			return "", err
+		}
+
+		// Set track number
+		if err := setValue(ctx, "#client_position", strconv.Itoa(i+1)); err != nil {
+			return "", err
+		}
+
+		// Set release date
+		if err := setValue(ctx, "#dateReleased", album.ReleaseDate.Format("2006-01-02")); err != nil {
+			return "", err
+		}
+
+		// Set ISRC code
+		if err := click(ctx, `label[for="isrcTrack-1"]`); err != nil {
+			return "", err
+		}
+		if err := setValue(ctx, "#isrcCodeTrack", album.UPC); err != nil {
+			return "", err
+		}
+		if err := click(ctx, "#js-save-isrc-code"); err != nil {
+			return "", err
+		}
+		time.Sleep(1000 * time.Millisecond)
+
+		// Click on I don't have a P.R.O. association
+		if err := click(ctx, `label[for="proTrack--1"]`); err != nil {
+			return "", err
+		}
+
+		// Click on Lyrics
+		if err := click(ctx, "#track_tab_menu_lyrics"); err != nil {
+			return "", err
+		}
+
+		if song.Instrumental {
+			// Click on Instrumental
+			if err := click(ctx, `label[for="voice_instrumental--1"]`); err != nil {
+				return "", err
+			}
+		} else {
+			return "", fmt.Errorf("jamendo: only instrumental songs are supported")
+		}
+
+		if song.Description != "" {
+			// Click on Description tab
+			if err := click(ctx, "#track_tab_menu_description"); err != nil {
+				return "", err
+			}
+			// Set description
+			if err := setValue(ctx, "#description", song.Description); err != nil {
+				return "", err
+			}
+		}
+
+		// Click on tags and metadata
+		if err := click(ctx, "#track_tab_menu_metadata"); err != nil {
+			return "", err
+		}
+
+		// Select speed
+		var speed int
+		switch {
+		case song.BPM <= 65:
+			speed = -2
+		case song.BPM <= 75:
+			speed = -1
+		case song.BPM <= 119:
+			speed = 0
+		case song.BPM <= 129:
+			speed = 1
+		case song.BPM > 129:
+			speed = 2
+		}
+		if err := selectOption(ctx, "#speed", strconv.Itoa(speed)); err != nil {
+			return "", err
+		}
+
+		doc, err = getHTML(ctx, "#edit_track_form")
+		if err != nil {
+			return "", err
+		}
+
+		// Obtain genres
+		genreLookup := map[string]string{}
+		doc.Find("#genres-element .option").Each(func(i int, s *goquery.Selection) {
+			name := s.Text()
+			v, ok := s.Attr("data-value")
+			if !ok {
+				log.Println("couldn't find data-value for genre", name)
+				return
+			}
+			genreLookup[name] = v
+			log.Println("genre", name, v)
+		})
+
+		// Obtain tags
+		tagLookup := map[string]string{}
+		doc.Find("#tags-element .option").Each(func(i int, s *goquery.Selection) {
+			name := s.Text()
+			v, ok := s.Attr("data-value")
+			if !ok {
+				log.Println("couldn't find data-value for tag", name)
+				return
+			}
+			tagLookup[name] = v
+			log.Println("tag", name, v)
+		})
+
+		// Set genres
+		for _, genre := range song.Genres {
+			/*_, ok := genreLookup[genre]
+			if !ok {
+				return "", fmt.Errorf("jamendo: couldn't find genre %s", genre)
+			}*/
+
+			// Type text in #genres-selectized
+			if err := typeValue(ctx, "#genres-selectized", genre+"\n"); err != nil {
+				return "", err
+			}
+			time.Sleep(200 * time.Millisecond)
+
+			// Click on option with data-value attribute equal to v
+			/*if err := click(ctx, fmt.Sprintf(`#genres-element .option[data-value="%s"]`, v)); err != nil {
+				return "", err
+			}*/
+		}
+
+		// Set tags
+		for _, tag := range song.Tags {
+			/*_, ok := tagLookup[tag]
+			if !ok {
+				return "", fmt.Errorf("jamendo: couldn't find tag %s", tag)
+			}*/
+
+			// Type text in #genres-selectized
+			if err := typeValue(ctx, "#tags-selectized", tag+"\n"); err != nil {
+				return "", err
+			}
+			time.Sleep(200 * time.Millisecond)
+
+			// Click on option with data-value attribute equal to v
+			/*if err := click(ctx, fmt.Sprintf(`#tags-element .option[data-value="%s"]`, v)); err != nil {
+				return "", err
+			}*/
+		}
+
+		// Click on OK
+		if err := click(ctx, "#edit_track_form #submit"); err != nil {
+			return "", err
+		}
+		time.Sleep(1000 * time.Millisecond)
+		log.Println("song", song.Title, "done")
 	}
 
 	// TODO: finalize album
@@ -349,6 +527,16 @@ func setValue(ctx context.Context, sel, val string) error {
 		chromedp.SetValue(sel, val, chromedp.ByQuery),
 	); err != nil {
 		return fmt.Errorf("jamendo: couldn't set value %s %s: %w", sel, val, err)
+	}
+	return nil
+}
+
+func typeValue(ctx context.Context, sel, val string) error {
+	if err := chromedp.Run(ctx,
+		chromedp.WaitVisible(sel, chromedp.ByQuery),
+		chromedp.SendKeys(sel, val, chromedp.ByQuery),
+	); err != nil {
+		return fmt.Errorf("jamendo: couldn't type value %s %s: %w", sel, val, err)
 	}
 	return nil
 }

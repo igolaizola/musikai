@@ -2,6 +2,7 @@ package jamendo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -10,11 +11,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/filestore"
 	"github.com/igolaizola/musikai/pkg/jamendo"
+	"github.com/igolaizola/musikai/pkg/sonoteller"
 	"github.com/igolaizola/musikai/pkg/sound/ffmpeg"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
@@ -246,11 +249,59 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 		if err := ffmpeg.Convert(ctx, mp3, wav); err != nil {
 			return fmt.Errorf("publish: couldn't convert mp3 to wav: %w", err)
 		}
+
+		// TODO: initialize with album genres
+		var genres []string
+		var tags []string
+		tempo := s.Generation.Tempo
+		description := s.Style
+
+		var analysis sonoteller.Analysis
+		if s.Classification != "" {
+			if err := json.Unmarshal([]byte(s.Classification), &analysis); err != nil {
+				return fmt.Errorf("publish: couldn't unmarshal classification: %w", err)
+			}
+			m := analysis.Music
+			tempo = float32(m.BPM)
+
+			instr := map[string]int{}
+			for _, i := range m.Instruments {
+				instr[i] = 100
+			}
+
+			var values []string
+			for _, src := range sortTags(m.Genres, instr, m.Styles, m.Moods) {
+				values = append(values, src)
+				v, t, ok := jamendo.GetField(src)
+				if !ok {
+					continue
+				}
+				switch t {
+				case jamendo.Genre:
+					genres = append(genres, v)
+				case jamendo.Tag:
+					tags = append(tags, v)
+				}
+			}
+			description = strings.Join(values, ", ")
+		}
+
+		if len(genres) > 2 {
+			genres = genres[:2]
+		}
+		if len(tags) > 2 {
+			tags = tags[:2]
+		}
+
 		dkSong := &jamendo.Song{
 			Instrumental: s.Instrumental,
 			Title:        s.Title,
 			ISRC:         s.ISRC,
 			File:         wav,
+			Genres:       genres,
+			Tags:         tags,
+			BPM:          tempo,
+			Description:  description,
 		}
 		jmAlbum.Songs = append(jmAlbum.Songs, dkSong)
 	}
@@ -271,4 +322,22 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 		}
 	*/
 	return nil
+}
+
+func sortTags(ms ...map[string]int) []string {
+	m := make(map[string]int)
+	for _, mm := range ms {
+		for k, v := range mm {
+			m[k] = v
+		}
+	}
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	// Sort from biggest to smallest
+	sort.Slice(keys, func(i, j int) bool {
+		return m[keys[i]] > m[keys[j]]
+	})
+	return keys
 }
