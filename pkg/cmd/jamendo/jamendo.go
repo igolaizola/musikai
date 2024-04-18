@@ -218,15 +218,21 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 		return fmt.Errorf("publish: couldn't download cover: %w", err)
 	}
 
+	var genres []string
+	genres = append(genres, album.PrimaryGenre)
+	if album.SecondaryGenre != "" {
+		genres = append(genres, album.SecondaryGenre)
+	}
+	description := strings.Join(genres, ", ")
+
 	// Create jamendo album data
 	jmAlbum := &jamendo.Album{
-		Artist:         album.Artist,
-		Title:          album.Title,
-		Cover:          cover,
-		PrimaryGenre:   album.PrimaryGenre,
-		SecondaryGenre: album.SecondaryGenre,
-		ReleaseDate:    album.PublishedAt,
-		UPC:            album.UPC,
+		Artist:      album.Artist,
+		Title:       album.Title,
+		Cover:       cover,
+		Description: description,
+		ReleaseDate: album.PublishedAt,
+		UPC:         album.UPC,
 	}
 
 	// Order songs by track number

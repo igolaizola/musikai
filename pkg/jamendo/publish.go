@@ -11,18 +11,18 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/chromedp"
 )
 
 type Album struct {
-	Artist         string
-	Title          string
-	PrimaryGenre   string
-	SecondaryGenre string
-	Cover          string
-	Songs          []*Song
-	ReleaseDate    time.Time
-	UPC            string
+	Artist      string
+	Title       string
+	Description string
+	Cover       string
+	Songs       []*Song
+	ReleaseDate time.Time
+	UPC         string
 }
 
 type Song struct {
@@ -43,7 +43,7 @@ func (a *Album) Validate() error {
 	if a.Title == "" {
 		return fmt.Errorf("jamendo: title is empty")
 	}
-	if a.PrimaryGenre == "" {
+	if a.Description == "" {
 		return fmt.Errorf("jamendo: primary genre is empty")
 	}
 	if a.ReleaseDate.IsZero() {
@@ -61,6 +61,18 @@ func (a *Album) Validate() error {
 	for i, song := range a.Songs {
 		if song.Title == "" {
 			return fmt.Errorf("jamendo: song %d title is empty", i+1)
+		}
+		if song.ISRC == "" {
+			return fmt.Errorf("jamendo: song %d ISRC is empty", i+1)
+		}
+		if song.BPM == 0 {
+			return fmt.Errorf("jamendo: song %d BPM is empty", i+1)
+		}
+		if len(song.Genres) == 0 {
+			return fmt.Errorf("jamendo: song %d genres is empty", i+1)
+		}
+		if len(song.Tags) == 0 {
+			return fmt.Errorf("jamendo: song %d tags is empty", i+1)
 		}
 		if song.File == "" {
 			return fmt.Errorf("jamendo: song %d file is empty", i+1)
@@ -183,6 +195,31 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 		return "", err
 	}
 	time.Sleep(1000 * time.Millisecond)
+
+	// Click on description
+	if err := click(ctx, "#album_tab_menu_description"); err != nil {
+		return "", err
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	// Set description in iframe
+	var iframes []*cdp.Node
+	if err := chromedp.Run(ctx, chromedp.Nodes(`iframe#LANGS_en_ifr`, &iframes, chromedp.ByQuery)); err != nil {
+		return "", err
+	}
+	if len(iframes) == 0 {
+		return "", fmt.Errorf("jamendo: couldn't find iframe")
+	}
+	iframe := iframes[0]
+	if err := chromedp.Run(ctx,
+		chromedp.WaitVisible(`#tinymce p`, chromedp.ByQuery, chromedp.FromNode(iframe)),
+		chromedp.Click(`#tinymce`, chromedp.ByQuery, chromedp.FromNode(iframe)),
+		chromedp.SendKeys(`#tinymce`, album.Description, chromedp.ByQuery, chromedp.FromNode(iframe)),
+	); err != nil {
+		return "", err
+	}
+
+	time.Sleep(200 * time.Millisecond)
 
 	// Click on Artwork
 	if err := click(ctx, "#album_tab_menu_artwork"); err != nil {
@@ -325,11 +362,16 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 			return "", err
 		}
 
+		// Set no UPC code
+		if err := click(ctx, `label[for="upcTrack--1"]`); err != nil {
+			return "", err
+		}
+
 		// Set ISRC code
 		if err := click(ctx, `label[for="isrcTrack-1"]`); err != nil {
 			return "", err
 		}
-		if err := setValue(ctx, "#isrcCodeTrack", album.UPC); err != nil {
+		if err := setValue(ctx, "#isrcCodeTrack", song.ISRC); err != nil {
 			return "", err
 		}
 		if err := click(ctx, "#js-save-isrc-code"); err != nil {
@@ -422,44 +464,66 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 		})
 
 		// Set genres
+		wait := 1000 * time.Millisecond
 		for _, genre := range song.Genres {
-			/*_, ok := genreLookup[genre]
-			if !ok {
-				return "", fmt.Errorf("jamendo: couldn't find genre %s", genre)
-			}*/
-
 			// Type text in #genres-selectized
-			if err := typeValue(ctx, "#genres-selectized", genre+"\n"); err != nil {
+			log.Println("typing genre", genre)
+			if err := typeValue(ctx, "#genres-selectized", genre); err != nil {
 				return "", err
 			}
-			time.Sleep(200 * time.Millisecond)
-
-			// Click on option with data-value attribute equal to v
-			/*if err := click(ctx, fmt.Sprintf(`#genres-element .option[data-value="%s"]`, v)); err != nil {
+			time.Sleep(wait)
+			if err := click(ctx, "#genres-element .option.active"); err != nil {
 				return "", err
-			}*/
+			}
+			time.Sleep(wait)
+			doc, err := getHTML(ctx, "select#genres")
+			if err != nil {
+				return "", err
+			}
+			var found bool
+			doc.Find("option").Each(func(i int, s *goquery.Selection) {
+				log.Println("option", s.Text())
+				if s.Text() != genre {
+					return
+				}
+				found = true
+			})
+			if !found {
+				return "", fmt.Errorf("jamendo: couldn't find genre %s", genre)
+			}
 		}
 
 		// Set tags
 		for _, tag := range song.Tags {
-			/*_, ok := tagLookup[tag]
-			if !ok {
-				return "", fmt.Errorf("jamendo: couldn't find tag %s", tag)
-			}*/
-
-			// Type text in #genres-selectized
-			if err := typeValue(ctx, "#tags-selectized", tag+"\n"); err != nil {
+			// Type text in #tags-selectized
+			log.Println("typing tag", tag)
+			if err := typeValue(ctx, "#tags-selectized", tag); err != nil {
 				return "", err
 			}
-			time.Sleep(200 * time.Millisecond)
-
-			// Click on option with data-value attribute equal to v
-			/*if err := click(ctx, fmt.Sprintf(`#tags-element .option[data-value="%s"]`, v)); err != nil {
+			time.Sleep(wait)
+			if err := click(ctx, "#tags-element .option.active"); err != nil {
 				return "", err
-			}*/
+			}
+			time.Sleep(wait)
+			doc, err := getHTML(ctx, "select#tags")
+			if err != nil {
+				return "", err
+			}
+			var found bool
+			doc.Find("option").Each(func(i int, s *goquery.Selection) {
+				log.Println("option", s.Text())
+				if s.Text() != tag {
+					return
+				}
+				found = true
+			})
+			if !found {
+				return "", fmt.Errorf("jamendo: couldn't find tags %s", tag)
+			}
 		}
 
 		// Click on OK
+		log.Println("clicking OK")
 		if err := click(ctx, "#edit_track_form #submit"); err != nil {
 			return "", err
 		}
@@ -468,7 +532,7 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 	}
 
 	// TODO: finalize album
-
+	fmt.Println("done")
 	<-ctx.Done()
 	return "", nil
 }
