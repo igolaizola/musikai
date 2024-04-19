@@ -293,7 +293,6 @@ func Serve(ctx context.Context, cfg *Config) error {
 	})
 	r.Put("/api/songs/{id}/select/{gid}", func(w http.ResponseWriter, r *http.Request) {
 		gid := chi.URLParam(r, "gid")
-		fmt.Println("gid:", gid)
 		updateSong(w, r, store, func(s *storage.Song) *storage.Song {
 			s.Generation.ID = gid
 			return s
@@ -309,7 +308,6 @@ func Serve(ctx context.Context, cfg *Config) error {
 		filters := []storage.Filter{}
 		draftFilters := []storage.Filter{}
 		if typ := r.URL.Query().Get("type"); typ != "" {
-			fmt.Println("type:", typ)
 			draftFilters = append(draftFilters, storage.Where(fmt.Sprintf("type LIKE '%s'", typ)))
 		}
 
@@ -348,7 +346,6 @@ func Serve(ctx context.Context, cfg *Config) error {
 			http.Error(w, "Not drafts found", http.StatusNotFound)
 			return
 		}
-		log.Println("covers for draft:", drafts[0].Title)
 		draft := drafts[0]
 		filters = append(filters, storage.Where("draft_id = ?", draft.ID))
 
