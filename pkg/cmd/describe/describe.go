@@ -211,6 +211,7 @@ func describe(ctx context.Context, song *storage.Song, debug func(string, ...any
 	}
 	debug("describe: %s", description)
 	song.Description = description
+	song.Described = true
 	if err := store.SetSong(ctx, song); err != nil {
 		return fmt.Errorf("describe: couldn't update song: %w", err)
 	}
