@@ -325,18 +325,14 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 	if err := click(ctx, `#move_track_form input[value="move"]`); err != nil {
 		return "", err
 	}
-	time.Sleep(2000 * time.Millisecond)
+
+	time.Sleep(10 * time.Second)
 
 	// Click on the album tab
 	if err := click(ctx, "#albumsTab"); err != nil {
 		return "", err
 	}
-	time.Sleep(2000 * time.Millisecond)
-
-	// Click on the album tab
-	if err := click(ctx, "#albumsTab"); err != nil {
-		return "", err
-	}
+	time.Sleep(200 * time.Millisecond)
 
 	// Edit songs
 	for i, songID := range songIDs {
@@ -489,7 +485,8 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 				found = true
 			})
 			if !found {
-				return "", fmt.Errorf("jamendo: couldn't find genre %s", genre)
+				log.Printf("❌ couldn't find genre %q (%s - %s)\n", genre, album.Title, song.Title)
+				// return "", fmt.Errorf("jamendo: couldn't find genre %s", genre)
 			}
 		}
 
@@ -518,7 +515,8 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 				found = true
 			})
 			if !found {
-				return "", fmt.Errorf("jamendo: couldn't find tags %s", tag)
+				log.Printf("❌ couldn't find tag %q (%s - %s)\n", tag, album.Title, song.Title)
+				// return "", fmt.Errorf("jamendo: couldn't find tags %s", tag)
 			}
 		}
 
@@ -532,9 +530,9 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 	}
 
 	// TODO: finalize album
-	fmt.Println("done")
-	<-ctx.Done()
-	return "", nil
+	fmt.Println("done, waiting for 1 minute")
+	time.Sleep(1 * time.Minute)
+	return albumID, nil
 }
 
 func getHTML(ctx context.Context, sel string) (*goquery.Document, error) {

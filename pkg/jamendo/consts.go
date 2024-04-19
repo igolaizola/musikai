@@ -628,7 +628,7 @@ func GetField(v string) (string, FieldType, bool) {
 var convert = map[string]string{
 	// genres
 	"alternative rock":  "alternativerock",
-	"chill":             "chill (chillout)",
+	"chill":             "Chillout",
 	"easy listening":    "easylistening",
 	"electro":           "Electronic",
 	"fusion":            "jazzfusion",

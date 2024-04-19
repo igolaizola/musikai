@@ -235,14 +235,12 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 		UPC:         album.UPC,
 	}
 
-	// Order songs by track number
+	// Order songs by track number from 1 to N
 	sort.Slice(songs, func(i, j int) bool {
 		return songs[i].Order < songs[j].Order
 	})
 
 	// Create jamendo song data
-	// TODO: limit to 1 song for now
-	songs = songs[:1]
 	for _, s := range songs {
 		// Download song
 		name := filestore.MP3(s.ID)
@@ -260,7 +258,7 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 		var genres []string
 		var tags []string
 		tempo := s.Generation.Tempo
-		description := s.Style
+		description := s.Description
 
 		var analysis sonoteller.Analysis
 		if s.Classification != "" {
@@ -289,7 +287,15 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 					tags = append(tags, v)
 				}
 			}
-			description = strings.Join(values, ", ")
+			// Use description from classification if not set
+			if description == "" {
+				description = strings.Join(values, ", ")
+			}
+		}
+
+		// Use style if description is empty
+		if description == "" {
+			description = s.Style
 		}
 
 		if len(genres) > 2 {
@@ -317,16 +323,15 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 	if err != nil {
 		return fmt.Errorf("publish: couldn't jamendo publish %s: %w", album.ID, err)
 	}
-	_ = jmID
+
 	// Update album
-	/*
-		album.JamendoID = jmID
-		album.PublishedAt = time.Now().UTC()
-		album.State = storage.Used
-		if err := store.SetAlbum(ctx, album); err != nil {
-			return fmt.Errorf("publish: couldn't set album %s %s: %w", album.ID, dkID, err)
-		}
-	*/
+	album.JamendoID = jmID
+	album.JamendoAt = time.Now().UTC()
+	album.State = storage.Used
+	if err := store.SetAlbum(ctx, album); err != nil {
+		return fmt.Errorf("publish: couldn't set album %s %s: %w", album.ID, jmID, err)
+	}
+
 	return nil
 }
 
