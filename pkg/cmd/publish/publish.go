@@ -200,6 +200,13 @@ func publish(ctx context.Context, cfg *Config, b *distrokid.Browser, store *stor
 	if err != nil {
 		return fmt.Errorf("publish: couldn't get songs: %w", err)
 	}
+	lookup := map[string]struct{}{}
+	for _, s := range songs {
+		if _, ok := lookup[s.Title]; ok {
+			return fmt.Errorf("publish: duplicated song %s", s.Title)
+		}
+		lookup[s.Title] = struct{}{}
+	}
 
 	// Download cover
 	name := filestore.JPG(album.ID)
