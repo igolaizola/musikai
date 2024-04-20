@@ -240,16 +240,20 @@ func drawStringWithShadowAndContrast(img draw.Image, label string, face font.Fac
 	return nil
 }*/
 
-// Adjust this constant to change the desired text width as a percentage of the image width
-const textWidthPercentage = 50 // Example: 50%
-
 // drawStringWithDynamicFontSize draws a string onto an image with a dynamically adjusted font size so that the text occupies a given percentage of the image size.
 func drawStringWithDynamicFontSize(img draw.Image, label string, getFace func(float64) (font.Face, error), position Position, initialFontSize float64) error {
+	// Adjust this to change the desired text width as a percentage of the image width
+	firstLine := strings.Split(label, "\n")[0]
+	textWidthPercentage := len(firstLine) * 2
+	if textWidthPercentage > 50 {
+		textWidthPercentage = 50
+	}
+
 	imgWidth := img.Bounds().Dx()
 	imgHeight := img.Bounds().Dy()
 
 	lines := strings.Split(label, "\n")
-	desiredTextWidth := int(float64(imgWidth) * (textWidthPercentage / 100.0))
+	desiredTextWidth := int(float64(imgWidth) * (float64(textWidthPercentage) / 100.0))
 
 	// Variables to keep track of the best matching font size and its measurements
 	var face font.Face

@@ -560,6 +560,7 @@ func newAlbumCommand() *ffcli.Command {
 	fs.IntVar(&cfg.MinSongs, "min-songs", 6, "minimum number of songs")
 	fs.IntVar(&cfg.MaxSongs, "max-songs", 10, "maximum number of songs")
 	fs.StringVar(&cfg.Genres, "genres", "", "genres file to use (.csv or .json) fields: type,primary,secondary")
+	fs.BoolVar(&cfg.ReuseCover, "reuse-cover", false, "reuse the same album cover (only for volume albums)")
 
 	return &ffcli.Command{
 		Name:       cmd,

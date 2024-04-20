@@ -31,13 +31,14 @@ type Config struct {
 	Limit   int
 	Proxy   string
 
-	Type     string
-	MinSongs int
-	MaxSongs int
-	Artist   string
-	Overlay  string
-	Font     string
-	Genres   string
+	Type       string
+	MinSongs   int
+	MaxSongs   int
+	Artist     string
+	Overlay    string
+	Font       string
+	Genres     string
+	ReuseCover bool
 }
 
 type typeGenres struct {
@@ -179,20 +180,26 @@ func Run(ctx context.Context, cfg *Config) error {
 			}
 			if len(albums) > 0 {
 				volume = albums[0].Volume + 1
-				// Get cover from last volume
-				cover, err = store.GetCover(ctx, albums[0].CoverID)
-				if err != nil {
-					return fmt.Errorf("album: couldn't get cover: %w", err)
+				if cfg.ReuseCover {
+					// Get cover from last volume
+					cover, err = store.GetCover(ctx, albums[0].CoverID)
+					if err != nil {
+						return fmt.Errorf("album: couldn't get cover: %w", err)
+					}
 				}
 			}
 		}
 
 		if cover == nil {
+			fmt.Println(draft.Title, draft.Volumes)
 			// Get random cover matching the draft title
 			coverFilters := []storage.Filter{
 				storage.Where("state = ?", storage.Approved),
 				storage.Where("upscaled = ?", true),
 				storage.Where("title = ?", draft.Title),
+			}
+			if draft.Volumes > 0 {
+				coverFilters = append(coverFilters, storage.Where("NOT EXISTS (SELECT id FROM albums WHERE cover_id = covers.id)"))
 			}
 			covers, err := store.ListCovers(ctx, 1, 1, "likes desc, random()", coverFilters...)
 			if err != nil {
@@ -274,7 +281,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			if subtitle != "" {
 				subtitle += "\n"
 			}
-			subtitle = fmt.Sprintf("%sVol %d", subtitle, volume)
+			subtitle = fmt.Sprintf("%sVol. %d", subtitle, volume)
 		}
 		if subtitle != "" {
 			log.Println("Adding subtitle to cover", subtitle)
