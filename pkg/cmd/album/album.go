@@ -238,6 +238,7 @@ func Run(ctx context.Context, cfg *Config) error {
 
 		// Assign titles to songs
 		var titles []*storage.Title
+		var inTitles []string
 		for _, song := range songs {
 			if song.Title != "" {
 				continue
@@ -246,6 +247,9 @@ func Run(ctx context.Context, cfg *Config) error {
 			titleFilters := []storage.Filter{
 				storage.Where("type LIKE ?", draft.Type),
 				storage.Where("state = ?", storage.Approved),
+			}
+			if len(inTitles) > 0 {
+				titleFilters = append(titleFilters, storage.Where("title NOT IN (?)", inTitles))
 			}
 			// Order so the titles with a matching style are first
 			orderBy := fmt.Sprintf("CASE WHEN style = '%s' THEN 1 ELSE 2 END, random()", song.Style)
@@ -258,6 +262,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			}
 			song.Title = resp[0].Title
 			titles = append(titles, resp[0])
+			inTitles = append(inTitles, resp[0].Title)
 		}
 
 		debug("album: start download cover %s", cover.ID)
