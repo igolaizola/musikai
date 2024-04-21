@@ -358,7 +358,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 		var assets []*Asset
 		for _, cover := range covers {
 			thumbnail := strings.Replace(cover.URL(), "cdn.discordapp.com", "media.discordapp.net", 1)
-			thumbnail += "?width=224&height=224"
+			thumbnail += "?width=300&height=300"
 			assets = append(assets, &Asset{
 				ID:           cover.ID,
 				URL:          cover.URL(),
