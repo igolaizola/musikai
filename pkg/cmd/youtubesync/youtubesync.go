@@ -130,7 +130,7 @@ func Run(ctx context.Context, cfg *Config) error {
 
 			// Get next channel
 			if len(channels) == 0 {
-				break
+				return errors.New("download: no more channels to process")
 			}
 			channel := channels[0]
 			channels = channels[1:]

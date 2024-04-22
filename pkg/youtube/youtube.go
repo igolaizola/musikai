@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"log"
 	"time"
 
 	"google.golang.org/api/option"
@@ -44,9 +45,13 @@ func (c *Client) GetVideos(ctx context.Context, channelID string, after time.Tim
 
 	var videos []Video
 	var pageToken string
+	var page int
 	for {
 		if pageToken != "" {
 			call = call.PageToken(pageToken)
+		}
+		if c.debug {
+			log.Println("youtube: fetching videos", page+1, channelID, pageToken)
 		}
 		resp, err := call.Do()
 		if err != nil {
@@ -54,7 +59,7 @@ func (c *Client) GetVideos(ctx context.Context, channelID string, after time.Tim
 		}
 		if c.debug {
 			b, _ := resp.MarshalJSON()
-			fmt.Println("youtube:", string(b))
+			log.Println("youtube:", string(b))
 		}
 
 		for _, item := range resp.Items {
@@ -68,6 +73,7 @@ func (c *Client) GetVideos(ctx context.Context, channelID string, after time.Tim
 			break
 		}
 		pageToken = resp.NextPageToken
+		page++
 	}
 	return videos, nil
 }

@@ -106,6 +106,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 
 		// Check status code
 		var errStatus errStatusCode
+		var appErr *appError
 		if errors.As(err, &errStatus) {
 			switch int(errStatus) {
 			case http.StatusBadGateway, http.StatusGatewayTimeout, 520:
@@ -118,6 +119,15 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 				err = nil
 				retry = true
 			default:
+				return nil, err
+			}
+		} else if errors.As(err, &appErr) {
+			msg := strings.ToLower(appErr.Message)
+			if strings.Contains(msg, "quota") {
+				maxAttempts = 1000
+				c.newIP()
+				retry = true
+			} else {
 				return nil, err
 			}
 		}
@@ -147,6 +157,14 @@ type errStatusCode int
 
 func (e errStatusCode) Error() string {
 	return fmt.Sprintf("%d", e)
+}
+
+type appError struct {
+	Message string `json:"error"`
+}
+
+func (e *appError) Error() string {
+	return fmt.Sprintf("sonoteller: %s", e.Message)
 }
 
 func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any) ([]byte, error) {
@@ -199,6 +217,10 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 		return nil, fmt.Errorf("sonoteller: %s %s returned (%s): %w", method, u, errMessage, errStatusCode(resp.StatusCode))
 	}
 	if out != nil {
+		var appErr appError
+		if err := json.Unmarshal(respBody, &appErr); err == nil && appErr.Message != "" {
+			return nil, &appErr
+		}
 		if err := json.Unmarshal(respBody, out); err != nil {
 			// Write response body to file for debugging.
 			_ = os.WriteFile(fmt.Sprintf("logs/debug_%s.json", time.Now().Format("20060102_150405")), respBody, 0644)
