@@ -124,8 +124,8 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 		} else if errors.As(err, &appErr) {
 			msg := strings.ToLower(appErr.Message)
 			if strings.Contains(msg, "quota") {
-				maxAttempts = 1000
 				c.newIP()
+				err = nil
 				retry = true
 			} else {
 				return nil, err
