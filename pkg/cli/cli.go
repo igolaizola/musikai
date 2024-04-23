@@ -741,6 +741,8 @@ func newSyncCommand() *ffcli.Command {
 	fs.DurationVar(&cfg.WaitMax, "wait-max", 1*time.Minute, "maximum wait time between songs")
 
 	fs.StringVar(&cfg.Account, "account", "", "distrokid account to use")
+	fs.StringVar(&cfg.SpotifyID, "spotify-id", "", "spotify client id")
+	fs.StringVar(&cfg.SpotifySecret, "spotify-secret", "", "spotify client secret")
 
 	return &ffcli.Command{
 		Name:       cmd,

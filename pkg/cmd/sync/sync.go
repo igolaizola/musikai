@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/distrokid"
+	"github.com/igolaizola/musikai/pkg/spotify"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
 
@@ -27,6 +29,9 @@ type Config struct {
 	WaitMax     time.Duration
 	Limit       int
 	Account     string
+
+	SpotifyID     string
+	SpotifySecret string
 }
 
 // Run launches the song generation process.
@@ -65,17 +70,29 @@ func Run(ctx context.Context, cfg *Config) error {
 			Proxy: http.ProxyURL(u),
 		}
 	}
-	client := distrokid.New(&distrokid.Config{
+
+	if cfg.SpotifyID == "" || cfg.SpotifySecret == "" {
+		return errors.New("sync: missing spotify credentials")
+	}
+	spClient := spotify.New(&spotify.Config{
+		Wait:         1 * time.Second,
+		Debug:        cfg.Debug,
+		Client:       httpClient,
+		ClientID:     cfg.SpotifyID,
+		ClientSecret: cfg.SpotifySecret,
+	})
+
+	dkClient := distrokid.New(&distrokid.Config{
 		Wait:        4 * time.Second,
 		Debug:       cfg.Debug,
 		Client:      httpClient,
 		CookieStore: store.NewCookieStore("distrokid", cfg.Account),
 	})
-	if err := client.Start(ctx); err != nil {
+	if err := dkClient.Start(ctx); err != nil {
 		return fmt.Errorf("sync: couldn't start distrokid client: %w", err)
 	}
 	defer func() {
-		if err := client.Stop(context.Background()); err != nil {
+		if err := dkClient.Stop(context.Background()); err != nil {
 			log.Printf("sync: couldn't stop distrokid client: %v\n", err)
 		}
 	}()
@@ -142,7 +159,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			filters := []storage.Filter{
 				storage.Where("id > ?", currID),
 				storage.Where("state = ?", storage.Used),
-				storage.Where("upc = ''"),
+				storage.Where("spotify_id = ''"),
 			}
 
 			// Get next image
@@ -166,7 +183,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			go func() {
 				defer wg.Done()
 				debug("sync: start %s %s", album.ID, album.Title)
-				err := syncAlbum(ctx, client, store, album)
+				err := syncAlbum(ctx, dkClient, spClient, store, album)
 				if err != nil {
 					log.Println(err)
 				}
@@ -177,8 +194,8 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func syncAlbum(ctx context.Context, c *distrokid.Client, store *storage.Store, album *storage.Album) error {
-	resp, err := c.Album(ctx, album.DistrokidID)
+func syncAlbum(ctx context.Context, dk *distrokid.Client, sp *spotify.Client, store *storage.Store, album *storage.Album) error {
+	resp, err := dk.Album(ctx, album.DistrokidID)
 	if err != nil {
 		return fmt.Errorf("sync: album %s: %w", album.DistrokidID, err)
 	}
@@ -199,16 +216,52 @@ func syncAlbum(ctx context.Context, c *distrokid.Client, store *storage.Store, a
 		return fmt.Errorf("sync: album %s songs mismatch: %d != %d", album.DistrokidID, len(songs), len(resp.ISRCs))
 	}
 
+	// Get spotify tracks
+	tracks, err := sp.AlbumTracks(ctx, resp.SpotifyID)
+	if err != nil {
+		return fmt.Errorf("sync: couldn't get album tracks: %w", err)
+	}
+
+	// Check if all tracks are in spotify
+	if len(tracks) != len(songs) {
+		return fmt.Errorf("sync: album %s tracks mismatch: %d != %d", album.SpotifyID, len(tracks), len(songs))
+	}
+
+	// Order tracks by track number
+	sort.Slice(tracks, func(i, j int) bool {
+		return tracks[i].Number < tracks[j].Number
+	})
+
+	// Set song values
 	for i, song := range songs {
+		if tracks[i].Name != song.Title {
+			return fmt.Errorf("sync: album %s track mismatch: %s != %s", album.SpotifyID, tracks[i].Name, song.Title)
+		}
+		song.SpotifyID = tracks[i].ID
 		song.ISRC = resp.ISRCs[i]
+		analysis, err := sp.AudioFeatures(ctx, song.SpotifyID)
+		if err != nil {
+			return fmt.Errorf("sync: couldn't get song analysis: %w", err)
+		}
+		js, err := json.Marshal(analysis)
+		if err != nil {
+			return fmt.Errorf("sync: couldn't marshal song analysis: %w", err)
+		}
+		song.SpotifyAnalysis = string(js)
+	}
+
+	// Update on database
+	for _, song := range songs {
 		if err := store.SetSong(ctx, song); err != nil {
 			return fmt.Errorf("sync: couldn't set song: %w", err)
 		}
 	}
 	album.UPC = resp.UPC
+	album.SpotifyID = resp.SpotifyID
+	album.AppleID = resp.AppleID
 	if err := store.SetAlbum(ctx, album); err != nil {
 		return fmt.Errorf("sync: couldn't set album: %w", err)
 	}
-	log.Println("sync: album synced", album.ID, album.Title, album.UPC)
+	log.Println("sync: album synced", album.ID, album.Title, album.UPC, album.SpotifyID, album.AppleID)
 	return nil
 }

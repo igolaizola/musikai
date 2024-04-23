@@ -132,7 +132,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			filters := []storage.Filter{
 				storage.Where("classified = ?", false),
 				storage.Where("state = ?", storage.Used),
-				storage.Where("youtube != ''"),
+				storage.Where("youtube_id != ''"),
 				storage.Where("songs.id > ?", currID),
 			}
 			if cfg.Type != "" {
@@ -171,10 +171,10 @@ func Run(ctx context.Context, cfg *Config) error {
 }
 
 func classify(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, sonoClient *sonoteller.Client) error {
-	if song.Youtube == "" {
+	if song.YoutubeID == "" {
 		return fmt.Errorf("classify: song %s has no youtube id", song.ID)
 	}
-	analysis, err := sonoClient.Analyze(ctx, song.Youtube)
+	analysis, err := sonoClient.Analyze(ctx, song.YoutubeID)
 	if err != nil {
 		return fmt.Errorf("classify: couldn't analyze song %s: %w", song.ID, err)
 	}

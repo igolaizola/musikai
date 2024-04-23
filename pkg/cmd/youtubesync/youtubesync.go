@@ -169,13 +169,13 @@ func syncChannel(ctx context.Context, c *youtube.Client, store *storage.Store, f
 			continue
 		}
 		song := songs[0]
-		if song.Youtube != "" {
-			if song.Youtube != video.ID {
-				log.Printf("youtubesync: song %q has different youtube id %q != %q\n", song.Title, song.Youtube, video.ID)
+		if song.YoutubeID != "" {
+			if song.YoutubeID != video.ID {
+				log.Printf("youtubesync: song %q has different youtube id %q != %q\n", song.Title, song.YoutubeID, video.ID)
 			}
 			continue
 		}
-		song.Youtube = video.ID
+		song.YoutubeID = video.ID
 		if err := store.SetSong(ctx, song); err != nil {
 			return fmt.Errorf("youtubesync: couldn't update song: %w", err)
 		}

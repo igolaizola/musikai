@@ -184,7 +184,7 @@ type metadata struct {
 }
 
 func describe(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, openaiClient *openai.Client) error {
-	if song.Youtube == "" {
+	if song.YoutubeID == "" {
 		return fmt.Errorf("describe: song %s has no youtube id", song.ID)
 	}
 	var analysis sonoteller.Analysis

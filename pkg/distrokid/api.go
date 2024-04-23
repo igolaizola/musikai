@@ -62,9 +62,11 @@ func (c *Client) Auth(ctx context.Context) error {
 }
 
 type AlbumResponse struct {
-	UUID  string   `json:"uuid"`
-	UPC   string   `json:"upc"`
-	ISRCs []string `json:"isrcs"`
+	UUID      string   `json:"uuid"`
+	UPC       string   `json:"upc"`
+	AppleID   string   `json:"apple_id"`
+	SpotifyID string   `json:"spotify_id"`
+	ISRCs     []string `json:"isrcs"`
 }
 
 func (c *Client) Album(ctx context.Context, uuid string) (*AlbumResponse, error) {
@@ -84,6 +86,27 @@ func (c *Client) Album(ctx context.Context, uuid string) (*AlbumResponse, error)
 		return nil, fmt.Errorf("distrokid: album UPC is empty")
 	}
 
+	// Search URLs
+	var spotifyID string
+	var appleID string
+	doc.Find("td a[target=_blank]").Each(func(i int, s *goquery.Selection) {
+		href, _ := s.Attr("href")
+		switch {
+		case strings.HasPrefix(href, "https://open.spotify.com/album/"):
+			spotifyID = strings.ReplaceAll(href, "https://open.spotify.com/album/", "")
+		case strings.HasPrefix(href, "https://music.apple.com/"):
+			idx := strings.Index(href, "/album/")
+			appleID = href[idx+len("/album/"):]
+			appleID = strings.Split(appleID, "?")[0]
+		}
+	})
+	if spotifyID == "" {
+		return nil, fmt.Errorf("distrokid: couldn't find Spotify ID")
+	}
+	if appleID == "" {
+		return nil, fmt.Errorf("distrokid: couldn't find Apple ID")
+	}
+
 	// Search ISCRs
 	var isrcs []string
 	doc.Find(".myISRC").Each(func(i int, s *goquery.Selection) {
@@ -101,8 +124,10 @@ func (c *Client) Album(ctx context.Context, uuid string) (*AlbumResponse, error)
 	}
 
 	return &AlbumResponse{
-		UUID:  uuid,
-		UPC:   upc,
-		ISRCs: isrcs,
+		UUID:      uuid,
+		UPC:       upc,
+		AppleID:   appleID,
+		SpotifyID: spotifyID,
+		ISRCs:     isrcs,
 	}, nil
 }

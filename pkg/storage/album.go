@@ -27,6 +27,8 @@ type Album struct {
 
 	DistrokidID string `gorm:"not null;default:''"`
 	UPC         string `gorm:"not null;default:''"`
+	SpotifyID   string `gorm:"not null;default:''"`
+	AppleID     string `gorm:"not null;default:''"`
 	JamendoID   string `gorm:"not null;default:''"`
 	JamendoAt   time.Time
 	PublishedAt time.Time

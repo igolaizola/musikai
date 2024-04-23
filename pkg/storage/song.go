@@ -35,11 +35,13 @@ type Song struct {
 	GenerationID *string
 	Generation   *Generation `gorm:"foreignKey:GenerationID"`
 
-	Title   string `gorm:"not null;default:''"`
-	AlbumID string `gorm:"index,not null;default:''"`
-	Order   int    `gorm:"not null;default:0"`
-	ISRC    string `gorm:"not null;default:''"`
-	Youtube string `gorm:"not null;default:''"`
+	Title           string `gorm:"not null;default:''"`
+	AlbumID         string `gorm:"index,not null;default:''"`
+	Order           int    `gorm:"not null;default:0"`
+	ISRC            string `gorm:"not null;default:''"`
+	YoutubeID       string `gorm:"not null;default:''"`
+	SpotifyID       string `gorm:"not null;default:''"`
+	SpotifyAnalysis string `gorm:"not null;default:''"`
 
 	Classification string `gorm:"not null;default:''"`
 	Classified     bool   `gorm:"not null;default:false"`
