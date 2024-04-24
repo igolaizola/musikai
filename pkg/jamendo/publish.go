@@ -348,7 +348,11 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (*Pub
 		return nil, err
 	}
 
-	time.Sleep(5 * time.Second)
+	wait := time.Second * time.Duration(len(album.Songs))
+	if wait < 5*time.Second {
+		wait = 5 * time.Second
+	}
+	time.Sleep(wait)
 
 	// Refresh the page
 	if err := chromedp.Run(ctx,
