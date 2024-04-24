@@ -19,6 +19,7 @@ import (
 	"github.com/igolaizola/musikai/pkg/jamendo"
 	"github.com/igolaizola/musikai/pkg/sonoteller"
 	"github.com/igolaizola/musikai/pkg/sound/ffmpeg"
+	"github.com/igolaizola/musikai/pkg/spotify"
 	"github.com/igolaizola/musikai/pkg/storage"
 )
 
@@ -39,6 +40,7 @@ type Config struct {
 	ArtistName string
 	ArtistID   int
 	Type       string
+	Albums     string
 }
 
 // Run launches the song generation process.
@@ -171,6 +173,10 @@ func Run(ctx context.Context, cfg *Config) error {
 			if cfg.Type != "" {
 				filters = append(filters, storage.Where("type LIKE ?", cfg.Type))
 			}
+			if cfg.Albums != "" {
+				albums := strings.Split(cfg.Albums, ",")
+				filters = append(filters, storage.Where("id IN (?)", albums))
+			}
 
 			// Get next image
 			if len(albums) == 0 {
@@ -245,7 +251,7 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 		// Download song
 		name := filestore.MP3(s.ID)
 		mp3 := filepath.Join(os.TempDir(), name)
-		if err := fs.GetMP3(ctx, mp3, s.ID); err != nil {
+		if err := fs.GetMP3(ctx, mp3, *s.GenerationID); err != nil {
 			return fmt.Errorf("publish: couldn't download song: %w", err)
 		}
 		// Convert mp3 to wav
@@ -298,6 +304,13 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 			description = s.Style
 		}
 
+		var spotifyAnalysis spotify.Analysis
+		if s.SpotifyAnalysis != "" {
+			if err := json.Unmarshal([]byte(s.SpotifyAnalysis), &spotifyAnalysis); err != nil {
+				return fmt.Errorf("publish: couldn't unmarshal spotify analysis: %w", err)
+			}
+		}
+
 		if len(genres) > 2 {
 			genres = genres[:2]
 		}
@@ -314,22 +327,33 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 			Tags:         tags,
 			BPM:          tempo,
 			Description:  description,
+			Energy:       spotifyAnalysis.Energy,
+			Mood:         spotifyAnalysis.Valence,
+			Acousticness: spotifyAnalysis.Acousticness,
 		}
 		jmAlbum.Songs = append(jmAlbum.Songs, dkSong)
 	}
 
 	// Publish album
-	jmID, err := b.Publish(ctx, jmAlbum, cfg.Auto)
+	pub, err := b.Publish(ctx, jmAlbum, cfg.Auto)
 	if err != nil {
 		return fmt.Errorf("publish: couldn't jamendo publish %s: %w", album.ID, err)
 	}
 
+	// Update songs
+	for i, s := range songs {
+		s.JamendoID = pub.SongIDs[i]
+		if err := store.SetSong(ctx, s); err != nil {
+			return fmt.Errorf("publish: couldn't set song %s %s: %w", s.ID, pub.SongIDs, err)
+		}
+	}
+
 	// Update album
-	album.JamendoID = jmID
+	album.JamendoID = pub.AlbumID
 	album.JamendoAt = time.Now().UTC()
 	album.State = storage.Used
 	if err := store.SetAlbum(ctx, album); err != nil {
-		return fmt.Errorf("publish: couldn't set album %s %s: %w", album.ID, jmID, err)
+		return fmt.Errorf("publish: couldn't set album %s %s: %w", album.ID, pub.AlbumID, err)
 	}
 
 	return nil

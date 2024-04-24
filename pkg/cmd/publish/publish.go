@@ -216,13 +216,7 @@ func publish(ctx context.Context, cfg *Config, b *distrokid.Browser, store *stor
 	}
 
 	// Create album title
-	title := album.Title
-	if album.Subtitle != "" {
-		title += " - " + album.Subtitle
-	}
-	if album.Volume > 0 {
-		title += fmt.Sprintf(", Vol. %d", album.Volume)
-	}
+	title := album.FullTitle()
 
 	// Create distrokid album data
 	dkAlbum := &distrokid.Album{

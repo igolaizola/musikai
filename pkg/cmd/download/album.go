@@ -186,13 +186,7 @@ func downloadCover(ctx context.Context, albumID string, debug func(string, ...an
 		return "", err
 	}
 
-	name := album.Title
-	if album.Subtitle != "" {
-		name += " - " + album.Subtitle
-	}
-	if album.Volume > 0 {
-		name += fmt.Sprintf(" (Vol. %d)", album.Volume)
-	}
+	name := album.FullTitle()
 	name += " - " + album.Artist
 
 	albumDir := filepath.Join(output, name)

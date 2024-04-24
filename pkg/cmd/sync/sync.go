@@ -241,7 +241,7 @@ func syncAlbum(ctx context.Context, dk *distrokid.Client, sp *spotify.Client, st
 		song.ISRC = resp.ISRCs[i]
 		analysis, err := sp.AudioFeatures(ctx, song.SpotifyID)
 		if err != nil {
-			return fmt.Errorf("sync: couldn't get song analysis: %w", err)
+			return fmt.Errorf("sync: couldn't get song analysis (%s / %s): %w", album.FullTitle(), song.Title, err)
 		}
 		js, err := json.Marshal(analysis)
 		if err != nil {

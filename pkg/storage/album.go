@@ -36,6 +36,17 @@ type Album struct {
 	State State `gorm:"index"`
 }
 
+func (a *Album) FullTitle() string {
+	title := a.Title
+	if a.Subtitle != "" {
+		title += " - " + a.Subtitle
+	}
+	if a.Volume > 0 {
+		title += fmt.Sprintf(", Vol. %d", a.Volume)
+	}
+	return title
+}
+
 func (s *Store) GetAlbum(ctx context.Context, id string) (*Album, error) {
 	var v Album
 	if err := s.db.First(&v, "id = ?", id).Error; err != nil {

@@ -42,6 +42,7 @@ type Song struct {
 	YoutubeID       string `gorm:"not null;default:''"`
 	SpotifyID       string `gorm:"not null;default:''"`
 	SpotifyAnalysis string `gorm:"not null;default:''"`
+	JamendoID       string `gorm:"not null;default:''"`
 
 	Classification string `gorm:"not null;default:''"`
 	Classified     bool   `gorm:"not null;default:false"`

@@ -705,6 +705,7 @@ func newJamendoCommand() *ffcli.Command {
 	fs.StringVar(&cfg.ArtistName, "artist-name", "", "jamendo artist name")
 	fs.IntVar(&cfg.ArtistID, "artist-id", 0, "jamendo artist id")
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
+	fs.StringVar(&cfg.Albums, "albums", "", "album IDs to publish (comma separated)")
 
 	return &ffcli.Command{
 		Name:       cmd,
