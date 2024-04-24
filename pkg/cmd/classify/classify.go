@@ -142,12 +142,9 @@ func Run(ctx context.Context, cfg *Config) error {
 			// Get next song
 			if len(songs) == 0 {
 				// Get a song
-				songs, err = store.ListSongs(ctx, 1, 100, "", filters...)
+				songs, err = list(ctx, store, currID, filters...)
 				if err != nil {
-					return fmt.Errorf("classify: couldn't get song from database: %w", err)
-				}
-				if len(songs) == 0 {
-					return errors.New("classify: no songs to process")
+					return err
 				}
 				currID = songs[len(songs)-1].ID
 			}
@@ -168,6 +165,26 @@ func Run(ctx context.Context, cfg *Config) error {
 			}()
 		}
 	}
+}
+
+func list(ctx context.Context, store *storage.Store, currID string, filters ...storage.Filter) ([]*storage.Song, error) {
+	// Get a song
+	next := append(filters, storage.Where("songs.id > ?", currID))
+	songs, err := store.ListSongs(ctx, 1, 100, "", next...)
+	if err != nil {
+		return nil, fmt.Errorf("classify: couldn't get song from database: %w", err)
+	}
+	if len(songs) > 0 {
+		return songs, nil
+	}
+	songs, err = store.ListSongs(ctx, 1, 100, "", filters...)
+	if err != nil {
+		return nil, fmt.Errorf("classify: couldn't get song from database: %w", err)
+	}
+	if len(songs) == 0 {
+		return nil, errors.New("classify: no songs to process")
+	}
+	return songs, nil
 }
 
 func classify(ctx context.Context, song *storage.Song, debug func(string, ...any), store *storage.Store, sonoClient *sonoteller.Client) error {
