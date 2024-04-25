@@ -323,6 +323,7 @@ func newDescribeCommand() *ffcli.Command {
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
 	fs.StringVar(&cfg.Key, "key", "", "openai api key")
 	fs.StringVar(&cfg.Model, "model", "", "openai model, default is gpt-3.5-turbo")
+	fs.StringVar(&cfg.Host, "host", "", "override host to use a different  endpoint")
 
 	return &ffcli.Command{
 		Name:       cmd,

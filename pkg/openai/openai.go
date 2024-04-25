@@ -18,6 +18,7 @@ type Client struct {
 type Config struct {
 	Debug bool
 	Token string
+	Host  string
 	Model string
 }
 
@@ -26,9 +27,17 @@ func New(cfg *Config) *Client {
 	if model == "" {
 		model = openai.GPT3Dot5Turbo
 	}
+	var client *openai.Client
+	if cfg.Host == "" {
+		client = openai.NewClient(cfg.Token)
+	} else {
+		openaiConfig := openai.DefaultConfig(cfg.Token)
+		openaiConfig.BaseURL = cfg.Host
+		client = openai.NewClientWithConfig(openaiConfig)
+	}
 	return &Client{
 		debug:  cfg.Debug,
-		client: openai.NewClient(cfg.Token),
+		client: client,
 		model:  model,
 	}
 }

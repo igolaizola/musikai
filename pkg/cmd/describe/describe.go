@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +29,7 @@ type Config struct {
 	Type  string
 	Key   string
 	Model string
+	Host  string
 }
 
 // Run launches the classification process
@@ -72,6 +74,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		Debug: cfg.Debug,
 		Token: cfg.Key,
 		Model: cfg.Model,
+		Host:  cfg.Host,
 	})
 
 	// Print time stats
@@ -209,6 +212,15 @@ func describe(ctx context.Context, song *storage.Song, debug func(string, ...any
 	if err != nil {
 		return fmt.Errorf("describe: couldn't create chat completion: %w", err)
 	}
+	// Clean description
+	split := strings.Split(description, "\n")
+	if split[len(split)-1] == "" {
+		split = split[:len(split)-1]
+	}
+	description = split[len(split)-1]
+	description = strings.TrimSpace(description)
+	description = strings.Trim(description, "\"")
+
 	debug("describe: %s", description)
 	song.Description = description
 	song.Described = true
