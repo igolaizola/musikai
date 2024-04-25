@@ -370,9 +370,6 @@ func (c *Browser) Publish(parent context.Context, album *Album, editTracks bool)
 		}
 	}
 
-	// TODO: finalize album
-	fmt.Println("done, waiting for 1 minute")
-	time.Sleep(1 * time.Minute)
 	return &Publication{
 		AlbumID: albumID,
 		SongIDs: songIDs,

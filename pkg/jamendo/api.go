@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -218,18 +219,26 @@ func (c *Client) Upload(ctx context.Context, path string) error {
 }
 
 type updateTrackRequest struct {
-	AlbumIDPlaceholder string    `json:"albumId-placeholder"`
-	IsrcTrack          string    `json:"isrcTrack"`
-	IsrcCodeTrack      string    `json:"isrcCodeTrack"`
-	UpcTrack           *string   `json:"upcTrack"`
-	UpcCodeTrack       string    `json:"upcCodeTrack"`
-	ProTrack           string    `json:"proTrack"`
-	ProCodeTrack       string    `json:"proCodeTrack"`
-	AcousticElectric   string    `json:"acoustic_electric"`
-	Speed              string    `json:"speed"`
-	Energy             string    `json:"energy"`
-	HappySad           string    `json:"happy_sad"`
-	Tags               trackTags `json:"tags"`
+	Name              string    `json:"name"`
+	ClientPosition    int       `json:"client_position"`
+	DateReleased      string    `json:"dateReleased"`
+	IsrcTrack         string    `json:"isrcTrack"`
+	IsrcCodeTrack     string    `json:"isrcCodeTrack"`
+	UpcTrack          *string   `json:"upcTrack"`
+	UpcCodeTrack      string    `json:"upcCodeTrack"`
+	ProTrack          string    `json:"proTrack"`
+	ProCodeTrack      string    `json:"proCodeTrack"`
+	VoiceInstrumental int       `json:"voice_instrumental"`
+	Description       string    `json:"description"`
+	AcousticElectric  string    `json:"acoustic_electric"`
+	Speed             string    `json:"speed"`
+	Energy            string    `json:"energy"`
+	HappySad          string    `json:"happy_sad"`
+	LyricsText        string    `json:"lyrics_text"`
+	LyricsLanguage    string    `json:"lyrics_language"`
+	ExplicitLyrics    int       `json:"explicit_lyrics"`
+	MaleFemale        string    `json:"male_female"`
+	Tags              trackTags `json:"tags"`
 }
 
 type trackTags struct {
@@ -246,13 +255,14 @@ type updateTrackResponse struct {
 	ID int `json:"id"`
 }
 
-func (c *Client) UpdateTrack(ctx context.Context, album string, song *Song, id string) error {
+func (c *Client) UpdateTrack(ctx context.Context, albumTitle string, releaseDate time.Time, song *Song, order int, id string) error {
 	var tTags trackTags
 	for _, label := range song.Tags {
 		value, ok := tagValues[label]
 		if !ok {
 			return fmt.Errorf("jamendo: couldn't update track: invalid tag %s", label)
 		}
+		value = strings.Split(value, "-")[0]
 		tTags.Tags = append(tTags.Tags, valueLabel{Value: value, Label: label})
 	}
 	for _, label := range song.Genres {
@@ -260,6 +270,7 @@ func (c *Client) UpdateTrack(ctx context.Context, album string, song *Song, id s
 		if !ok {
 			return fmt.Errorf("jamendo: couldn't update track: invalid genre %s", label)
 		}
+		value = strings.Split(value, "-")[0]
 		tTags.Genres = append(tTags.Genres, valueLabel{Value: value, Label: label})
 	}
 
@@ -286,18 +297,49 @@ func (c *Client) UpdateTrack(ctx context.Context, album string, song *Song, id s
 		acousticElectric = "1"
 	}
 
+	// Select instrumental or vocal
+	var voiceInstrumental int
+	if song.Instrumental {
+		voiceInstrumental = -1
+	} else {
+		voiceInstrumental = 1
+	}
+
+	// Check ISRC code
+	values := url.Values{}
+	values.Set("typeCode", "isrc")
+	values.Set("isAlbum", "0")
+	values.Set("code", song.ISRC)
+	u := fmt.Sprintf("artist/%d/%s/licensing/isrc-upc-code/%s", c.id, c.name, id)
+	out, err := c.do(ctx, "POST", u, values, nil)
+	if err != nil {
+		return fmt.Errorf("jamendo: couldn't check ISRC code: %w", err)
+	}
+	if string(out) != `"ok"` {
+		return fmt.Errorf("jamendo: couldn't check ISRC code: %s", out)
+	}
+
 	req := &updateTrackRequest{
-		AlbumIDPlaceholder: album,
-		IsrcTrack:          "1",
-		IsrcCodeTrack:      song.ISRC,
-		UpcTrack:           nil,
-		UpcCodeTrack:       "",
-		ProTrack:           "-1",
-		ProCodeTrack:       "",
-		AcousticElectric:   acousticElectric,
-		Speed:              speed,
-		Energy:             energy,
-		HappySad:           mood,
+		Name:              song.Title,
+		ClientPosition:    order,
+		DateReleased:      releaseDate.Format("2006-01-02"),
+		IsrcTrack:         "1",
+		IsrcCodeTrack:     song.ISRC,
+		UpcTrack:          nil,
+		UpcCodeTrack:      "",
+		ProTrack:          "-1",
+		ProCodeTrack:      "",
+		VoiceInstrumental: voiceInstrumental,
+		Description:       song.Description,
+		AcousticElectric:  acousticElectric,
+		Speed:             speed,
+		Energy:            energy,
+		HappySad:          mood,
+		LyricsText:        "",
+		LyricsLanguage:    "",
+		ExplicitLyrics:    0,
+		MaleFemale:        "",
+		Tags:              tTags,
 	}
 	var resp updateTrackResponse
 	if _, err := c.do(ctx, "PATCH", fmt.Sprintf("trackmanager/tracks/%d/%s/json/%s", c.id, c.name, id), req, &resp); err != nil {
@@ -309,9 +351,9 @@ func (c *Client) UpdateTrack(ctx context.Context, album string, song *Song, id s
 	return nil
 }
 
-func (c *Client) UpdateTracks(ctx context.Context, album string, songs []*Song, ids []string) error {
-	for i, song := range songs {
-		if err := c.UpdateTrack(ctx, album, song, ids[i]); err != nil {
+func (c *Client) UpdateTracks(ctx context.Context, album *Album, ids []string) error {
+	for i, song := range album.Songs {
+		if err := c.UpdateTrack(ctx, album.Title, album.ReleaseDate, song, i+1, ids[i]); err != nil {
 			return err
 		}
 	}

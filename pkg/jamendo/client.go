@@ -240,7 +240,9 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 	var contentType string
 	var contentRange string
 	if f, ok := in.(url.Values); ok {
+		body = []byte(f.Encode())
 		reqBody = strings.NewReader(f.Encode())
+		contentType = "application/x-www-form-urlencoded; charset=UTF-8"
 	} else if f, ok := in.(*form); ok {
 		reqBody = f.data
 		contentType = f.writer.FormDataContentType()
@@ -254,9 +256,6 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 		reqBody = bytes.NewReader(body)
 	}
 	logBody := string(body)
-	if len(logBody) > 100 {
-		logBody = logBody[:100] + "..."
-	}
 	c.log("jamendo: do %s %s %s", method, path, logBody)
 
 	// Check if path is absolute
@@ -324,7 +323,7 @@ func (c *Client) addHeaders(req *http.Request, path string) {
 		req.Header.Set("sec-fetch-site", "same-origin")
 		req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36`)
 		req.Header.Set("x-requested-with", "XMLHttpRequest")
-	case strings.HasPrefix(path, "trackmanager"):
+	case strings.HasPrefix(path, "trackmanager") || strings.HasPrefix(path, "artist"):
 		referer = fmt.Sprintf("https://artists.jamendo.com/en/artist/%d/%s/manager", c.id, c.name)
 		req.Header.Set("accept", "application/json, text/javascript, */*; q=0.01")
 		req.Header.Set("accept-language", "en-US,en;q=0.9")
