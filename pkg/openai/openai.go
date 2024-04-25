@@ -66,8 +66,6 @@ func (c *Client) ChatCompletion(ctx context.Context, msg string) (string, error)
 		js, _ := json.MarshalIndent(resp, "", "  ")
 		log.Println("openai: resp:", string(js))
 	}
-	log.Println("openai: tokens:", resp.Usage.TotalTokens)
-
 	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("openai: chat completion response is empty")
 	}
