@@ -74,8 +74,18 @@ func (a *Album) Validate() error {
 		if len(song.Genres) == 0 {
 			return fmt.Errorf("jamendo: song %d genres is empty", i+1)
 		}
+		for _, v := range song.Genres {
+			if _, ok := genreValues[v]; !ok {
+				return fmt.Errorf("jamendo: song %d genre %q is invalid", i+1, v)
+			}
+		}
 		if len(song.Tags) == 0 {
 			return fmt.Errorf("jamendo: song %d tags is empty", i+1)
+		}
+		for _, v := range song.Tags {
+			if _, ok := tagValues[v]; !ok {
+				return fmt.Errorf("jamendo: song %d tag %q is invalid", i+1, v)
+			}
 		}
 		if song.Acousticness == 0 {
 			return fmt.Errorf("jamendo: song %d acousticness is empty", i+1)
@@ -105,7 +115,7 @@ type Publication struct {
 }
 
 // Publish publishes a new album
-func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (*Publication, error) {
+func (c *Browser) Publish(parent context.Context, album *Album, editTracks bool) (*Publication, error) {
 	// Validate album
 	if err := album.Validate(); err != nil {
 		return nil, err
@@ -354,23 +364,40 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (*Pub
 	}
 	time.Sleep(wait)
 
+	if editTracks {
+		if err := c.EditTracks(ctx, album, albumID, songIDs); err != nil {
+			return nil, err
+		}
+	}
+
+	// TODO: finalize album
+	fmt.Println("done, waiting for 1 minute")
+	time.Sleep(1 * time.Minute)
+	return &Publication{
+		AlbumID: albumID,
+		SongIDs: songIDs,
+	}, nil
+}
+
+func (c *Browser) EditTracks(ctx context.Context, album *Album, albumID string, songIDs []string) error {
 	// Refresh the page
+	u := fmt.Sprintf("https://artists.jamendo.com/en/artist/%d/%s/manager", c.artistID, c.artistName)
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(u),
 		chromedp.WaitVisible("body", chromedp.ByQuery),
 	); err != nil {
-		return nil, fmt.Errorf("jamendo: couldn't navigate to url: %w", err)
+		return fmt.Errorf("jamendo: couldn't navigate to url: %w", err)
 	}
 
 	// Click on the album tab
 	if err := click(ctx, "#albumsTab"); err != nil {
-		return nil, err
+		return err
 	}
 	time.Sleep(200 * time.Millisecond)
 
 	// Click on the open album button
 	if err := click(ctx, fmt.Sprintf(`li[data-jam-album-id="%s"] button.openAlbum`, albumID)); err != nil {
-		return nil, err
+		return err
 	}
 	time.Sleep(200 * time.Millisecond)
 
@@ -380,102 +407,90 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (*Pub
 
 		// Click on edit track
 		if err := click(ctx, fmt.Sprintf(`li[data-jam-track-id="%s"] .edit button`, songID)); err != nil {
-			return nil, err
+			return err
 		}
 
 		// Set name
 		if err := setValue(ctx, "#edit_track_form #name", song.Title); err != nil {
-			return nil, err
+			return err
 		}
 
 		// Set track number
 		if err := setValue(ctx, "#client_position", strconv.Itoa(i+1)); err != nil {
-			return nil, err
+			return err
 		}
 
 		// Set release date
 		if err := setValue(ctx, "#dateReleased", album.ReleaseDate.Format("2006-01-02")); err != nil {
-			return nil, err
+			return err
 		}
 
 		// Set no UPC code
 		// This is only for singles
 		/*
 			if err := click(ctx, `label[for="upcTrack--1"]`); err != nil {
-				return nil, err
+				return err
 			}
 		*/
 
 		// Set ISRC code
 		if err := click(ctx, `label[for="isrcTrack-1"]`); err != nil {
-			return nil, err
+			return err
 		}
 		if err := setValue(ctx, "#isrcCodeTrack", song.ISRC); err != nil {
-			return nil, err
+			return err
 		}
 		if err := click(ctx, "#js-save-isrc-code"); err != nil {
-			return nil, err
+			return err
 		}
 		time.Sleep(1000 * time.Millisecond)
 
 		// Click on I don't have a P.R.O. association
 		if err := click(ctx, `label[for="proTrack--1"]`); err != nil {
-			return nil, err
+			return err
 		}
 
 		// Click on Lyrics
 		if err := click(ctx, "#track_tab_menu_lyrics"); err != nil {
-			return nil, err
+			return err
 		}
 
 		if song.Instrumental {
 			// Click on Instrumental
 			if err := click(ctx, `label[for="voice_instrumental--1"]`); err != nil {
-				return nil, err
+				return err
 			}
 		} else {
-			return nil, fmt.Errorf("jamendo: only instrumental songs are supported")
+			return fmt.Errorf("jamendo: only instrumental songs are supported")
 		}
 
 		if song.Description != "" {
 			// Click on Description tab
 			if err := click(ctx, "#track_tab_menu_description"); err != nil {
-				return nil, err
+				return err
 			}
 			// Set description
 			if err := setValue(ctx, "#description", song.Description); err != nil {
-				return nil, err
+				return err
 			}
 		}
 
 		// Click on tags and metadata
 		if err := click(ctx, "#track_tab_menu_metadata"); err != nil {
-			return nil, err
+			return err
 		}
 
 		// Select speed
-		var speed int
-		switch {
-		case song.BPM <= 65:
-			speed = -2
-		case song.BPM <= 75:
-			speed = -1
-		case song.BPM <= 119:
-			speed = 0
-		case song.BPM <= 129:
-			speed = 1
-		case song.BPM > 129:
-			speed = 2
-		}
+		speed := toSpeed(song.BPM)
 		if err := selectOption(ctx, "#speed", strconv.Itoa(speed)); err != nil {
-			return nil, err
+			return err
 		}
 
 		// Select energy
 		if song.Energy > 0.0 {
 			energy := toLevel(song.Energy)
 			if err := selectOption(ctx, "#energy", strconv.Itoa(energy)); err != nil {
-				return nil, err
+				return err
 			}
 		}
 
@@ -483,7 +498,7 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (*Pub
 		if song.Mood > 0.0 {
 			mood := toLevel(song.Mood)
 			if err := selectOption(ctx, "#happy_sad", strconv.Itoa(mood)); err != nil {
-				return nil, err
+				return err
 			}
 		}
 
@@ -491,18 +506,18 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (*Pub
 		if song.Acousticness < 0.4 {
 			// Click on electric
 			if err := click(ctx, `label[for="acoustic_electric--1"]`); err != nil {
-				return nil, err
+				return err
 			}
 		} else if song.Acousticness > 0.6 {
 			// Click on acoustic
 			if err := click(ctx, `label[for="acoustic_electric-1"]`); err != nil {
-				return nil, err
+				return err
 			}
 		}
 
-		doc, err = getHTML(ctx, "#edit_track_form")
+		doc, err := getHTML(ctx, "#edit_track_form")
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		// Obtain genres
@@ -537,16 +552,16 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (*Pub
 			// Type text in #genres-selectized
 			log.Println("typing genre", genre)
 			if err := typeValue(ctx, "#genres-selectized", genre); err != nil {
-				return nil, err
+				return err
 			}
 			time.Sleep(wait)
 			if err := click(ctx, "#genres-element .option.active"); err != nil {
-				return nil, err
+				return err
 			}
 			time.Sleep(wait)
 			doc, err := getHTML(ctx, "select#genres")
 			if err != nil {
-				return nil, err
+				return err
 			}
 			var found bool
 			doc.Find("option").Each(func(i int, s *goquery.Selection) {
@@ -558,7 +573,7 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (*Pub
 			})
 			if !found {
 				log.Printf("❌ couldn't find genre %q (%s - %s)\n", genre, album.Title, song.Title)
-				// return nil, fmt.Errorf("jamendo: couldn't find genre %s", genre)
+				// return fmt.Errorf("jamendo: couldn't find genre %s", genre)
 			}
 		}
 
@@ -567,16 +582,16 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (*Pub
 			// Type text in #tags-selectized
 			log.Println("typing tag", tag)
 			if err := typeValue(ctx, "#tags-selectized", tag); err != nil {
-				return nil, err
+				return err
 			}
 			time.Sleep(wait)
 			if err := click(ctx, "#tags-element .option.active"); err != nil {
-				return nil, err
+				return err
 			}
 			time.Sleep(wait)
 			doc, err := getHTML(ctx, "select#tags")
 			if err != nil {
-				return nil, err
+				return err
 			}
 			var found bool
 			doc.Find("option").Each(func(i int, s *goquery.Selection) {
@@ -588,26 +603,19 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (*Pub
 			})
 			if !found {
 				log.Printf("❌ couldn't find tag %q (%s - %s)\n", tag, album.Title, song.Title)
-				// return nil, fmt.Errorf("jamendo: couldn't find tags %s", tag)
+				// return fmt.Errorf("jamendo: couldn't find tags %s", tag)
 			}
 		}
 
 		// Click on OK
 		log.Println("clicking OK")
 		if err := click(ctx, "#edit_track_form #submit"); err != nil {
-			return nil, err
+			return err
 		}
 		time.Sleep(2000 * time.Millisecond)
 		log.Println("song", song.Title, "done")
 	}
-
-	// TODO: finalize album
-	fmt.Println("done, waiting for 1 minute")
-	time.Sleep(1 * time.Minute)
-	return &Publication{
-		AlbumID: albumID,
-		SongIDs: songIDs,
-	}, nil
+	return nil
 }
 
 func toLevel(f float32) int {
@@ -619,6 +627,21 @@ func toLevel(f float32) int {
 	case f <= 0.6:
 		return 0
 	case f <= 0.8:
+		return 1
+	default:
+		return 2
+	}
+}
+
+func toSpeed(bpm float32) int {
+	switch {
+	case bpm <= 65:
+		return -2
+	case bpm <= 75:
+		return -1
+	case bpm <= 119:
+		return 0
+	case bpm <= 129:
 		return 1
 	default:
 		return 2

@@ -91,10 +91,25 @@ func Run(ctx context.Context, cfg *Config) error {
 			Proxy: http.ProxyURL(u),
 		}
 	}
+
+	cookieStore := store.NewCookieStore("jamendo", cfg.Account)
+
+	client := jamendo.New(&jamendo.Config{
+		Wait:        1 * time.Second,
+		Debug:       true,
+		Client:      httpClient,
+		CookieStore: cookieStore,
+		Name:        cfg.ArtistName,
+		ID:          cfg.ArtistID,
+	})
+	if err := client.Auth(ctx); err != nil {
+		return fmt.Errorf("publish: couldn't authenticate jamendo client: %w", err)
+	}
+
 	browser := jamendo.NewBrowser(&jamendo.BrowserConfig{
-		Wait:        4 * time.Second,
+		Wait:        1 * time.Second,
 		Proxy:       cfg.Proxy,
-		CookieStore: store.NewCookieStore("jamendo", cfg.Account),
+		CookieStore: cookieStore,
 	})
 	if err := browser.Start(ctx); err != nil {
 		return fmt.Errorf("publish: couldn't start jamendo browser: %w", err)
@@ -199,7 +214,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			go func() {
 				defer wg.Done()
 				debug("publish: start %s %s", album.ID, album.Title)
-				err := publish(ctx, cfg, browser, store, fs, album)
+				err := publish(ctx, browser, client, store, fs, album)
 				if err != nil {
 					log.Println(err)
 				}
@@ -210,7 +225,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storage.Store, fs *filestore.Store, album *storage.Album) error {
+func publish(ctx context.Context, b *jamendo.Browser, c *jamendo.Client, store *storage.Store, fs *filestore.Store, album *storage.Album) error {
 	// Get songs for album
 	songs, err := store.ListSongs(ctx, 1, 100, "", storage.Where("album_id = ?", album.ID))
 	if err != nil {
@@ -234,7 +249,7 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 	// Create jamendo album data
 	jmAlbum := &jamendo.Album{
 		Artist:      album.Artist,
-		Title:       album.Title,
+		Title:       album.FullTitle(),
 		Cover:       cover,
 		Description: description,
 		ReleaseDate: album.PublishedAt,
@@ -335,9 +350,12 @@ func publish(ctx context.Context, cfg *Config, b *jamendo.Browser, store *storag
 	}
 
 	// Publish album
-	pub, err := b.Publish(ctx, jmAlbum, cfg.Auto)
+	pub, err := b.Publish(ctx, jmAlbum, false)
 	if err != nil {
 		return fmt.Errorf("publish: couldn't jamendo publish %s: %w", album.ID, err)
+	}
+	if err := c.UpdateTracks(ctx, jmAlbum.Title, jmAlbum.Songs, pub.SongIDs); err != nil {
+		return fmt.Errorf("publish: couldn't update tracks %s: %w", album.ID, err)
 	}
 
 	// Update songs

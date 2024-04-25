@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -212,6 +213,107 @@ func (c *Client) Upload(ctx context.Context, path string) error {
 	uploadURL := "https://uploadserver.jamendo.com/audio/index.php"
 	if _, err := c.do(ctx, "POST", uploadURL, f, nil); err != nil {
 		return err
+	}
+	return nil
+}
+
+type updateTrackRequest struct {
+	AlbumIDPlaceholder string    `json:"albumId-placeholder"`
+	IsrcTrack          string    `json:"isrcTrack"`
+	IsrcCodeTrack      string    `json:"isrcCodeTrack"`
+	UpcTrack           *string   `json:"upcTrack"`
+	UpcCodeTrack       string    `json:"upcCodeTrack"`
+	ProTrack           string    `json:"proTrack"`
+	ProCodeTrack       string    `json:"proCodeTrack"`
+	AcousticElectric   string    `json:"acoustic_electric"`
+	Speed              string    `json:"speed"`
+	Energy             string    `json:"energy"`
+	HappySad           string    `json:"happy_sad"`
+	Tags               trackTags `json:"tags"`
+}
+
+type trackTags struct {
+	Tags   []valueLabel `json:"tags"`
+	Genres []valueLabel `json:"genres"`
+}
+
+type valueLabel struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+type updateTrackResponse struct {
+	ID int `json:"id"`
+}
+
+func (c *Client) UpdateTrack(ctx context.Context, album string, song *Song, id string) error {
+	var tTags trackTags
+	for _, label := range song.Tags {
+		value, ok := tagValues[label]
+		if !ok {
+			return fmt.Errorf("jamendo: couldn't update track: invalid tag %s", label)
+		}
+		tTags.Tags = append(tTags.Tags, valueLabel{Value: value, Label: label})
+	}
+	for _, label := range song.Genres {
+		value, ok := genreValues[label]
+		if !ok {
+			return fmt.Errorf("jamendo: couldn't update track: invalid genre %s", label)
+		}
+		tTags.Genres = append(tTags.Genres, valueLabel{Value: value, Label: label})
+	}
+
+	// Select speed
+	speed := strconv.Itoa(toSpeed(song.BPM))
+
+	// Select energy
+	var energy string
+	if song.Energy > 0.0 {
+		energy = strconv.Itoa(toLevel(song.Energy))
+	}
+
+	// Select mood
+	var mood string
+	if song.Mood > 0.0 {
+		mood = strconv.Itoa(toLevel(song.Mood))
+	}
+
+	// Select acoustic or electric
+	var acousticElectric string
+	if song.Acousticness < 0.4 {
+		acousticElectric = "-1"
+	} else if song.Acousticness > 0.6 {
+		acousticElectric = "1"
+	}
+
+	req := &updateTrackRequest{
+		AlbumIDPlaceholder: album,
+		IsrcTrack:          "1",
+		IsrcCodeTrack:      song.ISRC,
+		UpcTrack:           nil,
+		UpcCodeTrack:       "",
+		ProTrack:           "-1",
+		ProCodeTrack:       "",
+		AcousticElectric:   acousticElectric,
+		Speed:              speed,
+		Energy:             energy,
+		HappySad:           mood,
+	}
+	var resp updateTrackResponse
+	if _, err := c.do(ctx, "PATCH", fmt.Sprintf("trackmanager/tracks/%d/%s/json/%s", c.id, c.name, id), req, &resp); err != nil {
+		return fmt.Errorf("jamendo: couldn't update track: %w", err)
+	}
+	if id != strconv.Itoa(resp.ID) {
+		return fmt.Errorf("jamendo: couldn't update track: invalid ID")
+	}
+	return nil
+}
+
+func (c *Client) UpdateTracks(ctx context.Context, album string, songs []*Song, ids []string) error {
+	for i, song := range songs {
+		if err := c.UpdateTrack(ctx, album, song, ids[i]); err != nil {
+			return err
+		}
 	}
 	return nil
 }
