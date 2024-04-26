@@ -175,7 +175,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 		var errStatus errStatusCode
 		if errors.As(err, &errStatus) {
 			switch int(errStatus) {
-			case http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusTooManyRequests, 520:
+			case http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusTooManyRequests, http.StatusInternalServerError, 520:
 				// Retry on these status codes
 				retry = true
 				wait = true

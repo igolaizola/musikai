@@ -224,7 +224,7 @@ type updateTrackRequest struct {
 	DateReleased      string    `json:"dateReleased"`
 	IsrcTrack         string    `json:"isrcTrack"`
 	IsrcCodeTrack     string    `json:"isrcCodeTrack"`
-	UpcTrack          *string   `json:"upcTrack"`
+	UpcTrack          string    `json:"upcTrack"`
 	UpcCodeTrack      string    `json:"upcCodeTrack"`
 	ProTrack          string    `json:"proTrack"`
 	ProCodeTrack      string    `json:"proCodeTrack"`
@@ -325,7 +325,7 @@ func (c *Client) UpdateTrack(ctx context.Context, albumTitle string, releaseDate
 		DateReleased:      releaseDate.Format("2006-01-02"),
 		IsrcTrack:         "1",
 		IsrcCodeTrack:     song.ISRC,
-		UpcTrack:          nil,
+		UpcTrack:          "-1",
 		UpcCodeTrack:      "",
 		ProTrack:          "-1",
 		ProCodeTrack:      "",

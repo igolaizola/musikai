@@ -346,23 +346,71 @@ func (c *Browser) Publish(parent context.Context, album *Album, editTracks bool)
 	if err := click(ctx, "button.batch_move"); err != nil {
 		return nil, err
 	}
-
 	// Choose album
 	if err := selectOption(ctx, "#move_track_form select#albumId", albumID); err != nil {
 		return nil, err
 	}
 	time.Sleep(200 * time.Millisecond)
-
 	// Click MOVE
 	if err := click(ctx, `#move_track_form input[value="move"]`); err != nil {
 		return nil, err
 	}
-
-	wait := time.Second * time.Duration(len(album.Songs))
+	// Wait
+	wait := time.Duration(len(album.Songs)*1500) * time.Millisecond
 	if wait < 5*time.Second {
 		wait = 5 * time.Second
 	}
 	time.Sleep(wait)
+
+	// Move missing ones
+
+	// Obtain current singles
+	doc, err = getHTML(ctx, "#singlesList")
+	if err != nil {
+		return nil, err
+	}
+	missingLookup := map[string]struct{}{}
+	doc.Find("li.track").Each(func(i int, s *goquery.Selection) {
+		id, ok := s.Attr("data-jam-track-id")
+		if !ok {
+			return
+		}
+		missingLookup[id] = struct{}{}
+	})
+
+	var missing int
+	for _, songID := range songIDs {
+		if _, ok := missingLookup[songID]; !ok {
+			continue
+		}
+		// Click on select
+		if err := click(ctx, fmt.Sprintf(`li[data-jam-track-id="%s"] input.js-batch-actions`, songID)); err != nil {
+			return nil, err
+		}
+		missing++
+	}
+
+	if missing > 0 {
+		// Click on batch move
+		if err := click(ctx, "button.batch_move"); err != nil {
+			return nil, err
+		}
+		// Choose album
+		if err := selectOption(ctx, "#move_track_form select#albumId", albumID); err != nil {
+			return nil, err
+		}
+		time.Sleep(200 * time.Millisecond)
+		// Click MOVE
+		if err := click(ctx, `#move_track_form input[value="move"]`); err != nil {
+			return nil, err
+		}
+		// Wait
+		wait := time.Duration(missing*1500) * time.Millisecond
+		if wait < 5*time.Second {
+			wait = 5 * time.Second
+		}
+		time.Sleep(wait)
+	}
 
 	if editTracks {
 		if err := c.EditTracks(ctx, album, albumID, songIDs); err != nil {
