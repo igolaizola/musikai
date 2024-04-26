@@ -14,8 +14,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/igolaizola/musikai/pkg/nopecha"
 	"github.com/igolaizola/musikai/pkg/ratelimit"
 	"github.com/igolaizola/musikai/pkg/session"
+)
+
+const (
+	hcaptchaSiteKey = "2945592b-1928-43a9-8473-7e7fed3d752e"
 )
 
 type Client struct {
@@ -26,6 +31,8 @@ type Client struct {
 	minDuration   float32
 	maxDuration   float32
 	maxExtensions int
+	nopechaClient *nopecha.Client
+	parallel      bool
 }
 
 type Config struct {
@@ -36,6 +43,8 @@ type Config struct {
 	MinDuration   time.Duration
 	MaxDuration   time.Duration
 	MaxExtensions int
+	Parallel      bool
+	NopechaKey    string
 }
 
 type cookieStore struct {
@@ -91,6 +100,12 @@ func New(cfg *Config) *Client {
 	if cfg.MaxExtensions > 0 {
 		maxExtensions = cfg.MaxExtensions
 	}
+	nopechaClient := nopecha.New(&nopecha.Config{
+		Wait:   100 * time.Millisecond,
+		Key:    cfg.NopechaKey,
+		Client: client,
+		Debug:  cfg.Debug,
+	})
 
 	return &Client{
 		client:        client,
@@ -100,6 +115,8 @@ func New(cfg *Config) *Client {
 		minDuration:   float32(minDuration.Seconds()),
 		maxDuration:   float32(maxDuration.Seconds()),
 		maxExtensions: maxExtensions,
+		nopechaClient: nopechaClient,
+		parallel:      cfg.Parallel,
 	}
 }
 
@@ -119,7 +136,7 @@ func (c *Client) Start(ctx context.Context) error {
 	if cookie == "" {
 		return fmt.Errorf("udio: cookie is empty")
 	}
-	if err := session.SetCookies(c.client, "https://clerk.udio.com", cookie, nil); err != nil {
+	if err := session.SetCookies(c.client, "https://www.udio.com", cookie, nil); err != nil {
 		return fmt.Errorf("udio: couldn't set cookie: %w", err)
 	}
 
@@ -132,7 +149,7 @@ func (c *Client) Start(ctx context.Context) error {
 }
 
 func (c *Client) Stop(ctx context.Context) error {
-	cookie, err := session.GetCookies(c.client, "https://clerk.udio.com")
+	cookie, err := session.GetCookies(c.client, "https://www.udio.com")
 	if err != nil {
 		return fmt.Errorf("udio: couldn't get cookie: %w", err)
 	}
@@ -150,6 +167,13 @@ func (c *Client) log(format string, args ...interface{}) {
 }
 
 func (c *Client) Auth(ctx context.Context) error {
+	email, err := c.User(ctx)
+	if err != nil {
+		return err
+	}
+	if email == "" {
+		return fmt.Errorf("udio: couldn't get email")
+	}
 	return nil
 }
 

@@ -26,6 +26,7 @@ import (
 	"github.com/igolaizola/musikai/pkg/cmd/setting"
 	"github.com/igolaizola/musikai/pkg/cmd/sync"
 	"github.com/igolaizola/musikai/pkg/cmd/title"
+	"github.com/igolaizola/musikai/pkg/cmd/udio"
 	"github.com/igolaizola/musikai/pkg/cmd/upscale"
 	"github.com/igolaizola/musikai/pkg/cmd/web"
 	"github.com/igolaizola/musikai/pkg/cmd/youtubesync"
@@ -50,6 +51,7 @@ func New(version, commit, date string) *ffcli.Command {
 			newSettingCommand(),
 			newAnalyzeCommand(),
 			newGenerateCommand(),
+			newUdioCommand(),
 			newProcessCommand(),
 			newTitleCommand(),
 			newDraftCommand(),
@@ -226,6 +228,52 @@ func newGenerateCommand() *ffcli.Command {
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
 			return generate.Run(ctx, cfg)
+		},
+	}
+}
+
+func newUdioCommand() *ffcli.Command {
+	cmd := "udio"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &udio.Config{}
+
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
+	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
+	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
+	fs.DurationVar(&cfg.WaitMin, "wait-min", 3*time.Second, "minimum wait time between songs")
+	fs.DurationVar(&cfg.WaitMax, "wait-max", 1*time.Minute, "maximum wait time between songs")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+
+	fs.StringVar(&cfg.Account, "account", "", "account to use")
+	fs.StringVar(&cfg.Input, "input", "", "csv or json with prompts or styles (fields: weight,type,prompt,style,instrumental)")
+	fs.StringVar(&cfg.Prompt, "prompt", "", "prompt to use")
+	fs.StringVar(&cfg.Style, "style", "", "style to use")
+	fs.BoolVar(&cfg.Instrumental, "instrumental", true, "instrumental song")
+	fs.StringVar(&cfg.Type, "type", "", "type to use")
+	fs.DurationVar(&cfg.MinDuration, "min-duration", 0, "minimum duration for the song")
+	fs.DurationVar(&cfg.MaxDuration, "max-duration", 0, "maximum duration for the song")
+	fs.IntVar(&cfg.MaxExtensions, "max-extensions", 0, "maximum number of extensions for the song")
+	fs.StringVar(&cfg.Notes, "notes", "", "text notes stored with the song")
+
+	fs.StringVar(&cfg.NopechaKey, "nopecha-key", "", "nopecha api key")
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return udio.Run(ctx, cfg)
 		},
 	}
 }

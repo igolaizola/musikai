@@ -39,7 +39,7 @@ func (c *Client) Token(ctx context.Context, typ, siteKey, u string) (string, err
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
-		case <-time.After(1 * time.Second):
+		case <-time.After(5 * time.Second):
 		}
 		var resp tokenResponse
 		if _, err := c.do(ctx, "GET", path, nil, &resp); err != nil {
