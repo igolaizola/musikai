@@ -6,6 +6,8 @@ import (
 )
 
 func TestAnalyze(t *testing.T) {
+	t.Skip("Only for manual testing")
+
 	tests := []string{
 		"https://www.youtube.com/watch?v=W3q8Od5qJio",
 		"https://www.youtube.com/watch?v=TCGvZCbcE0Q",
