@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/oklog/ulid/v2"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -83,12 +85,20 @@ func (s *seed) TableName() string {
 }
 
 func (s *Store) Migrate(ctx context.Context) error {
-	if err := s.db.Limit(1).Find(&Song{}).Error; err != nil {
+	// Initialize the database with a seed table
+	init := !s.db.Migrator().HasTable(&Song{})
+
+	// Custom migrations
+	if err := s.customMigrate(init); err != nil {
+		return err
+	}
+
+	// Auto migrations
+	if init {
 		if err := s.db.Migrator().CreateTable(&seed{}); err != nil {
 			return fmt.Errorf("storage: failed to create table songs: %w", err)
 		}
 	}
-
 	if err := s.db.AutoMigrate(
 		&Song{},
 		&Generation{},
@@ -100,6 +110,62 @@ func (s *Store) Migrate(ctx context.Context) error {
 		&File{},
 	); err != nil {
 		return fmt.Errorf("storage: failed to migrate database: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) customMigrate(init bool) error {
+	lastVersion := 1
+
+	if !s.db.Migrator().HasTable(&Migration{}) {
+		if err := s.db.Migrator().CreateTable(&Migration{}); err != nil {
+			return fmt.Errorf("storage: failed to create table migrations: %w", err)
+		}
+		var version int
+		if init {
+			version = lastVersion
+		}
+		if err := s.db.Save(&Migration{ID: ulid.Make().String(), Version: version}).Error; err != nil {
+			return fmt.Errorf("storage: failed to save migration version: %w", err)
+		}
+		if init {
+			return nil
+		}
+	}
+
+	// Get the current migration version
+	var migration Migration
+	if err := s.db.First(&migration).Error; err != nil {
+		return fmt.Errorf("storage: failed to get migration version: %w", err)
+	}
+
+	// Custom migrations
+	for i := migration.Version + 1; i <= lastVersion; i++ {
+		switch i {
+		case 1:
+			log.Println("storage: migration 1: rename suno columns")
+			if err := s.db.Migrator().RenameColumn(&Generation{}, "suno_id", "external_id"); err != nil {
+				return fmt.Errorf("storage: migration %d: %w", i, err)
+			}
+			if err := s.db.Migrator().RenameColumn(&Generation{}, "suno_audio", "audio"); err != nil {
+				return fmt.Errorf("storage: migration %d: %w", i, err)
+			}
+			if err := s.db.Migrator().RenameColumn(&Generation{}, "suno_image", "image"); err != nil {
+				return fmt.Errorf("storage: migration %d: %w", i, err)
+			}
+			if err := s.db.Migrator().RenameColumn(&Generation{}, "suno_title", "title"); err != nil {
+				return fmt.Errorf("storage: migration %d: %w", i, err)
+			}
+			if err := s.db.Migrator().RenameColumn(&Generation{}, "suno_history", "history"); err != nil {
+				return fmt.Errorf("storage: migration %d: %w", i, err)
+			}
+		case 2:
+			// TODO: Add next migration here and update lastVersion
+		}
+		migration.Version = i
+		if err := s.db.Save(&migration).Error; err != nil {
+			return fmt.Errorf("storage: failed to save migration version: %w", err)
+		}
 	}
 	return nil
 }

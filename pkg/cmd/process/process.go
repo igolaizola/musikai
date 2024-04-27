@@ -232,7 +232,7 @@ func process(ctx context.Context, gen *storage.Generation, debug func(string, ..
 
 	// Download the audio file
 	debug("process: start download %s", gen.ID)
-	b, err := download(ctx, client, gen.SunoAudio)
+	b, err := download(ctx, client, gen.Audio)
 	if err != nil {
 		return fmt.Errorf("process: couldn't download gen audio: %w", err)
 	}

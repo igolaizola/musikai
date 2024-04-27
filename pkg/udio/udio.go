@@ -5,18 +5,60 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
+	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/igolaizola/musikai/pkg/music"
 )
 
 const (
 	defaultMinDuration   = 2*time.Minute + 5*time.Second
 	defaultMaxDuration   = 3*time.Minute + 55*time.Second
-	defaultMaxExtensions = 2
+	defaultMaxExtensions = 6
 )
 
-type UserResponse struct {
+type apiUsageResponse struct {
+	Data struct {
+		Tier               string    `json:"tier"`
+		ConcurrentUsed     int       `json:"concurrent_used"`
+		DailyUsed          int       `json:"daily_used"`
+		MonthlyUsed        int       `json:"monthly_used"`
+		Disabled           bool      `json:"disabled"`
+		Discretionary      int       `json:"discretionary"`
+		StartDay           time.Time `json:"start_day"`
+		StartMonth         time.Time `json:"start_month"`
+		LastUse            time.Time `json:"last_use"`
+		ConcurrentLimit    int       `json:"concurrent_limit"`
+		DailyThrottleLimit int       `json:"daily_throttle_limit"`
+		DailyThrottled     bool      `json:"daily_throttled"`
+		MonthlyLimit       int       `json:"monthly_limit"`
+	} `json:"data"`
+}
+
+func (c *Client) CheckLimit(ctx context.Context) error {
+	var resp apiUsageResponse
+	if _, err := c.do(ctx, "GET", "users/current/api-usage", nil, &resp); err != nil {
+		return fmt.Errorf("udio: couldn't get api usage: %w", err)
+	}
+	if resp.Data.Disabled {
+		return errors.New("udio: api disabled")
+	}
+	if resp.Data.DailyThrottled {
+		return errors.New("udio: daily throttled")
+	}
+	if resp.Data.DailyUsed >= resp.Data.DailyThrottleLimit {
+		return errors.New("udio: daily limit reached")
+	}
+	if resp.Data.MonthlyUsed >= resp.Data.MonthlyLimit {
+		return errors.New("udio: monthly limit reached")
+	}
+	return nil
+}
+
+type userResponse struct {
 	User struct {
 		ID          string      `json:"id"`
 		Factors     interface{} `json:"factors"`
@@ -54,7 +96,7 @@ type UserResponse struct {
 }
 
 func (c *Client) User(ctx context.Context) (string, error) {
-	var resp UserResponse
+	var resp userResponse
 	if _, err := c.do(ctx, "GET", "users/current", nil, &resp); err != nil {
 		return "", err
 	}
@@ -62,13 +104,19 @@ func (c *Client) User(ctx context.Context) (string, error) {
 }
 
 type generateRequest struct {
-	Prompt         string `json:"prompt"`
-	LyricInput     string `json:"lyricInput"`
-	SamplerOptions struct {
-		Seed                 int  `json:"seed"`
-		BypassPromptOptimize bool `json:"bypass_prompt_optimization"`
-	} `json:"samplerOptions"`
-	CaptchaToken string `json:"captchaToken"`
+	Prompt         string         `json:"prompt"`
+	LyricInput     string         `json:"lyricInput"`
+	SamplerOptions samplerOptions `json:"samplerOptions"`
+	CaptchaToken   string         `json:"captchaToken"`
+}
+
+type samplerOptions struct {
+	Seed                    int     `json:"seed"`
+	CropStartTime           float64 `json:"crop_start_time,omitempty"`
+	BypassPromptOptimize    bool    `json:"bypass_prompt_optimization"`
+	AudioConditioningPath   string  `json:"audio_conditioning_path,omitempty"`
+	AudioConditioningSongID string  `json:"audio_conditioning_song_id,omitempty"`
+	AudioConditioningType   string  `json:"audio_conditioning_type,omitempty"`
 }
 
 type generateResponse struct {
@@ -77,19 +125,19 @@ type generateResponse struct {
 	TrackIDs     []string `json:"track_ids"`
 }
 
-type Song struct {
-	ID           string  `json:"id"`
-	Title        string  `json:"title"`
-	Style        string  `json:"style"`
-	Audio        string  `json:"audio"`
-	Image        string  `json:"image"`
-	Video        string  `json:"video"`
-	Duration     float32 `json:"duration"`
-	Instrumental bool    `json:"instrumental"`
-	//History      []Fragment `json:"history"`
-}
+func (c *Client) Generate(ctx context.Context, prompt, style, title string, instrumental bool) ([][]music.Song, error) {
+	if !instrumental {
+		return nil, errors.New("udio: only instrumental songs are supported")
+	}
+	if prompt != "" && style != "" {
+		return nil, errors.New("udio: prompt and style are mutually exclusive")
+	}
+	var bypassPromptOptimize bool
+	if style != "" {
+		prompt = style
+		bypassPromptOptimize = true
+	}
 
-func (c *Client) Generate(ctx context.Context, prompt, lyrics string) ([][]Song, error) {
 	// Get captcha token
 	captchaToken, err := c.nopechaClient.Token(ctx, "hcaptcha", hcaptchaSiteKey, "https://www.udio.com/")
 	if err != nil {
@@ -99,13 +147,10 @@ func (c *Client) Generate(ctx context.Context, prompt, lyrics string) ([][]Song,
 	// Generate first fragments
 	req := &generateRequest{
 		Prompt:     prompt,
-		LyricInput: lyrics,
-		SamplerOptions: struct {
-			Seed                 int  `json:"seed"`
-			BypassPromptOptimize bool `json:"bypass_prompt_optimization"`
-		}{
+		LyricInput: "",
+		SamplerOptions: samplerOptions{
 			Seed:                 -1,
-			BypassPromptOptimize: false,
+			BypassPromptOptimize: bypassPromptOptimize,
 		},
 		CaptchaToken: captchaToken,
 	}
@@ -117,7 +162,7 @@ func (c *Client) Generate(ctx context.Context, prompt, lyrics string) ([][]Song,
 		return nil, fmt.Errorf("udio: generation failed: %s", resp.Message)
 	}
 	if len(resp.TrackIDs) == 0 {
-		return nil, errors.New("suno: empty clips")
+		return nil, errors.New("udio: empty clips")
 	}
 	fragments, err := c.waitClips(ctx, resp.TrackIDs)
 	if err != nil {
@@ -132,16 +177,16 @@ func (c *Client) Generate(ctx context.Context, prompt, lyrics string) ([][]Song,
 	sem := make(chan struct{}, concurrency)
 
 	// Extend fragments
-	songs := [][]Song{}
+	songs := [][]music.Song{}
 	var wg sync.WaitGroup
 	var lck sync.Mutex
 	for _, fragment := range fragments {
-		f := &fragment
+		f := fragment
 
 		// Wait for semaphore
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("suno: %w", ctx.Err())
+			return nil, fmt.Errorf("udio: %w", ctx.Err())
 		case sem <- struct{}{}:
 		}
 		wg.Add(1)
@@ -151,27 +196,26 @@ func (c *Client) Generate(ctx context.Context, prompt, lyrics string) ([][]Song,
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			clips, err := c.extend(ctx, f)
+			clips, err := c.extend(ctx, f, bypassPromptOptimize)
 			if err != nil {
 				log.Printf("❌ %v\n", err)
 				return
 			}
-			ss := []Song{}
+			ss := []music.Song{}
 			for _, clp := range clips {
 				videoPath := ""
 				if clp.VideoPath != nil {
 					videoPath = *clp.VideoPath
 				}
-				ss = append(ss, Song{
-					ID:       clp.ID,
-					Title:    clp.Title,
-					Style:    strings.Join(clp.Tags, ", "),
-					Audio:    clp.SongPath,
-					Image:    clp.ImagePath,
-					Video:    videoPath,
-					Duration: float32(clp.Duration),
-					// TODO: determine if instrumental
-					Instrumental: true,
+				ss = append(ss, music.Song{
+					ID:           clp.ID,
+					Title:        clp.Title,
+					Style:        strings.Join(clp.Tags, ", "),
+					Audio:        clp.SongPath,
+					Image:        clp.ImagePath,
+					Video:        videoPath,
+					Duration:     float32(clp.Duration),
+					Instrumental: instrumental,
 				})
 			}
 			lck.Lock()
@@ -183,13 +227,13 @@ func (c *Client) Generate(ctx context.Context, prompt, lyrics string) ([][]Song,
 	// Wait for all fragments to be extended
 	wg.Wait()
 	if len(songs) == 0 {
-		return nil, errors.New("suno: no songs generated")
+		return nil, errors.New("udio: no songs generated")
 	}
 	return songs, nil
 }
 
 type clipsResponse struct {
-	Clips []clip `json:"songs"`
+	Clips []*clip `json:"songs"`
 }
 
 type clip struct {
@@ -221,12 +265,95 @@ type clip struct {
 	Disliked    bool     `json:"disliked"`
 }
 
-func (c *Client) extend(_ context.Context, clp *clip) ([]*clip, error) {
-	// TODO: implement
-	return []*clip{clp}, nil
+func (c *Client) extend(ctx context.Context, clp *clip, bypassPromptOptimize bool) ([]*clip, error) {
+	// Initialize variables
+	clips := []*clip{clp}
+	var duration float32
+	var extensions int
+
+	for {
+		// TODO: Choose the best clip
+
+		// Choose random clip
+		rnd := rand.Intn(len(clips))
+		clp = clips[rnd]
+
+		duration = float32(clp.Duration)
+
+		// Check if the song is over the min duration
+		if duration > c.maxDuration {
+			break
+		}
+
+		// Check if the song is over the max extensions
+		if extensions >= c.maxExtensions {
+			break
+		}
+
+		// Generate next fragment
+		extensions++
+
+		// If the duration is over the min duration, set outro settings
+		cropStartTime := 0.0
+		if duration+30.0 > c.minDuration || extensions == c.maxExtensions {
+			cropStartTime = 0.9
+		}
+
+		// Check auth
+		if err := c.Auth(ctx); err != nil {
+			return nil, err
+		}
+
+		// Get captcha token
+		captchaToken, err := c.nopechaClient.Token(ctx, "hcaptcha", hcaptchaSiteKey, "https://www.udio.com/")
+		if err != nil {
+			return nil, err
+		}
+
+		// Generate extension
+		req := &generateRequest{
+			Prompt:     clp.Prompt,
+			LyricInput: "",
+			SamplerOptions: samplerOptions{
+				Seed:                    -1,
+				CropStartTime:           cropStartTime,
+				BypassPromptOptimize:    bypassPromptOptimize,
+				AudioConditioningPath:   clp.SongPath,
+				AudioConditioningSongID: clp.ID,
+				AudioConditioningType:   "continuation",
+			},
+			CaptchaToken: captchaToken,
+		}
+		var resp generateResponse
+		if _, err := c.do(ctx, "POST", "generate-proxy", req, &resp); err != nil {
+			return nil, err
+		}
+		if resp.Message != "Success" {
+			return nil, fmt.Errorf("udio: generation failed: %s", resp.Message)
+		}
+		if len(resp.TrackIDs) == 0 {
+			return nil, errors.New("udio: empty clips")
+		}
+		candidates, err := c.waitClips(ctx, resp.TrackIDs)
+		if err != nil {
+			return nil, err
+		}
+		clips = candidates
+	}
+
+	// If there are no extensions, return the original clip
+	if extensions == 0 {
+		return []*clip{clp}, nil
+	}
+
+	// Sort clips putting clp first
+	sort.Slice(clips, func(i, j int) bool {
+		return clips[i].ID == clp.ID
+	})
+	return clips, nil
 }
 
-func (c *Client) waitClips(ctx context.Context, ids []string) ([]clip, error) {
+func (c *Client) waitClips(ctx context.Context, ids []string) ([]*clip, error) {
 	u := fmt.Sprintf("songs?songIds=%s", strings.Join(ids, ","))
 	var last []byte
 	for {
@@ -244,7 +371,7 @@ func (c *Client) waitClips(ctx context.Context, ids []string) ([]clip, error) {
 			return nil, fmt.Errorf("udio: couldn't get clips: %w", err)
 		}
 		clips := resp.Clips
-		var oks []clip
+		var oks []*clip
 		var errs []string
 		for _, clip := range clips {
 			if clip.ErrorID != nil {

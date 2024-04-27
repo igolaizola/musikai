@@ -235,7 +235,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 				p += " " + g.Flags
 			}
 
-			audioURL := g.SunoAudio
+			audioURL := g.Audio
 			if g.Processed {
 				audioURL = getMP3(g.ID)
 			}
@@ -481,7 +481,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 			d := time.Duration(int(g.Duration)) * time.Second
 			p := fmt.Sprintf("%d - %s | %s %.f BPM %s", s.Order, s.Title, d, g.Tempo, s.Type)
 
-			audioURL := g.SunoAudio
+			audioURL := g.Audio
 			if g.Processed {
 				audioURL = getMP3(g.ID)
 			}

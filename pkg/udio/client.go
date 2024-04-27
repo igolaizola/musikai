@@ -153,8 +153,10 @@ func (c *Client) Stop(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("udio: couldn't get cookie: %w", err)
 	}
-	if err := c.cookieStore.SetCookie(ctx, cookie); err != nil {
-		return err
+	if cookie != "" {
+		if err := c.cookieStore.SetCookie(ctx, cookie); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -167,12 +169,8 @@ func (c *Client) log(format string, args ...interface{}) {
 }
 
 func (c *Client) Auth(ctx context.Context) error {
-	email, err := c.User(ctx)
-	if err != nil {
+	if err := c.CheckLimit(ctx); err != nil {
 		return err
-	}
-	if email == "" {
-		return fmt.Errorf("udio: couldn't get email")
 	}
 	return nil
 }

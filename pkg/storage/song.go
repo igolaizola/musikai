@@ -35,6 +35,9 @@ type Song struct {
 	GenerationID *string
 	Generation   *Generation `gorm:"foreignKey:GenerationID"`
 
+	Provider string `gorm:"not null;default:''"`
+	Account  string `gorm:"not null;default:''"`
+
 	Title           string `gorm:"not null;default:''"`
 	AlbumID         string `gorm:"index,not null;default:''"`
 	Order           int    `gorm:"not null;default:0"`

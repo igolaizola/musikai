@@ -17,11 +17,11 @@ type Generation struct {
 	SongID *string
 	Song   *Song `gorm:"foreignKey:SongID"`
 
-	SunoID      string `gorm:"not null;default:''"`
-	SunoAudio   string `gorm:"not null;default:''"`
-	SunoImage   string `gorm:"not null;default:''"`
-	SunoTitle   string `gorm:"not null;default:''"`
-	SunoHistory string `gorm:"not null;default:''"`
+	ExternalID string `gorm:"not null;default:''"`
+	Audio      string `gorm:"not null;default:''"`
+	Image      string `gorm:"not null;default:''"`
+	Title      string `gorm:"not null;default:''"`
+	History    string `gorm:"not null;default:''"`
 
 	Duration float32 `gorm:"not null;default:0"`
 	Tempo    float32 `gorm:"not null;default:0"`

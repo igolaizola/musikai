@@ -2,6 +2,7 @@ package suno
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/igolaizola/musikai/pkg/music"
 	"github.com/igolaizola/musikai/pkg/sound"
 )
 
@@ -91,19 +93,7 @@ type concatRequest struct {
 	ClipID string `json:"clip_id"`
 }
 
-type Song struct {
-	ID           string     `json:"id"`
-	Title        string     `json:"title"`
-	Style        string     `json:"style"`
-	Audio        string     `json:"audio"`
-	Image        string     `json:"image"`
-	Video        string     `json:"video"`
-	Duration     float32    `json:"duration"`
-	Instrumental bool       `json:"instrumental"`
-	History      []Fragment `json:"history"`
-}
-
-func (c *Client) Generate(ctx context.Context, prompt, style, title string, instrumental bool) ([][]Song, error) {
+func (c *Client) Generate(ctx context.Context, prompt, style, title string, instrumental bool) ([][]music.Song, error) {
 	if err := c.Auth(ctx); err != nil {
 		return nil, err
 	}
@@ -143,7 +133,7 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 	sem := make(chan struct{}, concurrency)
 
 	// Extend fragments
-	songs := [][]Song{}
+	songs := [][]music.Song{}
 	var wg sync.WaitGroup
 	var lck sync.Mutex
 	for _, fragment := range fragments {
@@ -167,7 +157,7 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 				log.Printf("❌ %v\n", err)
 				return
 			}
-			ss := []Song{}
+			ss := []music.Song{}
 			for _, clp := range clips {
 				var history []Fragment
 				for _, h := range clp.Metadata.ConcatHistory {
@@ -176,7 +166,11 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 						ContinueAt: h.ContinueAt,
 					})
 				}
-				ss = append(ss, Song{
+				jsHistory, err := json.Marshal(history)
+				if err != nil {
+					log.Println("❌ suno: couldn't marshal history:", err)
+				}
+				ss = append(ss, music.Song{
 					ID:           clp.ID,
 					Title:        clp.Title,
 					Style:        clp.Metadata.Tags,
@@ -185,7 +179,7 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 					Video:        clp.VideoURL,
 					Duration:     clp.Metadata.Duration,
 					Instrumental: instrumental,
-					History:      history,
+					History:      string(jsHistory),
 				})
 			}
 			lck.Lock()
@@ -283,7 +277,7 @@ func (c *Client) extend(ctx context.Context, clp *clip) ([]*clip, error) {
 		}
 
 		// Check if the song is over the min duration
-		if duration > c.minDuration {
+		if duration > c.maxDuration {
 			break
 		}
 
@@ -322,6 +316,11 @@ func (c *Client) extend(ctx context.Context, clp *clip) ([]*clip, error) {
 
 		// Generate next fragment
 		extensions++
+
+		// Check auth
+		if err := c.Auth(ctx); err != nil {
+			return nil, err
+		}
 
 		req := &generateRequest{
 			Prompt:         lyrics,
@@ -367,6 +366,10 @@ func (c *Client) extend(ctx context.Context, clp *clip) ([]*clip, error) {
 	// Concatenate clips
 	var concats []*clip
 	for _, clp := range clips {
+		// Check auth
+		if err := c.Auth(ctx); err != nil {
+			return nil, err
+		}
 		req := &concatRequest{
 			ClipID: clp.ID,
 		}

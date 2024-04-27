@@ -14,9 +14,11 @@ import (
 	"time"
 
 	"github.com/gocarina/gocsv"
+	"github.com/igolaizola/musikai/pkg/music"
 	"github.com/igolaizola/musikai/pkg/sound/aubio"
 	"github.com/igolaizola/musikai/pkg/storage"
 	"github.com/igolaizola/musikai/pkg/suno"
+	"github.com/igolaizola/musikai/pkg/udio"
 	"github.com/oklog/ulid/v2"
 )
 
@@ -32,6 +34,7 @@ type Config struct {
 	Proxy       string
 
 	Account      string
+	Provider     string
 	Input        string
 	Type         string
 	Prompt       string
@@ -47,6 +50,8 @@ type Config struct {
 	MinDuration    time.Duration
 	MaxDuration    time.Duration
 	MaxExtensions  int
+
+	NopechaKey string
 }
 
 type input struct {
@@ -106,21 +111,39 @@ func Run(ctx context.Context, cfg *Config) error {
 			Proxy: http.ProxyURL(u),
 		}
 	}
-	generator := suno.New(&suno.Config{
-		Wait:           4 * time.Second,
-		Debug:          cfg.Debug,
-		Client:         httpClient,
-		CookieStore:    store.NewCookieStore("suno", cfg.Account),
-		Parallel:       cfg.Limit == 1,
-		EndLyrics:      cfg.EndLyrics,
-		EndStyle:       cfg.EndStyle,
-		EndStyleAppend: cfg.EndStyleAppend,
-		ForceEndLyrics: cfg.ForceEndLyrics,
-		ForceEndStyle:  cfg.ForceEndStyle,
-		MinDuration:    cfg.MinDuration,
-		MaxDuration:    cfg.MaxDuration,
-		MaxExtensions:  cfg.MaxExtensions,
-	})
+	var generator music.Generator
+	switch cfg.Provider {
+	case "suno":
+		generator = suno.New(&suno.Config{
+			Wait:           4 * time.Second,
+			Debug:          cfg.Debug,
+			Client:         httpClient,
+			CookieStore:    store.NewCookieStore("suno", cfg.Account),
+			Parallel:       cfg.Limit == 1,
+			EndLyrics:      cfg.EndLyrics,
+			EndStyle:       cfg.EndStyle,
+			EndStyleAppend: cfg.EndStyleAppend,
+			ForceEndLyrics: cfg.ForceEndLyrics,
+			ForceEndStyle:  cfg.ForceEndStyle,
+			MinDuration:    cfg.MinDuration,
+			MaxDuration:    cfg.MaxDuration,
+			MaxExtensions:  cfg.MaxExtensions,
+		})
+	case "udio":
+		generator = udio.New(&udio.Config{
+			Wait:          4 * time.Second,
+			Debug:         cfg.Debug,
+			Client:        httpClient,
+			CookieStore:   store.NewCookieStore("udio", cfg.Account),
+			Parallel:      cfg.Limit == 1,
+			MinDuration:   cfg.MinDuration,
+			MaxDuration:   cfg.MaxDuration,
+			MaxExtensions: cfg.MaxExtensions,
+			NopechaKey:    cfg.NopechaKey,
+		})
+	default:
+		return fmt.Errorf("generate: unknown provider: %s", cfg.Provider)
+	}
 	if err := generator.Start(ctx); err != nil {
 		return fmt.Errorf("generate: couldn't start suno generator: %w", err)
 	}
@@ -218,7 +241,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			go func() {
 				defer wg.Done()
 				debug("generate: start %s", tmpl)
-				err := generate(ctx, generator, store, tmpl, cfg.Notes)
+				err := generate(ctx, cfg.Account, "suno", generator, store, tmpl, cfg.Notes)
 				if err != nil {
 					log.Println(err)
 				}
@@ -229,7 +252,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 }
 
-func generate(ctx context.Context, generator *suno.Client, store *storage.Store, t template, notes string) error {
+func generate(ctx context.Context, account, provider string, generator music.Generator, store *storage.Store, t template, notes string) error {
 	// Generate the songs.
 	songs, err := generator.Generate(ctx, t.Prompt, t.Style, t.Title, t.Instrumental)
 	if err != nil {
@@ -248,6 +271,8 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 			Prompt:       t.Prompt,
 			Style:        gens[0].Style,
 			Instrumental: t.Instrumental,
+			Provider:     provider,
+			Account:      account,
 		}
 		if err := store.SetSong(ctx, song); err != nil {
 			return fmt.Errorf("generate: couldn't save song to database: %w", err)
@@ -258,19 +283,15 @@ func generate(ctx context.Context, generator *suno.Client, store *storage.Store,
 			if i == 0 {
 				firstGenID = genID
 			}
-			history, err := json.Marshal(g.History)
-			if err != nil {
-				return fmt.Errorf("generate: couldn't marshal history: %w", err)
-			}
 			if err := store.SetGeneration(ctx, &storage.Generation{
-				ID:          genID,
-				SongID:      &song.ID,
-				SunoID:      g.ID,
-				SunoAudio:   g.Audio,
-				SunoImage:   g.Image,
-				SunoTitle:   g.Title,
-				SunoHistory: string(history),
-				Duration:    g.Duration,
+				ID:         genID,
+				SongID:     &song.ID,
+				ExternalID: g.ID,
+				Audio:      g.Audio,
+				Image:      g.Image,
+				Title:      g.Title,
+				History:    g.History,
+				Duration:   g.Duration,
 			}); err != nil {
 				return fmt.Errorf("generate: couldn't save generation to database: %w", err)
 			}
