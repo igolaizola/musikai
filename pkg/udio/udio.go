@@ -130,11 +130,18 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 		return nil, errors.New("udio: only instrumental songs are supported")
 	}
 
+	// Check auth
+	if err := c.Auth(ctx); err != nil {
+		return nil, err
+	}
+
 	// Get captcha token
+	start := time.Now()
 	captchaToken, err := c.nopechaClient.Token(ctx, "hcaptcha", hcaptchaSiteKey, "https://www.udio.com/")
 	if err != nil {
 		return nil, err
 	}
+	c.log("udio: captcha token took %v", time.Since(start))
 
 	// Generate first fragments
 	req := &generateRequest{
@@ -297,10 +304,12 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 		}
 
 		// Get captcha token
+		start := time.Now()
 		captchaToken, err := c.nopechaClient.Token(ctx, "hcaptcha", hcaptchaSiteKey, "https://www.udio.com/")
 		if err != nil {
 			return nil, err
 		}
+		c.log("udio: captcha token took %v", time.Since(start))
 
 		// Generate extension
 		req := &generateRequest{
