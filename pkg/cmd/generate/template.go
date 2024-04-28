@@ -9,46 +9,38 @@ type template struct {
 	Type string `json:"type,omitempty"`
 
 	Prompt       string `json:"prompt,omitempty"`
-	Style        string `json:"style,omitempty"`
-	Title        string `json:"title,omitempty"`
+	Manual       bool   `json:"manual,omitempty"`
 	Instrumental bool   `json:"instrumental,omitempty"`
 }
 
-func newPrompt(typ, prompt string, instr bool) template {
+func newPrompt(typ, prompt string, manual, instr bool) template {
 	return template{
 		Type:         typ,
 		Prompt:       prompt,
-		Instrumental: instr,
-	}
-}
-
-func newStyle(typ, style string, instr bool) template {
-	return template{
-		Type:         typ,
-		Style:        style,
+		Manual:       manual,
 		Instrumental: instr,
 	}
 }
 
 func (t template) String() string {
-	return fmt.Sprintf("%s, p: %s, s: %s, t: %s, i: %v}",
-		t.Type, t.Prompt, t.Style, t.Title, t.Instrumental)
+	return fmt.Sprintf("%s, p: %s, m: %v, i: %v}",
+		t.Type, t.Prompt, t.Manual, t.Instrumental)
 }
 
 func nextTemplate() template {
 	var opts []template
-	opts = append(opts, options(100, newPrompt("lullaby", "genre: lullaby", true))...)
-	opts = append(opts, options(80, newPrompt("classical", "genre: classical", true))...)
-	opts = append(opts, options(80, newPrompt("jazz", "genre: jazz", true))...)
-	opts = append(opts, options(50, newPrompt("post-metal", "genre: post-metal", true))...)
-	opts = append(opts, options(50, newPrompt("edm", "genre: electronic dance", true))...)
-	opts = append(opts, options(20, newPrompt("post-rock", "genre: post-rock", true))...)
-	opts = append(opts, options(10, newPrompt("post-punk", "genre: post-punk", true))...)
-	opts = append(opts, options(10, newPrompt("bluegrass", "genre: bluegrass", true))...)
-	opts = append(opts, options(10, newPrompt("ambient", "genre: ambient", true))...)
-	opts = append(opts, options(10, newPrompt("film score", "genre: film score", true))...)
-	opts = append(opts, options(10, newPrompt("lo-fi", "genre: lo-fi", true))...)
-	opts = append(opts, options(10, newStyle("daftpunk", "electronic, funk, disco, house, synth-pop, innovative", true))...)
+	opts = append(opts, options(100, newPrompt("lullaby", "genre: lullaby", false, true))...)
+	opts = append(opts, options(80, newPrompt("classical", "genre: classical", false, true))...)
+	opts = append(opts, options(80, newPrompt("jazz", "genre: jazz", false, true))...)
+	opts = append(opts, options(50, newPrompt("post-metal", "genre: post-metal", false, true))...)
+	opts = append(opts, options(50, newPrompt("edm", "genre: electronic dance", false, true))...)
+	opts = append(opts, options(20, newPrompt("post-rock", "genre: post-rock", false, true))...)
+	opts = append(opts, options(10, newPrompt("post-punk", "genre: post-punk", false, true))...)
+	opts = append(opts, options(10, newPrompt("bluegrass", "genre: bluegrass", false, true))...)
+	opts = append(opts, options(10, newPrompt("ambient", "genre: ambient", false, true))...)
+	opts = append(opts, options(10, newPrompt("film score", "genre: film score", false, true))...)
+	opts = append(opts, options(10, newPrompt("lo-fi", "genre: lo-fi", false, true))...)
+	opts = append(opts, options(10, newPrompt("daftpunk", "electronic, funk, disco, house, synth-pop, innovative", true, true))...)
 	t := opts[rand.Intn(len(opts))]
 
 	return t

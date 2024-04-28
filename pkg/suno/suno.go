@@ -93,9 +93,15 @@ type concatRequest struct {
 	ClipID string `json:"clip_id"`
 }
 
-func (c *Client) Generate(ctx context.Context, prompt, style, title string, instrumental bool) ([][]music.Song, error) {
+func (c *Client) Generate(ctx context.Context, prompt string, manual, instrumental bool) ([][]music.Song, error) {
 	if err := c.Auth(ctx); err != nil {
 		return nil, err
+	}
+
+	var style string
+	if manual {
+		style = prompt
+		prompt = ""
 	}
 
 	// Generate first fragments
@@ -103,7 +109,6 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 		GPTDescriptionPrompt: prompt,
 		MV:                   "chirp-v3-alpha",
 		Tags:                 style,
-		Title:                title,
 		MakeInstrumental:     instrumental,
 	}
 	var resp generateResponse

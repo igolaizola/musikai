@@ -125,17 +125,9 @@ type generateResponse struct {
 	TrackIDs     []string `json:"track_ids"`
 }
 
-func (c *Client) Generate(ctx context.Context, prompt, style, title string, instrumental bool) ([][]music.Song, error) {
+func (c *Client) Generate(ctx context.Context, prompt string, manual, instrumental bool) ([][]music.Song, error) {
 	if !instrumental {
 		return nil, errors.New("udio: only instrumental songs are supported")
-	}
-	if prompt != "" && style != "" {
-		return nil, errors.New("udio: prompt and style are mutually exclusive")
-	}
-	var bypassPromptOptimize bool
-	if style != "" {
-		prompt = style
-		bypassPromptOptimize = true
 	}
 
 	// Get captcha token
@@ -150,7 +142,7 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 		LyricInput: "",
 		SamplerOptions: samplerOptions{
 			Seed:                 -1,
-			BypassPromptOptimize: bypassPromptOptimize,
+			BypassPromptOptimize: manual,
 		},
 		CaptchaToken: captchaToken,
 	}
@@ -196,7 +188,7 @@ func (c *Client) Generate(ctx context.Context, prompt, style, title string, inst
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			clips, err := c.extend(ctx, f, bypassPromptOptimize)
+			clips, err := c.extend(ctx, f, manual)
 			if err != nil {
 				log.Printf("❌ %v\n", err)
 				return
@@ -265,7 +257,7 @@ type clip struct {
 	Disliked    bool     `json:"disliked"`
 }
 
-func (c *Client) extend(ctx context.Context, clp *clip, bypassPromptOptimize bool) ([]*clip, error) {
+func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, error) {
 	// Initialize variables
 	clips := []*clip{clp}
 	var duration float32
@@ -317,7 +309,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, bypassPromptOptimize boo
 			SamplerOptions: samplerOptions{
 				Seed:                    -1,
 				CropStartTime:           cropStartTime,
-				BypassPromptOptimize:    bypassPromptOptimize,
+				BypassPromptOptimize:    manual,
 				AudioConditioningPath:   clp.SongPath,
 				AudioConditioningSongID: clp.ID,
 				AudioConditioningType:   "continuation",

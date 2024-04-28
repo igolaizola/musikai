@@ -29,6 +29,7 @@ type Song struct {
 	Notes string `gorm:"not null;default:''"`
 
 	Prompt       string `gorm:"not null;default:''"`
+	Manual       bool   `gorm:"not null;default:false"`
 	Style        string `gorm:"not null;default:''"`
 	Instrumental bool   `gorm:"not null;default:false"`
 

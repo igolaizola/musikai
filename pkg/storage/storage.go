@@ -88,8 +88,13 @@ func (s *Store) Migrate(ctx context.Context) error {
 	// Initialize the database with a seed table
 	init := !s.db.Migrator().HasTable(&Song{})
 
-	// Custom migrations
-	if err := s.customMigrate(init); err != nil {
+	m, err := s.currentMigration(init)
+	if err != nil {
+		return err
+	}
+
+	// Custom pre migrations
+	if err := s.preMigrate(m.Version); err != nil {
 		return err
 	}
 
@@ -111,36 +116,50 @@ func (s *Store) Migrate(ctx context.Context) error {
 	); err != nil {
 		return fmt.Errorf("storage: failed to migrate database: %w", err)
 	}
+
+	// Custom post migrations
+	if err := s.postMigrate(m.Version); err != nil {
+		return err
+	}
+
+	// Update the migration version
+	m.Version = lastVersion
+	if err := s.db.Save(m).Error; err != nil {
+		return fmt.Errorf("storage: failed to save migration version: %w", err)
+	}
 	return nil
 }
 
-func (s *Store) customMigrate(init bool) error {
-	lastVersion := 1
+const lastVersion = 2
 
+func (s *Store) currentMigration(init bool) (*Migration, error) {
+	var migration Migration
 	if !s.db.Migrator().HasTable(&Migration{}) {
 		if err := s.db.Migrator().CreateTable(&Migration{}); err != nil {
-			return fmt.Errorf("storage: failed to create table migrations: %w", err)
+			return nil, fmt.Errorf("storage: failed to create table migrations: %w", err)
 		}
-		var version int
+		migration.ID = ulid.Make().String()
 		if init {
-			version = lastVersion
+			migration.Version = lastVersion
 		}
-		if err := s.db.Save(&Migration{ID: ulid.Make().String(), Version: version}).Error; err != nil {
-			return fmt.Errorf("storage: failed to save migration version: %w", err)
+		if err := s.db.Save(&migration).Error; err != nil {
+			return nil, fmt.Errorf("storage: failed to save migration version: %w", err)
 		}
 		if init {
-			return nil
+			return &migration, nil
 		}
 	}
 
 	// Get the current migration version
-	var migration Migration
 	if err := s.db.First(&migration).Error; err != nil {
-		return fmt.Errorf("storage: failed to get migration version: %w", err)
+		return nil, fmt.Errorf("storage: failed to get migration version: %w", err)
 	}
+	return &migration, nil
+}
 
+func (s *Store) preMigrate(version int) error {
 	// Custom migrations
-	for i := migration.Version + 1; i <= lastVersion; i++ {
+	for i := version + 1; i <= lastVersion; i++ {
 		switch i {
 		case 1:
 			log.Println("storage: migration 1: rename suno columns")
@@ -159,12 +178,35 @@ func (s *Store) customMigrate(init bool) error {
 			if err := s.db.Migrator().RenameColumn(&Generation{}, "suno_history", "history"); err != nil {
 				return fmt.Errorf("storage: migration %d: %w", i, err)
 			}
-		case 2:
-			// TODO: Add next migration here and update lastVersion
+		case 3:
+			// TODO: Next migration here and update lastVersion
 		}
-		migration.Version = i
-		if err := s.db.Save(&migration).Error; err != nil {
-			return fmt.Errorf("storage: failed to save migration version: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) postMigrate(version int) error {
+	// Custom migrations
+	for i := version + 1; i <= lastVersion; i++ {
+		switch i {
+		case 2:
+			// Update empty provider to "suno"
+			log.Println("storage: migration 2: update empty provider to suno")
+			if err := s.db.Exec("UPDATE songs SET provider = 'suno' WHERE provider = ''").Error; err != nil {
+				return fmt.Errorf("storage: migration %d: %w", i, err)
+			}
+			// Update manual to true where prompt is empty
+			log.Println("storage: migration 2: update manual to true where prompt is empty")
+			if err := s.db.Exec("UPDATE songs SET manual = true WHERE prompt = ''").Error; err != nil {
+				return fmt.Errorf("storage: migration %d: %w", i, err)
+			}
+			// Set prompt value equal to style value where prompt is empty
+			log.Println("storage: migration 2: set prompt value equal to style value where prompt is empty")
+			if err := s.db.Exec("UPDATE songs SET prompt = style WHERE prompt = ''").Error; err != nil {
+				return fmt.Errorf("storage: migration %d: %w", i, err)
+			}
+		case 3:
+			// TODO: Next migration here and update lastVersion
 		}
 	}
 	return nil

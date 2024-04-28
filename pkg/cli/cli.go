@@ -203,7 +203,7 @@ func newGenerateCommand() *ffcli.Command {
 
 	fs.StringVar(&cfg.Input, "input", "", "csv or json with prompts or styles (fields: weight,type,prompt,style,instrumental)")
 	fs.StringVar(&cfg.Prompt, "prompt", "", "prompt to use")
-	fs.StringVar(&cfg.Style, "style", "", "style to use")
+	fs.BoolVar(&cfg.Manual, "manual", false, "send prompt on manual mode")
 	fs.BoolVar(&cfg.Instrumental, "instrumental", true, "instrumental song")
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
 	fs.DurationVar(&cfg.MinDuration, "min-duration", 0, "minimum duration for the song")

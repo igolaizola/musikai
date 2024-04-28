@@ -104,7 +104,7 @@ func New(cfg *Config) *Client {
 		Wait:   100 * time.Millisecond,
 		Key:    cfg.NopechaKey,
 		Client: client,
-		Debug:  cfg.Debug,
+		Debug:  false,
 	})
 
 	return &Client{

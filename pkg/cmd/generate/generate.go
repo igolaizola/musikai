@@ -38,7 +38,7 @@ type Config struct {
 	Input        string
 	Type         string
 	Prompt       string
-	Style        string
+	Manual       bool
 	Instrumental bool
 	Notes        string
 
@@ -58,7 +58,7 @@ type input struct {
 	Weight       int    `json:"weight" csv:"weight"`
 	Type         string `json:"type" csv:"type"`
 	Prompt       string `json:"prompt" csv:"prompt"`
-	Style        string `json:"style" csv:"style"`
+	Manual       bool   `json:"manual" csv:"manual"`
 	Instrumental bool   `json:"instrumental" csv:"instrumental"`
 }
 
@@ -228,10 +228,10 @@ func Run(ctx context.Context, cfg *Config) error {
 				tmpl = template{
 					Type:         cfg.Type,
 					Prompt:       cfg.Prompt,
-					Style:        cfg.Style,
+					Manual:       cfg.Manual,
 					Instrumental: cfg.Instrumental,
 				}
-				if tmpl.Prompt == "" && tmpl.Style == "" {
+				if tmpl.Prompt == "" {
 					tmpl = nextTemplate()
 				}
 			}
@@ -241,7 +241,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			go func() {
 				defer wg.Done()
 				debug("generate: start %s", tmpl)
-				err := generate(ctx, cfg.Account, "suno", generator, store, tmpl, cfg.Notes)
+				err := generate(ctx, cfg.Account, cfg.Provider, generator, store, tmpl, cfg.Notes)
 				if err != nil {
 					log.Println(err)
 				}
@@ -254,7 +254,7 @@ func Run(ctx context.Context, cfg *Config) error {
 
 func generate(ctx context.Context, account, provider string, generator music.Generator, store *storage.Store, t template, notes string) error {
 	// Generate the songs.
-	songs, err := generator.Generate(ctx, t.Prompt, t.Style, t.Title, t.Instrumental)
+	songs, err := generator.Generate(ctx, t.Prompt, t.Manual, t.Instrumental)
 	if err != nil {
 		return fmt.Errorf("generate: couldn't generate song %s: %w", t, err)
 	}
@@ -269,6 +269,7 @@ func generate(ctx context.Context, account, provider string, generator music.Gen
 			Type:         t.Type,
 			Notes:        notes,
 			Prompt:       t.Prompt,
+			Manual:       t.Manual,
 			Style:        gens[0].Style,
 			Instrumental: t.Instrumental,
 			Provider:     provider,
@@ -345,14 +346,14 @@ func toTemplateFunc(file string) (func() template, error) {
 		if w <= 0 {
 			w = 1
 		}
-		if i.Prompt == "" && i.Style == "" {
+		if i.Prompt == "" {
 			log.Println("generate: skipping empty input")
 			continue
 		}
 		opts = append(opts, options(w, template{
 			Type:         i.Type,
 			Prompt:       i.Prompt,
-			Style:        i.Style,
+			Manual:       i.Manual,
 			Instrumental: i.Instrumental,
 		})...)
 	}
