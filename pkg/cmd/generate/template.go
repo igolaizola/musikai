@@ -23,7 +23,7 @@ func newPrompt(typ, prompt string, manual, instr bool) template {
 }
 
 func (t template) String() string {
-	return fmt.Sprintf("%s, p: %s, m: %v, i: %v}",
+	return fmt.Sprintf("{%s, p: %s, m: %v, i: %v}",
 		t.Type, t.Prompt, t.Manual, t.Instrumental)
 }
 
