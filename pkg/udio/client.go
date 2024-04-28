@@ -211,6 +211,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 
 		// Check status code
 		var errStatus errStatusCode
+		var appErr appError
 		if errors.As(err, &errStatus) {
 			switch int(errStatus) {
 			case http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusTooManyRequests, 520:
@@ -224,6 +225,17 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 				}
 				retry = true
 			default:
+				return nil, err
+			}
+		} else if errors.As(err, &appErr) {
+			msg := strings.ToLower(appErr.Message)
+			if msg == "unauthorized" {
+				// Retry on unauthorized
+				if err := c.Auth(ctx); err != nil {
+					return nil, err
+				}
+				retry = true
+			} else {
 				return nil, err
 			}
 		}
@@ -253,6 +265,14 @@ type errStatusCode int
 
 func (e errStatusCode) Error() string {
 	return fmt.Sprintf("%d", e)
+}
+
+type appError struct {
+	Message string `json:"error"`
+}
+
+func (e appError) Error() string {
+	return fmt.Sprintf("udio: %s", e.Message)
 }
 
 func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any) ([]byte, error) {
@@ -296,6 +316,10 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 		return nil, fmt.Errorf("udio: couldn't read response body: %w", err)
 	}
 	c.log("udio: response %s %s %d %s", method, path, resp.StatusCode, string(respBody))
+	var appErr appError
+	if err := json.Unmarshal(respBody, &appErr); err == nil && appErr.Message != "" {
+		return nil, &appErr
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		errMessage := string(respBody)
 		if len(errMessage) > 100 {
