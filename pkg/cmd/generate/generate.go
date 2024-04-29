@@ -52,6 +52,7 @@ type Config struct {
 	MaxExtensions  int
 
 	NopechaKey string
+	UdioKey string
 }
 
 type input struct {
@@ -140,6 +141,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			MaxDuration:   cfg.MaxDuration,
 			MaxExtensions: cfg.MaxExtensions,
 			NopechaKey:    cfg.NopechaKey,
+			Key: 		   cfg.UdioKey,
 		})
 	default:
 		return fmt.Errorf("generate: unknown provider: %s", cfg.Provider)

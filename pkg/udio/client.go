@@ -16,7 +16,6 @@ import (
 
 	"github.com/igolaizola/musikai/pkg/nopecha"
 	"github.com/igolaizola/musikai/pkg/ratelimit"
-	"github.com/igolaizola/musikai/pkg/session"
 )
 
 const (
@@ -28,6 +27,9 @@ type Client struct {
 	debug         bool
 	ratelimit     ratelimit.Lock
 	cookieStore   CookieStore
+	refreshToken  string
+	key           string
+	expiration    time.Time
 	minDuration   float32
 	maxDuration   float32
 	maxExtensions int
@@ -44,6 +46,7 @@ type Config struct {
 	MaxDuration   time.Duration
 	MaxExtensions int
 	Parallel      bool
+	Key           string
 	NopechaKey    string
 }
 
@@ -112,6 +115,7 @@ func New(cfg *Config) *Client {
 		ratelimit:     ratelimit.New(wait),
 		debug:         cfg.Debug,
 		cookieStore:   cfg.CookieStore,
+		key:           cfg.Key,
 		minDuration:   float32(minDuration.Seconds()),
 		maxDuration:   float32(maxDuration.Seconds()),
 		maxExtensions: maxExtensions,
@@ -128,17 +132,15 @@ func (c *Client) Start(ctx context.Context) error {
 		}
 	}
 
-	// Get cookie
-	cookie, err := c.cookieStore.GetCookie(ctx)
+	// Get refresh token
+	refreshToken, err := c.cookieStore.GetCookie(ctx)
 	if err != nil {
 		return err
 	}
-	if cookie == "" {
-		return fmt.Errorf("udio: cookie is empty")
+	if refreshToken == "" {
+		return fmt.Errorf("udio: refresh token is empty")
 	}
-	if err := session.SetCookies(c.client, "https://www.udio.com", cookie, nil); err != nil {
-		return fmt.Errorf("udio: couldn't set cookie: %w", err)
-	}
+	c.refreshToken = refreshToken
 
 	// Authenticate
 	if err := c.Auth(ctx); err != nil {
@@ -149,12 +151,8 @@ func (c *Client) Start(ctx context.Context) error {
 }
 
 func (c *Client) Stop(ctx context.Context) error {
-	cookie, err := session.GetCookies(c.client, "https://www.udio.com")
-	if err != nil {
-		return fmt.Errorf("udio: couldn't get cookie: %w", err)
-	}
-	if cookie != "" {
-		if err := c.cookieStore.SetCookie(ctx, cookie); err != nil {
+	if c.refreshToken != "" {
+		if err := c.cookieStore.SetCookie(ctx, c.refreshToken); err != nil {
 			return err
 		}
 	}
@@ -169,6 +167,12 @@ func (c *Client) log(format string, args ...interface{}) {
 }
 
 func (c *Client) Auth(ctx context.Context) error {
+	// Check if we need to refresh the token
+	if c.expiration.After(time.Now()) {
+		if err := c.refresh(ctx); err != nil {
+			return err
+		}
+	}
 	if err := c.CheckLimit(ctx); err != nil {
 		return err
 	}
@@ -301,7 +305,7 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 	if err != nil {
 		return nil, fmt.Errorf("udio: couldn't create request: %w", err)
 	}
-	c.addHeaders(req)
+	c.addHeaders(req, path)
 
 	unlock := c.ratelimit.Lock(ctx)
 	defer unlock()
@@ -338,17 +342,36 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 	return respBody, nil
 }
 
-func (c *Client) addHeaders(req *http.Request) {
-	req.Header.Set("accept", "application/json, text/plain, */*")
-	req.Header.Set("accept-language", "es-ES,es;q=0.9,en;q=0.8")
-	req.Header.Set("priority", "u=1, i")
-	req.Header.Set("referer", "https://www.udio.com/")
-	req.Header.Set("origin", "https://www.udio.com")
-	req.Header.Set("sec-ch-ua", `"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"`)
-	req.Header.Set("sec-ch-ua-mobile", "?0")
-	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
-	req.Header.Set("sec-fetch-dest", "empty")
-	req.Header.Set("sec-fetch-mode", "cors")
-	req.Header.Set("sec-fetch-site", "same-origin")
-	req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`)
+func (c *Client) addHeaders(req *http.Request, path string) {
+	switch {
+	case strings.HasPrefix(path, "https://api.udio.com/auth"):
+		req.Header.Set("accept", "*/*")
+		req.Header.Set("accept-language", "es-ES,es;q=0.9,en;q=0.8")
+		req.Header.Set("apikey", c.key)
+		req.Header.Set("authorization", fmt.Sprintf("Bearer %s", c.key))
+		req.Header.Set("content-type", "application/json;charset=UTF-8")
+		req.Header.Set("origin", "https://www.udio.com")
+		req.Header.Set("priority", "u=1, i")
+		req.Header.Set("referer", "https://www.udio.com/")
+		req.Header.Set("sec-ch-ua", `"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"`)
+		req.Header.Set("sec-ch-ua-mobile", "?0")
+		req.Header.Set("sec-ch-ua-platform", `"Windows"`)
+		req.Header.Set("sec-fetch-dest", "empty")
+		req.Header.Set("sec-fetch-site", "same-site")
+		req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`)
+		req.Header.Set("x-client-info", "@supabase/auth-helpers-nextjs@0.8.7")
+	default:
+		req.Header.Set("accept", "application/json, text/plain, */*")
+		req.Header.Set("accept-language", "es-ES,es;q=0.9,en;q=0.8")
+		req.Header.Set("priority", "u=1, i")
+		req.Header.Set("referer", "https://www.udio.com/")
+		req.Header.Set("origin", "https://www.udio.com")
+		req.Header.Set("sec-ch-ua", `"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"`)
+		req.Header.Set("sec-ch-ua-mobile", "?0")
+		req.Header.Set("sec-ch-ua-platform", `"Windows"`)
+		req.Header.Set("sec-fetch-dest", "empty")
+		req.Header.Set("sec-fetch-mode", "cors")
+		req.Header.Set("sec-fetch-site", "same-origin")
+		req.Header.Set("user-agent", `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`)
+	}
 }

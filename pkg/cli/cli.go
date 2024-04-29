@@ -220,6 +220,7 @@ func newGenerateCommand() *ffcli.Command {
 
 	// Udio specific parameters
 	fs.StringVar(&cfg.NopechaKey, "nopecha-key", "", "nopecha api key")
+	fs.StringVar(&cfg.UdioKey, "udio-key", "", "udio api key")
 
 	return &ffcli.Command{
 		Name:       cmd,

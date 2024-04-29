@@ -58,6 +58,45 @@ func (c *Client) CheckLimit(ctx context.Context) error {
 	return nil
 }
 
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type refreshResponse struct {
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	ExpiresAt    int64  `json:"expires_at"`
+	RefreshToken string `json:"refresh_token"`
+	User         struct {
+		ID               string `json:"id"`
+		Aud              string `json:"aud"`
+		Role             string `json:"role"`
+		Email            string `json:"email"`
+		EmailConfirmedAt string `json:"email_confirmed_at"`
+		Phone            string `json:"phone"`
+		ConfirmedAt      string `json:"confirmed_at"`
+		LastSignInAt     string `json:"last_sign_in_at"`
+		CreatedAt        string `json:"created_at"`
+		UpdatedAt        string `json:"updated_at"`
+		IsAnonymous      bool   `json:"is_anonymous"`
+	} `json:"user"`
+}
+
+func (c *Client) refresh(ctx context.Context) error {
+	req := &refreshRequest{
+		RefreshToken: c.refreshToken,
+	}
+	var resp refreshResponse
+	if _, err := c.do(ctx, "POST", "https://api.udio.com/auth/v1/token?grant_type=refresh_token", req, &resp); err != nil {
+		return fmt.Errorf("udio: couldn't refresh token: %w", err)
+	}
+	c.refreshToken = resp.RefreshToken
+	expiration := resp.ExpiresIn * 70 / 100
+	c.expiration = time.Now().Add(time.Duration(expiration) * time.Second)
+	return nil
+}
+
 type userResponse struct {
 	User struct {
 		ID          string      `json:"id"`
