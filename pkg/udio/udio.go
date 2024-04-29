@@ -2,16 +2,19 @@ package udio
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"math/rand"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/music"
+	"github.com/igolaizola/musikai/pkg/session"
 )
 
 const (
@@ -84,16 +87,57 @@ type refreshResponse struct {
 }
 
 func (c *Client) refresh(ctx context.Context) error {
+	u, err := url.Parse("https://www.udio.com")
+	if err != nil {
+		return fmt.Errorf("udio: couldn't parse url: %w", err)
+	}
+	var authToken string
+	for _, cookie := range c.client.Jar.Cookies(u) {
+		if cookie.Name != "sb-api-auth-token" {
+			continue
+		}
+		authToken = cookie.Value
+	}
+	if authToken == "" {
+		return errors.New("udio: couldn't find auth token")
+	}
+
+	// Decode auth token
+	authToken, err = url.QueryUnescape(authToken)
+	if err != nil {
+		return fmt.Errorf("udio: couldn't decode auth token (%s): %w", authToken, err)
+	}
+	var parts []*string
+	if err := json.Unmarshal([]byte(authToken), &parts); err != nil {
+		return fmt.Errorf("udio: couldn't unmarshal auth token (%s): %w", authToken, err)
+	}
+	if len(parts) != 5 {
+		return fmt.Errorf("udio: invalid auth token parts: %v", parts)
+	}
+	refreshToken := *parts[1]
+
+	// Refresh token
 	req := &refreshRequest{
-		RefreshToken: c.refreshToken,
+		RefreshToken: refreshToken,
 	}
 	var resp refreshResponse
 	if _, err := c.do(ctx, "POST", "https://api.udio.com/auth/v1/token?grant_type=refresh_token", req, &resp); err != nil {
 		return fmt.Errorf("udio: couldn't refresh token: %w", err)
 	}
-	c.refreshToken = resp.RefreshToken
+
+	parts[0] = &resp.AccessToken
+	parts[4] = &resp.RefreshToken
 	expiration := resp.ExpiresIn * 70 / 100
 	c.expiration = time.Now().Add(time.Duration(expiration) * time.Second)
+
+	jsonParts, err := json.Marshal(parts)
+	if err != nil {
+		return fmt.Errorf("udio: couldn't marshal auth token parts: %w", err)
+	}
+	cookie := fmt.Sprintf("sb-api-auth-token=%s", url.QueryEscape(string(jsonParts)))
+	if err := session.SetCookies(c.client, "https://www.udio.com", cookie, nil); err != nil {
+		return fmt.Errorf("udio: couldn't set cookie: %w", err)
+	}
 	return nil
 }
 

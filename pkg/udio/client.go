@@ -16,6 +16,7 @@ import (
 
 	"github.com/igolaizola/musikai/pkg/nopecha"
 	"github.com/igolaizola/musikai/pkg/ratelimit"
+	"github.com/igolaizola/musikai/pkg/session"
 )
 
 const (
@@ -27,7 +28,6 @@ type Client struct {
 	debug         bool
 	ratelimit     ratelimit.Lock
 	cookieStore   CookieStore
-	refreshToken  string
 	key           string
 	expiration    time.Time
 	minDuration   float32
@@ -132,15 +132,17 @@ func (c *Client) Start(ctx context.Context) error {
 		}
 	}
 
-	// Get refresh token
-	refreshToken, err := c.cookieStore.GetCookie(ctx)
+	// Get cookie
+	cookie, err := c.cookieStore.GetCookie(ctx)
 	if err != nil {
 		return err
 	}
-	if refreshToken == "" {
-		return fmt.Errorf("udio: refresh token is empty")
+	if cookie == "" {
+		return fmt.Errorf("udio: cookie is empty")
 	}
-	c.refreshToken = refreshToken
+	if err := session.SetCookies(c.client, "https://www.udio.com", cookie, nil); err != nil {
+		return fmt.Errorf("udio: couldn't set cookie: %w", err)
+	}
 
 	// Authenticate
 	if err := c.Auth(ctx); err != nil {
@@ -151,8 +153,12 @@ func (c *Client) Start(ctx context.Context) error {
 }
 
 func (c *Client) Stop(ctx context.Context) error {
-	if c.refreshToken != "" {
-		if err := c.cookieStore.SetCookie(ctx, c.refreshToken); err != nil {
+	cookie, err := session.GetCookies(c.client, "https://www.udio.com")
+	if err != nil {
+		return fmt.Errorf("udio: couldn't get cookie: %w", err)
+	}
+	if cookie != "" {
+		if err := c.cookieStore.SetCookie(ctx, cookie); err != nil {
 			return err
 		}
 	}
@@ -168,7 +174,7 @@ func (c *Client) log(format string, args ...interface{}) {
 
 func (c *Client) Auth(ctx context.Context) error {
 	// Check if we need to refresh the token
-	if c.expiration.After(time.Now()) {
+	if c.expiration.IsZero() || time.Now().After(c.expiration) {
 		if err := c.refresh(ctx); err != nil {
 			return err
 		}
