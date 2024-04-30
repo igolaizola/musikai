@@ -221,6 +221,7 @@ func newGenerateCommand() *ffcli.Command {
 	// Udio specific parameters
 	fs.StringVar(&cfg.CaptchaKey, "captcha-key", "", "captcha api key")
 	fs.StringVar(&cfg.CaptchaProvider, "captcha-provider", "", "captcha provider to use (nopecha, 2captcha)")
+	fs.StringVar(&cfg.CaptchaProxy, "captcha-proxy", "", "captcha proxy to use")
 	fs.StringVar(&cfg.UdioKey, "udio-key", "", "udio api key")
 
 	return &ffcli.Command{

@@ -50,6 +50,7 @@ type Config struct {
 	Key             string
 	CaptchaKey      string
 	CaptchaProvider string
+	CaptchaProxy    string
 }
 
 type cookieStore struct {
@@ -119,6 +120,9 @@ func New(cfg *Config) (*Client, error) {
 				SiteKey: hcaptchaSiteKey,
 				Url:     "https://www.udio.com/",
 			}).ToRequest()
+			if cfg.CaptchaProxy != "" {
+				req.SetProxy("http", cfg.CaptchaProxy)
+			}
 			code, err := cli.Solve(req)
 			if err != nil {
 				return "", fmt.Errorf("udio: couldn't solve 2captcha: %w", err)
@@ -126,13 +130,17 @@ func New(cfg *Config) (*Client, error) {
 			return code, nil
 		}
 	case "nopecha":
+		cli, err := nopecha.New(&nopecha.Config{
+			Wait:   1 * time.Second,
+			Key:    cfg.CaptchaKey,
+			Client: client,
+			Debug:  false,
+			Proxy:  cfg.CaptchaProxy,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("udio: couldn't create nopecha client: %w", err)
+		}
 		resolveCaptcha = func(ctx context.Context) (string, error) {
-			cli := nopecha.New(&nopecha.Config{
-				Wait:   1 * time.Second,
-				Key:    cfg.CaptchaKey,
-				Client: client,
-				Debug:  false,
-			})
 			code, err := cli.Token(ctx, "hcaptcha", hcaptchaSiteKey, "https://www.udio.com/")
 			if err != nil {
 				return "", fmt.Errorf("udio: couldn't solve nopecha: %w", err)

@@ -23,6 +23,7 @@ type Client struct {
 	debug     bool
 	ratelimit ratelimit.Lock
 	key       string
+	proxy     *url.URL
 }
 
 type Config struct {
@@ -30,9 +31,10 @@ type Config struct {
 	Debug  bool
 	Client *http.Client
 	Key    string
+	Proxy  string
 }
 
-func New(cfg *Config) *Client {
+func New(cfg *Config) (*Client, error) {
 	wait := cfg.Wait
 	if wait == 0 {
 		wait = 1 * time.Second
@@ -44,12 +46,22 @@ func New(cfg *Config) *Client {
 		}
 	}
 
+	var proxy *url.URL
+	if cfg.Proxy != "" {
+		var err error
+		proxy, err = url.Parse(cfg.Proxy)
+		if err != nil {
+			return nil, fmt.Errorf("nopecha couldn't parse proxy URL: %w", err)
+		}
+	}
+
 	return &Client{
 		client:    client,
 		ratelimit: ratelimit.New(wait),
 		debug:     cfg.Debug,
 		key:       cfg.Key,
-	}
+		proxy:     proxy,
+	}, nil
 }
 
 func (c *Client) log(format string, args ...interface{}) {

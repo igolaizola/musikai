@@ -8,10 +8,17 @@ import (
 )
 
 type tokenRequest struct {
-	Key     string `json:"key"`
-	Type    string `json:"type"`
-	SiteKey string `json:"sitekey"`
-	URL     string `json:"url"`
+	Key     string      `json:"key"`
+	Type    string      `json:"type"`
+	SiteKey string      `json:"sitekey"`
+	URL     string      `json:"url"`
+	Proxy   *tokenProxy `json:"proxy,omitempty"`
+}
+
+type tokenProxy struct {
+	Scheme string `json:"scheme"`
+	Host   string `json:"host"`
+	Port   string `json:"port"`
 }
 
 type tokenResponse struct {
@@ -26,6 +33,13 @@ func (c *Client) Token(ctx context.Context, typ, siteKey, u string) (string, err
 		Type:    typ,
 		SiteKey: siteKey,
 		URL:     u,
+	}
+	if c.proxy != nil {
+		req.Proxy = &tokenProxy{
+			Scheme: c.proxy.Scheme,
+			Host:   c.proxy.Hostname(),
+			Port:   c.proxy.Port(),
+		}
 	}
 	var resp tokenResponse
 	if _, err := c.do(ctx, "POST", "token", req, &resp); err != nil {

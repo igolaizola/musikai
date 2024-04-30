@@ -53,6 +53,7 @@ type Config struct {
 
 	CaptchaProvider string
 	CaptchaKey      string
+	CaptchaProxy    string
 	UdioKey         string
 }
 
@@ -133,16 +134,18 @@ func Run(ctx context.Context, cfg *Config) error {
 		})
 	case "udio":
 		generator, err = udio.New(&udio.Config{
-			Wait:          4 * time.Second,
-			Debug:         cfg.Debug,
-			Client:        httpClient,
-			CookieStore:   store.NewCookieStore("udio", cfg.Account),
-			Parallel:      cfg.Limit == 1,
-			MinDuration:   cfg.MinDuration,
-			MaxDuration:   cfg.MaxDuration,
-			MaxExtensions: cfg.MaxExtensions,
-			CaptchaKey:    cfg.CaptchaProvider,
-			Key:           cfg.UdioKey,
+			Wait:            4 * time.Second,
+			Debug:           cfg.Debug,
+			Client:          httpClient,
+			CookieStore:     store.NewCookieStore("udio", cfg.Account),
+			Parallel:        cfg.Limit == 1,
+			MinDuration:     cfg.MinDuration,
+			MaxDuration:     cfg.MaxDuration,
+			MaxExtensions:   cfg.MaxExtensions,
+			CaptchaKey:      cfg.CaptchaKey,
+			CaptchaProvider: cfg.CaptchaProvider,
+			CaptchaProxy:    cfg.CaptchaProxy,
+			Key:             cfg.UdioKey,
 		})
 		if err != nil {
 			return fmt.Errorf("generate: couldn't create udio generator: %w", err)

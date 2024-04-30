@@ -8,7 +8,7 @@ import (
 func TestToken(t *testing.T) {
 	t.Skip("Only works with a valid key")
 
-	client := New(&Config{
+	client, _ := New(&Config{
 		Debug: true,
 		Key:   "",
 	})
