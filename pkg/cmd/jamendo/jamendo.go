@@ -354,7 +354,7 @@ func publish(ctx context.Context, b *jamendo.Browser, c *jamendo.Client, store *
 	if err != nil {
 		return fmt.Errorf("publish: couldn't jamendo publish %s: %w", album.ID, err)
 	}
-	if err := c.UpdateTracks(ctx, jmAlbum, pub.SongIDs); err != nil {
+	if err := c.UpdateTracks(ctx, jmAlbum, pub.AlbumID, pub.SongIDs); err != nil {
 		return fmt.Errorf("publish: couldn't update tracks %s: %w", album.ID, err)
 	}
 

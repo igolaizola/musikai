@@ -255,7 +255,16 @@ type updateTrackResponse struct {
 	ID int `json:"id"`
 }
 
-func (c *Client) UpdateTrack(ctx context.Context, albumTitle string, releaseDate time.Time, song *Song, order int, id string) error {
+type moveRequest struct {
+	AlbumID int `json:"albumId"`
+}
+
+type moveResponse struct {
+	AlbumID int `json:"albumId"`
+	ID      int `json:"id"`
+}
+
+func (c *Client) UpdateTrack(ctx context.Context, albumID, albumTitle string, releaseDate time.Time, song *Song, order int, id string) error {
 	var tTags trackTags
 	for _, label := range song.Tags {
 		value, ok := tagValues[label]
@@ -305,6 +314,25 @@ func (c *Client) UpdateTrack(ctx context.Context, albumTitle string, releaseDate
 		voiceInstrumental = 1
 	}
 
+	// Move to album
+	aID, err := strconv.Atoi(albumID)
+	if err != nil {
+		return fmt.Errorf("jamendo: couldn't move track: %w", err)
+	}
+	moveReq := &moveRequest{
+		AlbumID: aID,
+	}
+	var moveResp moveResponse
+	if _, err := c.do(ctx, "PATCH", fmt.Sprintf("trackmanager/tracks/%d/%s/json/%s", c.id, c.name, id), moveReq, &moveResp); err != nil {
+		return fmt.Errorf("jamendo: couldn't move track: %w", err)
+	}
+	if albumID != strconv.Itoa(moveResp.AlbumID) {
+		return fmt.Errorf("jamendo: couldn't move track: invalid album ID")
+	}
+	if id != strconv.Itoa(moveResp.ID) {
+		return fmt.Errorf("jamendo: couldn't move track: invalid ID")
+	}
+
 	// Check ISRC code
 	values := url.Values{}
 	values.Set("typeCode", "isrc")
@@ -351,9 +379,9 @@ func (c *Client) UpdateTrack(ctx context.Context, albumTitle string, releaseDate
 	return nil
 }
 
-func (c *Client) UpdateTracks(ctx context.Context, album *Album, ids []string) error {
+func (c *Client) UpdateTracks(ctx context.Context, album *Album, albumID string, ids []string) error {
 	for i, song := range album.Songs {
-		if err := c.UpdateTrack(ctx, album.Title, album.ReleaseDate, song, i+1, ids[i]); err != nil {
+		if err := c.UpdateTrack(ctx, albumID, album.Title, album.ReleaseDate, song, i+1, ids[i]); err != nil {
 			return err
 		}
 	}
