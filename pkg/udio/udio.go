@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	twocaptcha "github.com/2captcha/2captcha-go"
 	"github.com/igolaizola/musikai/pkg/music"
 	"github.com/igolaizola/musikai/pkg/session"
 )
@@ -190,21 +189,6 @@ func (c *Client) User(ctx context.Context) (string, error) {
 	return resp.User.Email, nil
 }
 
-func (c *Client) captchaToken(_ context.Context) (string, error) {
-	start := time.Now()
-	// captchaToken, err := c.nopechaClient.Token(ctx, "hcaptcha", hcaptchaSiteKey, "https://www.udio.com/")
-	cap := twocaptcha.HCaptcha{
-		SiteKey: hcaptchaSiteKey,
-		Url:     "https://www.udio.com/",
-	}
-	code, err := c.twocaptchaClient.Solve(cap.ToRequest())
-	if err != nil {
-		return "", fmt.Errorf("udio: couldn't solve 2captcha: %w", err)
-	}
-	c.log("udio: captcha token took %v", time.Since(start))
-	return code, nil
-}
-
 type generateRequest struct {
 	Prompt         string         `json:"prompt"`
 	LyricInput     string         `json:"lyricInput"`
@@ -238,7 +222,7 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 	}
 
 	// Get captcha token
-	captchaToken, err := c.captchaToken(ctx)
+	captchaToken, err := c.resolveCaptcha(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +388,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 		}
 
 		// Get captcha token
-		captchaToken, err := c.captchaToken(ctx)
+		captchaToken, err := c.resolveCaptcha(ctx)
 		if err != nil {
 			return nil, err
 		}
