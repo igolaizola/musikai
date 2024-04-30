@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	twocaptcha "github.com/2captcha/2captcha-go"
 	"github.com/igolaizola/musikai/pkg/music"
 	"github.com/igolaizola/musikai/pkg/session"
 )
@@ -138,6 +139,9 @@ func (c *Client) refresh(ctx context.Context) error {
 	if err := session.SetCookies(c.client, "https://www.udio.com", cookie, nil); err != nil {
 		return fmt.Errorf("udio: couldn't set cookie: %w", err)
 	}
+	if err := c.cookieStore.SetCookie(ctx, cookie); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -186,6 +190,21 @@ func (c *Client) User(ctx context.Context) (string, error) {
 	return resp.User.Email, nil
 }
 
+func (c *Client) captchaToken(_ context.Context) (string, error) {
+	start := time.Now()
+	// captchaToken, err := c.nopechaClient.Token(ctx, "hcaptcha", hcaptchaSiteKey, "https://www.udio.com/")
+	cap := twocaptcha.HCaptcha{
+		SiteKey: hcaptchaSiteKey,
+		Url:     "https://www.udio.com/",
+	}
+	code, err := c.twocaptchaClient.Solve(cap.ToRequest())
+	if err != nil {
+		return "", fmt.Errorf("udio: couldn't solve 2captcha: %w", err)
+	}
+	c.log("udio: captcha token took %v", time.Since(start))
+	return code, nil
+}
+
 type generateRequest struct {
 	Prompt         string         `json:"prompt"`
 	LyricInput     string         `json:"lyricInput"`
@@ -219,12 +238,10 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 	}
 
 	// Get captcha token
-	start := time.Now()
-	captchaToken, err := c.nopechaClient.Token(ctx, "hcaptcha", hcaptchaSiteKey, "https://www.udio.com/")
+	captchaToken, err := c.captchaToken(ctx)
 	if err != nil {
 		return nil, err
 	}
-	c.log("udio: captcha token took %v", time.Since(start))
 
 	// Generate first fragments
 	req := &generateRequest{
@@ -387,12 +404,10 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 		}
 
 		// Get captcha token
-		start := time.Now()
-		captchaToken, err := c.nopechaClient.Token(ctx, "hcaptcha", hcaptchaSiteKey, "https://www.udio.com/")
+		captchaToken, err := c.captchaToken(ctx)
 		if err != nil {
 			return nil, err
 		}
-		c.log("udio: captcha token took %v", time.Since(start))
 
 		// Generate extension
 		req := &generateRequest{
@@ -446,10 +461,7 @@ func (c *Client) waitClips(ctx context.Context, ids []string) ([]*clip, error) {
 		case <-ctx.Done():
 			log.Println("udio: context done, last response:", string(last))
 			return nil, ctx.Err()
-		case <-time.After(5 * time.Second):
-		}
-		if err := c.Auth(ctx); err != nil {
-			return nil, err
+		case <-time.After(15 * time.Second):
 		}
 		if _, err := c.do(ctx, "GET", u, nil, &resp); err != nil {
 			return nil, fmt.Errorf("udio: couldn't get clips: %w", err)
@@ -459,6 +471,8 @@ func (c *Client) waitClips(ctx context.Context, ids []string) ([]*clip, error) {
 		var errs []string
 		for _, clip := range clips {
 			if clip.ErrorID != nil {
+				js, _ := json.Marshal(clip)
+				log.Println("❌ udio: clip error:", string(js))
 				errs = append(errs, *clip.ErrorID)
 			} else if clip.SongPath != "" {
 				oks = append(oks, clip)

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	twocaptcha "github.com/2captcha/2captcha-go"
 	"github.com/igolaizola/musikai/pkg/nopecha"
 	"github.com/igolaizola/musikai/pkg/ratelimit"
 	"github.com/igolaizola/musikai/pkg/session"
@@ -24,30 +25,31 @@ const (
 )
 
 type Client struct {
-	client        *http.Client
-	debug         bool
-	ratelimit     ratelimit.Lock
-	cookieStore   CookieStore
-	key           string
-	expiration    time.Time
-	minDuration   float32
-	maxDuration   float32
-	maxExtensions int
-	nopechaClient *nopecha.Client
-	parallel      bool
+	client         *http.Client
+	debug          bool
+	ratelimit      ratelimit.Lock
+	cookieStore    CookieStore
+	key            string
+	expiration     time.Time
+	minDuration    float32
+	maxDuration    float32
+	maxExtensions  int
+	resolveCaptcha func(context.Context) (string, error)
+	parallel       bool
 }
 
 type Config struct {
-	Wait          time.Duration
-	Debug         bool
-	Client        *http.Client
-	CookieStore   CookieStore
-	MinDuration   time.Duration
-	MaxDuration   time.Duration
-	MaxExtensions int
-	Parallel      bool
-	Key           string
-	NopechaKey    string
+	Wait            time.Duration
+	Debug           bool
+	Client          *http.Client
+	CookieStore     CookieStore
+	MinDuration     time.Duration
+	MaxDuration     time.Duration
+	MaxExtensions   int
+	Parallel        bool
+	Key             string
+	CaptchaKey      string
+	CaptchaProvider string
 }
 
 type cookieStore struct {
@@ -80,7 +82,7 @@ type CookieStore interface {
 	SetCookie(context.Context, string) error
 }
 
-func New(cfg *Config) *Client {
+func New(cfg *Config) (*Client, error) {
 	wait := cfg.Wait
 	if wait == 0 {
 		wait = 1 * time.Second
@@ -103,25 +105,56 @@ func New(cfg *Config) *Client {
 	if cfg.MaxExtensions > 0 {
 		maxExtensions = cfg.MaxExtensions
 	}
-	nopechaClient := nopecha.New(&nopecha.Config{
-		Wait:   100 * time.Millisecond,
-		Key:    cfg.NopechaKey,
-		Client: client,
-		Debug:  false,
-	})
+
+	// Set up captcha resolver
+	if cfg.CaptchaKey == "" {
+		return nil, fmt.Errorf("udio: captcha key is empty")
+	}
+	var resolveCaptcha func(context.Context) (string, error)
+	switch cfg.CaptchaProvider {
+	case "2captcha":
+		cli := twocaptcha.NewClient(cfg.CaptchaKey)
+		resolveCaptcha = func(ctx context.Context) (string, error) {
+			req := (&twocaptcha.HCaptcha{
+				SiteKey: hcaptchaSiteKey,
+				Url:     "https://www.udio.com/",
+			}).ToRequest()
+			code, err := cli.Solve(req)
+			if err != nil {
+				return "", fmt.Errorf("udio: couldn't solve 2captcha: %w", err)
+			}
+			return code, nil
+		}
+	case "nopecha":
+		resolveCaptcha = func(ctx context.Context) (string, error) {
+			cli := nopecha.New(&nopecha.Config{
+				Wait:   1 * time.Second,
+				Key:    cfg.CaptchaKey,
+				Client: client,
+				Debug:  false,
+			})
+			code, err := cli.Token(ctx, "hcaptcha", hcaptchaSiteKey, "https://www.udio.com/")
+			if err != nil {
+				return "", fmt.Errorf("udio: couldn't solve nopecha: %w", err)
+			}
+			return code, nil
+		}
+	default:
+		return nil, fmt.Errorf("udio: invalid captcha provider: %s", cfg.CaptchaProvider)
+	}
 
 	return &Client{
-		client:        client,
-		ratelimit:     ratelimit.New(wait),
-		debug:         cfg.Debug,
-		cookieStore:   cfg.CookieStore,
-		key:           cfg.Key,
-		minDuration:   float32(minDuration.Seconds()),
-		maxDuration:   float32(maxDuration.Seconds()),
-		maxExtensions: maxExtensions,
-		nopechaClient: nopechaClient,
-		parallel:      cfg.Parallel,
-	}
+		client:         client,
+		ratelimit:      ratelimit.New(wait),
+		debug:          cfg.Debug,
+		cookieStore:    cfg.CookieStore,
+		key:            cfg.Key,
+		minDuration:    float32(minDuration.Seconds()),
+		maxDuration:    float32(maxDuration.Seconds()),
+		maxExtensions:  maxExtensions,
+		resolveCaptcha: resolveCaptcha,
+		parallel:       cfg.Parallel,
+	}, nil
 }
 
 func (c *Client) Start(ctx context.Context) error {
@@ -230,7 +263,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 				wait = true
 			case http.StatusUnauthorized:
 				// Retry on unauthorized
-				if err := c.Auth(ctx); err != nil {
+				if err := c.refresh(ctx); err != nil {
 					return nil, err
 				}
 				retry = true
@@ -241,7 +274,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 			msg := strings.ToLower(appErr.Message)
 			if msg == "unauthorized" {
 				// Retry on unauthorized
-				if err := c.Auth(ctx); err != nil {
+				if err := c.refresh(ctx); err != nil {
 					return nil, err
 				}
 				retry = true
@@ -326,10 +359,6 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 		return nil, fmt.Errorf("udio: couldn't read response body: %w", err)
 	}
 	c.log("udio: response %s %s %d %s", method, path, resp.StatusCode, string(respBody))
-	var appErr appError
-	if err := json.Unmarshal(respBody, &appErr); err == nil && appErr.Message != "" {
-		return nil, &appErr
-	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		errMessage := string(respBody)
 		if len(errMessage) > 100 {
@@ -337,6 +366,10 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 		}
 		_ = os.WriteFile(fmt.Sprintf("logs/debug_%s.json", time.Now().Format("20060102_150405")), respBody, 0644)
 		return nil, fmt.Errorf("udio: %s %s returned (%s): %w", method, u, errMessage, errStatusCode(resp.StatusCode))
+	}
+	var appErr appError
+	if err := json.Unmarshal(respBody, &appErr); err == nil && appErr.Message != "" {
+		return nil, &appErr
 	}
 	if out != nil {
 		if err := json.Unmarshal(respBody, out); err != nil {

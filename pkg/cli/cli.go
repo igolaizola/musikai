@@ -219,7 +219,8 @@ func newGenerateCommand() *ffcli.Command {
 	fs.StringVar(&cfg.ForceEndStyle, "force-end-style", "short, end", "force end style to use")
 
 	// Udio specific parameters
-	fs.StringVar(&cfg.NopechaKey, "nopecha-key", "", "nopecha api key")
+	fs.StringVar(&cfg.CaptchaKey, "captcha-key", "", "captcha api key")
+	fs.StringVar(&cfg.CaptchaProvider, "captcha-provider", "", "captcha provider to use (nopecha, 2captcha)")
 	fs.StringVar(&cfg.UdioKey, "udio-key", "", "udio api key")
 
 	return &ffcli.Command{

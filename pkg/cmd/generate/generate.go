@@ -51,8 +51,9 @@ type Config struct {
 	MaxDuration    time.Duration
 	MaxExtensions  int
 
-	NopechaKey string
-	UdioKey string
+	CaptchaProvider string
+	CaptchaKey      string
+	UdioKey         string
 }
 
 type input struct {
@@ -131,7 +132,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			MaxExtensions:  cfg.MaxExtensions,
 		})
 	case "udio":
-		generator = udio.New(&udio.Config{
+		generator, err = udio.New(&udio.Config{
 			Wait:          4 * time.Second,
 			Debug:         cfg.Debug,
 			Client:        httpClient,
@@ -140,9 +141,12 @@ func Run(ctx context.Context, cfg *Config) error {
 			MinDuration:   cfg.MinDuration,
 			MaxDuration:   cfg.MaxDuration,
 			MaxExtensions: cfg.MaxExtensions,
-			NopechaKey:    cfg.NopechaKey,
-			Key: 		   cfg.UdioKey,
+			CaptchaKey:    cfg.CaptchaProvider,
+			Key:           cfg.UdioKey,
 		})
+		if err != nil {
+			return fmt.Errorf("generate: couldn't create udio generator: %w", err)
+		}
 	default:
 		return fmt.Errorf("generate: unknown provider: %s", cfg.Provider)
 	}

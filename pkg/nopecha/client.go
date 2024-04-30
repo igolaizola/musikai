@@ -101,6 +101,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 				// Retry on these status codes
 				retry = true
 				wait = true
+				err = nil
 			default:
 				return nil, err
 			}
