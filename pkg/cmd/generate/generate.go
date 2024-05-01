@@ -15,6 +15,7 @@ import (
 
 	"github.com/gocarina/gocsv"
 	"github.com/igolaizola/musikai/pkg/music"
+	"github.com/igolaizola/musikai/pkg/ngrok"
 	"github.com/igolaizola/musikai/pkg/sound/aubio"
 	"github.com/igolaizola/musikai/pkg/storage"
 	"github.com/igolaizola/musikai/pkg/suno"
@@ -133,6 +134,23 @@ func Run(ctx context.Context, cfg *Config) error {
 			MaxExtensions:  cfg.MaxExtensions,
 		})
 	case "udio":
+		if cfg.Proxy == "" {
+			return fmt.Errorf("generate: udio requires a proxy")
+		}
+		capthaProxy := cfg.CaptchaProxy
+		if capthaProxy == "" {
+			u, err := url.Parse(cfg.Proxy)
+			if err != nil {
+				return fmt.Errorf("invalid proxy URL: %w", err)
+			}
+			candidate, cancel, err := ngrok.Run(ctx, "tcp", u.Port())
+			if err != nil {
+				return fmt.Errorf("generate: couldn't start ngrok: %w", err)
+			}
+			capthaProxy = candidate
+			log.Printf("generate: ngrok started %s => %s\n", capthaProxy, u.Port())
+			defer cancel()
+		}
 		generator, err = udio.New(&udio.Config{
 			Wait:            4 * time.Second,
 			Debug:           cfg.Debug,
@@ -144,12 +162,13 @@ func Run(ctx context.Context, cfg *Config) error {
 			MaxExtensions:   cfg.MaxExtensions,
 			CaptchaKey:      cfg.CaptchaKey,
 			CaptchaProvider: cfg.CaptchaProvider,
-			CaptchaProxy:    cfg.CaptchaProxy,
+			CaptchaProxy:    capthaProxy,
 			Key:             cfg.UdioKey,
 		})
 		if err != nil {
 			return fmt.Errorf("generate: couldn't create udio generator: %w", err)
 		}
+		panic("STOP")
 	default:
 		return fmt.Errorf("generate: unknown provider: %s", cfg.Provider)
 	}

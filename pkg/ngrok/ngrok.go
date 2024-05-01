@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -29,23 +28,39 @@ type tunnelsResponse struct {
 
 func Run(ctx context.Context, protocol, port string) (string, context.CancelFunc, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	go func() {
-		cmd := exec.CommandContext(ctx, BinPath, protocol, port)
-		data, err := cmd.CombinedOutput()
-		if err != nil {
-			msg := string(data)
-			log.Println(fmt.Errorf("ngrok: %w: %s", err, msg))
-		}
-	}()
+
+	// Launch ngrok
+	cmd := exec.CommandContext(ctx, BinPath, protocol, port)
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		cancel()
+		return "", nil, fmt.Errorf("ngrok: couldn't start: %w", err)
+	}
+
+	// Get the public URL
 	client := &http.Client{
 		Timeout: 2 * time.Minute,
 	}
-	resp, err := client.Get("http://localhost:4040")
+	var err error
+	var resp *http.Response
+	for i := 0; i < 10; i++ {
+		select {
+		case <-ctx.Done():
+			cancel()
+			return "", nil, fmt.Errorf("ngrok: context cancelled")
+		case <-time.After(500 * time.Millisecond):
+		}
+		resp, err = client.Get("http://localhost:4040/api/tunnels")
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
 		cancel()
 		return "", nil, fmt.Errorf("ngrok: couldn't start: %w", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		cancel()
@@ -62,8 +77,12 @@ func Run(ctx context.Context, protocol, port string) (string, context.CancelFunc
 		if p != port {
 			continue
 		}
-		u = strings.Replace("tcp://", "http://", t.PublicURL, 1)
+		u = strings.Replace(t.PublicURL, "tcp://", "http://", 1)
 		break
+	}
+	if u == "" {
+		cancel()
+		return "", nil, fmt.Errorf("ngrok: couldn't find tunnel")
 	}
 	return u, cancel, nil
 }
