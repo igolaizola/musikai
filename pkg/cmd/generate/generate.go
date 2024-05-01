@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"github.com/igolaizola/musikai/pkg/suno"
 	"github.com/igolaizola/musikai/pkg/udio"
 	"github.com/oklog/ulid/v2"
+	"github.com/smarty/cproxy/v2"
 )
 
 type Config struct {
@@ -134,12 +136,31 @@ func Run(ctx context.Context, cfg *Config) error {
 			MaxExtensions:  cfg.MaxExtensions,
 		})
 	case "udio":
-		if cfg.Proxy == "" {
-			return fmt.Errorf("generate: udio requires a proxy")
+		proxy := cfg.Proxy
+		if proxy == "" {
+			// Start a connect proxy server on a random port
+			handler := cproxy.New(
+				cproxy.Options.Logger(logger{}),
+				cproxy.Options.LogConnections(true),
+			)
+			listener, err := net.Listen("tcp", ":0")
+			if err != nil {
+				return fmt.Errorf("generate: couldn't create listener: %w", err)
+			}
+			defer func() {
+				_ = listener.Close()
+			}()
+			port := listener.Addr().(*net.TCPAddr).Port
+			proxy = fmt.Sprintf("http://localhost:%d", port)
+			go func() {
+				_ = http.Serve(listener, handler)
+			}()
+			log.Println("generate: running udio proxy on", proxy)
 		}
 		capthaProxy := cfg.CaptchaProxy
 		if capthaProxy == "" {
-			u, err := url.Parse(cfg.Proxy)
+			// Start a ngrok tunnel to the proxy
+			u, err := url.Parse(proxy)
 			if err != nil {
 				return fmt.Errorf("invalid proxy URL: %w", err)
 			}
@@ -168,7 +189,6 @@ func Run(ctx context.Context, cfg *Config) error {
 		if err != nil {
 			return fmt.Errorf("generate: couldn't create udio generator: %w", err)
 		}
-		panic("STOP")
 	default:
 		return fmt.Errorf("generate: unknown provider: %s", cfg.Provider)
 	}
@@ -388,4 +408,10 @@ func toTemplateFunc(file string) (func() template, error) {
 	return func() template {
 		return opts[rand.Intn(len(opts))]
 	}, nil
+}
+
+type logger struct{}
+
+func (logger) Printf(format string, args ...interface{}) {
+	log.Printf(format, args...)
 }

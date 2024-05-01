@@ -23,6 +23,7 @@ require (
 	github.com/peterbourgon/ff v1.7.1
 	github.com/peterbourgon/ff/v3 v3.3.0
 	github.com/sashabaranov/go-openai v1.22.0
+	github.com/smarty/cproxy/v2 v2.1.0
 	github.com/zmb3/spotify/v2 v2.4.1
 	golang.org/x/image v0.11.0
 	gonum.org/v1/plot v0.14.0
