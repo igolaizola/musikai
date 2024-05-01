@@ -79,17 +79,27 @@ If set to true, the application will output debug information.
 ### Generate
 
 The `generate` command is used to generate songs.
-You can specify the number of songs to generate, the account to use, the type of song, the prompt, and the style.
-You should use either the prompt or the style, but not both.
+You can specify the number of songs to generate, the account to use, the type of song, the prompt, and whether to use manual mode or not.
+If you use manual mode, the prompt will be directly used in the generation without applying any AI modifications to it.
 
-Suno generates first a fragment of around 2 minutes. 
+Suno generates first a fragment of around 2 minutes.
+Udio generates first a fragment of around 30 seconds.
 Then you can extend this fragments multiple times.
 There are some parameters to control how this extensions are done:
  - Duration of the song: `min-duration` and `max-duration` is used to continue extending or stop extending depending on the current total duration.
  - Number of extensions: `max-extensions` forces to end the generation once the maximum number of extensions is reached.
+
+Suno has a specific parameter to control the end of the song:
  - Final style and lyrics: In order to tell suno that you want to end the song you have to explicitly indicate it in the lyrics and/or style section.
    - Parameters `end-style`, `end-style-append` and `end-lyrics` are applied when minimum duration is reached and it is the first extension.
    - Parameters `force-end-style` and `force-end-lyrics` are applied when minimum duration is reached and it isn't the first extension.
+
+Udio needs a captcha resolver to bypass the captcha.
+You can use `nopecha` to solve the captcha manually or `2captcha` to use a service to solve the captcha.
+Captcha providers connect to your computer using a proxy.
+The tool starts a local server that the captcha provider connects to.
+You need to have ngrok installed in your computer so the tool can expose the local server to the captcha provider.
+You can avoid this by using the same proxy both in `proxy` and `captcha-proxy`.
 
 ```bash
 ./musikai generate --config generate.yaml
@@ -106,18 +116,25 @@ concurrency: 1
 wait-min: 1s
 wait-max: 2s
 limit: 20
-account: suno-account
+account: account-name
+provider: suno # suno or udio
 type: jazz
-prompt: jazz
-style: nostalgic mood ambient jazz
+prompt: nostalgic mood ambient jazz
+manual: true
+min-duration: 2m5s
+max-duration: 3m55s
+max-extensions: 1
+# suno specific parameters
 end-lyrics: "[end]"
 end-style: ". End." # leave empty to use copy the song style
 end-style-append: true # append the value instead of replacing it
 force-end-lyrics: "[end]"
 force-end-style: short, end # leave empty to use copy the song style
-min-duration: 2m5s
-max-duration: 3m55s
-max-extensions: 1
+# udio specific parameters
+udio-key: udio-key-for-refresh-token
+captcha-key: captcha-service-key
+captcha-provider: nopecha # nopecha or 2captcha
+captcha-proxy: http://proxy-url # optional
 ```
 
 You can also use a csv/json file to use multiple prompts or styles.
