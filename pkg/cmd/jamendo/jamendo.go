@@ -214,12 +214,12 @@ func Run(ctx context.Context, cfg *Config) error {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				debug("publish: start %s %s", album.ID, album.Title)
+				debug("publish: start %s %s", album.ID, album.FullTitle())
 				err := publish(ctx, browser, client, store, fs, album)
 				if err != nil {
 					log.Println(err)
 				}
-				debug("publish: end %s%s", album.ID, album.Title)
+				debug("publish: end %s%s", album.ID, album.FullTitle())
 				errC <- err
 			}()
 		}

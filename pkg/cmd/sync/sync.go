@@ -182,12 +182,12 @@ func Run(ctx context.Context, cfg *Config) error {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				debug("sync: start %s %s", album.ID, album.Title)
+				debug("sync: start %s %s", album.ID, album.FullTitle())
 				err := syncAlbum(ctx, dkClient, spClient, store, album)
 				if err != nil {
 					log.Println(err)
 				}
-				debug("sync: end %s%s", album.ID, album.Title)
+				debug("sync: end %s%s", album.ID, album.FullTitle())
 				errC <- err
 			}()
 		}
@@ -262,6 +262,6 @@ func syncAlbum(ctx context.Context, dk *distrokid.Client, sp *spotify.Client, st
 	if err := store.SetAlbum(ctx, album); err != nil {
 		return fmt.Errorf("sync: couldn't set album: %w", err)
 	}
-	log.Println("sync: album synced", album.ID, album.Title, album.UPC, album.SpotifyID, album.AppleID)
+	log.Println("sync: album synced", album.ID, album.FullTitle(), album.UPC, album.SpotifyID, album.AppleID)
 	return nil
 }
