@@ -301,7 +301,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 				idx = len(backoff) - 1
 			}
 			waitTime := backoff[idx]
-			c.log("server seems to be down, waiting %s before retrying\n", wait)
+			c.log("server seems to be down, waiting %s before retrying\n", waitTime)
 			t := time.NewTimer(waitTime)
 			select {
 			case <-ctx.Done():
