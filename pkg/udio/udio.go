@@ -53,12 +53,6 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 		return nil, err
 	}
 
-	// Get captcha token
-	captchaToken, err := c.resolveCaptcha(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	// Generate first fragments
 	req := &generateRequest{
 		Prompt:     prompt,
@@ -67,9 +61,11 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 			Seed:                 -1,
 			BypassPromptOptimize: manual,
 		},
-		CaptchaToken: captchaToken,
 	}
-	var resp generateResponse
+	resp, err := c.tryGenerate(ctx, req, 0)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := c.do(ctx, "POST", "generate-proxy", req, &resp); err != nil {
 		return nil, err
 	}
@@ -147,6 +143,30 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 	return songs, nil
 }
 
+func (c *Client) tryGenerate(ctx context.Context, req *generateRequest, attempt int) (*generateResponse, error) {
+	if attempt > 3 {
+		return nil, errors.New("udio: too many attempts")
+	}
+
+	captchaToken, err := c.resolveCaptcha(ctx)
+	if err != nil {
+		return nil, err
+	}
+	req.CaptchaToken = captchaToken
+
+	var resp generateResponse
+	_, err = c.do(ctx, "POST", "generate-proxy", req, &resp)
+	var errStatus errStatusCode
+	if errors.As(err, &errStatus) && errStatus == 500 {
+		log.Println("udio: generation failed with status 500, retrying with new captcha token")
+		return c.tryGenerate(ctx, req, attempt+1)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 type clipsResponse struct {
 	Clips []*clip `json:"songs"`
 }
@@ -219,12 +239,6 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 			return nil, err
 		}
 
-		// Get captcha token
-		captchaToken, err := c.resolveCaptcha(ctx)
-		if err != nil {
-			return nil, err
-		}
-
 		// Generate extension
 		req := &generateRequest{
 			Prompt:     clp.Prompt,
@@ -237,10 +251,9 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 				AudioConditioningSongID: clp.ID,
 				AudioConditioningType:   "continuation",
 			},
-			CaptchaToken: captchaToken,
 		}
-		var resp generateResponse
-		if _, err := c.do(ctx, "POST", "generate-proxy", req, &resp); err != nil {
+		resp, err := c.tryGenerate(ctx, req, 0)
+		if err != nil {
 			return nil, err
 		}
 		if resp.Message != "Success" {
