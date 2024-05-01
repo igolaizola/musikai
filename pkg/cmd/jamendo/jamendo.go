@@ -183,6 +183,7 @@ func Run(ctx context.Context, cfg *Config) error {
 			// Get next albums
 			filters := []storage.Filter{
 				storage.Where("state = ?", storage.Used),
+				storage.Where("jamendo_id = ?", ""),
 				storage.Where("id > ?", currID),
 			}
 			if cfg.Type != "" {
