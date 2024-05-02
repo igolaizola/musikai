@@ -228,7 +228,11 @@ func Run(ctx context.Context, cfg *Config) error {
 
 func publish(ctx context.Context, b *jamendo.Browser, c *jamendo.Client, store *storage.Store, fs *filestore.Store, album *storage.Album) error {
 	// Get songs for album
-	songs, err := store.ListSongs(ctx, 1, 100, "", storage.Where("album_id = ?", album.ID))
+	filter := []storage.Filter{
+		storage.Where("album_id = ?", album.ID),
+		storage.Where("disabled = ?", false),
+	}
+	songs, err := store.ListSongs(ctx, 1, 100, "", filter...)
 	if err != nil {
 		return fmt.Errorf("publish: couldn't get songs: %w", err)
 	}
@@ -355,12 +359,25 @@ func publish(ctx context.Context, b *jamendo.Browser, c *jamendo.Client, store *
 	if err != nil {
 		return fmt.Errorf("publish: couldn't jamendo publish %s: %w", album.ID, err)
 	}
-	if err := c.UpdateTracks(ctx, jmAlbum, pub.AlbumID, pub.SongIDs); err != nil {
-		return fmt.Errorf("publish: couldn't update tracks %s: %w", album.ID, err)
+	failed := map[string]struct{}{}
+	for i, song := range jmAlbum.Songs {
+		songID := pub.SongIDs[i]
+		storeID := songs[i].ID
+		if err := c.UpdateTrack(ctx, pub.AlbumID, jmAlbum.Title, jmAlbum.ReleaseDate, song, i+1, songID); err != nil {
+			failed[storeID] = struct{}{}
+			log.Printf("❌ jamendo: couldn't update track `%s` %s (%q #%d %q): %v\n", storeID, songID, jmAlbum.Title, i+1, song.Title, err)
+			continue
+		}
+	}
+	if len(failed) == len(jmAlbum.Songs) {
+		return fmt.Errorf("publish: all songs failed to publish %s", album.ID)
 	}
 
 	// Update songs
 	for i, s := range songs {
+		if _, ok := failed[s.ID]; ok {
+			continue
+		}
 		s.JamendoID = pub.SongIDs[i]
 		if err := store.SetSong(ctx, s); err != nil {
 			return fmt.Errorf("publish: couldn't set song %s %s: %w", s.ID, pub.SongIDs, err)
