@@ -39,11 +39,8 @@ func Run(ctx context.Context, protocol, port string) (string, context.CancelFunc
 	}
 
 	// Get the public URL
-	client := &http.Client{
-		Timeout: 2 * time.Minute,
-	}
+	var u string
 	var err error
-	var resp *http.Response
 	for i := 0; i < 10; i++ {
 		select {
 		case <-ctx.Done():
@@ -51,25 +48,40 @@ func Run(ctx context.Context, protocol, port string) (string, context.CancelFunc
 			return "", nil, fmt.Errorf("ngrok: context cancelled")
 		case <-time.After(500 * time.Millisecond):
 		}
-		resp, err = client.Get("http://localhost:4040/api/tunnels")
+		u, err = publicURL(port)
 		if err == nil {
 			break
 		}
 	}
 	if err != nil {
 		cancel()
-		return "", nil, fmt.Errorf("ngrok: couldn't start: %w", err)
+		return "", nil, fmt.Errorf("ngrok: couldn't get public URL: %w", err)
+	}
+	return u, cancel, nil
+}
+
+func publicURL(port string) (string, error) {
+	client := &http.Client{
+		Timeout: 2 * time.Minute,
+	}
+	req, err := http.NewRequest("GET", "http://localhost:4040/api/tunnels", nil)
+	if err != nil {
+		return "", fmt.Errorf("ngrok: couldn't create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("ngrok: couldn't get tunnels: %w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		cancel()
-		return "", nil, fmt.Errorf("ngrok: couldn't read response: %w", err)
+		return "", fmt.Errorf("ngrok: couldn't read response: %w", err)
 	}
 	var tr tunnelsResponse
 	if err := json.Unmarshal(data, &tr); err != nil {
-		cancel()
-		return "", nil, fmt.Errorf("ngrok: couldn't unmarshal response (%s): %w", string(data), err)
+		return "", fmt.Errorf("ngrok: couldn't unmarshal response (%s): %w", string(data), err)
 	}
 	var u string
 	for _, t := range tr.Tunnels {
@@ -81,8 +93,7 @@ func Run(ctx context.Context, protocol, port string) (string, context.CancelFunc
 		break
 	}
 	if u == "" {
-		cancel()
-		return "", nil, fmt.Errorf("ngrok: couldn't find tunnel")
+		return "", fmt.Errorf("ngrok: couldn't find tunnel")
 	}
-	return u, cancel, nil
+	return u, nil
 }

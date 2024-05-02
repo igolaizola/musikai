@@ -121,7 +121,8 @@ func New(cfg *Config) (*Client, error) {
 				Url:     "https://www.udio.com/",
 			}).ToRequest()
 			if cfg.CaptchaProxy != "" {
-				req.SetProxy("http", cfg.CaptchaProxy)
+				proxy := strings.TrimPrefix(cfg.CaptchaProxy, "http://")
+				req.SetProxy("http", proxy)
 			}
 			code, err := cli.Solve(req)
 			if err != nil {

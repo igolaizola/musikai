@@ -156,8 +156,7 @@ func (c *Client) tryGenerate(ctx context.Context, req *generateRequest, attempt 
 
 	var resp generateResponse
 	_, err = c.do(ctx, "POST", "generate-proxy", req, &resp)
-	var errStatus errStatusCode
-	if errors.As(err, &errStatus) && errStatus == 500 {
+	if err != nil && strings.Contains(err.Error(), "500") {
 		log.Println("udio: generation failed with status 500, retrying with new captcha token")
 		return c.tryGenerate(ctx, req, attempt+1)
 	}
