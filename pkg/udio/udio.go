@@ -66,9 +66,6 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 	if err != nil {
 		return nil, err
 	}
-	if _, err := c.do(ctx, "POST", "generate-proxy", req, &resp); err != nil {
-		return nil, err
-	}
 	if resp.Message != "Success" {
 		return nil, fmt.Errorf("udio: generation failed: %s", resp.Message)
 	}
@@ -156,12 +153,13 @@ func (c *Client) tryGenerate(ctx context.Context, req *generateRequest, attempt 
 
 	var resp generateResponse
 	_, err = c.do(ctx, "POST", "generate-proxy", req, &resp)
-	if err != nil && strings.Contains(err.Error(), "500") {
-		log.Println("udio: generation failed with status 500, retrying with new captcha token")
+	var errStatus errStatusCode
+	if errors.As(err, &errStatus) && int(errStatus) == 500 {
+		log.Println("❌ udio: generation failed with status 500, retrying with new captcha token")
 		return c.tryGenerate(ctx, req, attempt+1)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("udio: couldn't generate: %w", err)
 	}
 	return &resp, nil
 }
