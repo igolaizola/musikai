@@ -29,12 +29,13 @@ type generateRequest struct {
 }
 
 type samplerOptions struct {
-	Seed                    int     `json:"seed"`
-	CropStartTime           float64 `json:"crop_start_time,omitempty"`
-	BypassPromptOptimize    bool    `json:"bypass_prompt_optimization"`
-	AudioConditioningPath   string  `json:"audio_conditioning_path,omitempty"`
-	AudioConditioningSongID string  `json:"audio_conditioning_song_id,omitempty"`
-	AudioConditioningType   string  `json:"audio_conditioning_type,omitempty"`
+	Seed                         int       `json:"seed"`
+	AudioConditioningCropSeconds []float64 `json:"audio_conditioning_crop_seconds,omitempty"`
+	CropStartTime                float64   `json:"crop_start_time,omitempty"` // 0.4 extend, 0.9 outro 0.0 intro
+	BypassPromptOptimize         bool      `json:"bypass_prompt_optimization"`
+	AudioConditioningPath        string    `json:"audio_conditioning_path,omitempty"`
+	AudioConditioningSongID      string    `json:"audio_conditioning_song_id,omitempty"`
+	AudioConditioningType        string    `json:"audio_conditioning_type,omitempty"` // continuation, precede
 }
 
 type generateResponse struct {
@@ -44,10 +45,6 @@ type generateResponse struct {
 }
 
 func (c *Client) Generate(ctx context.Context, prompt string, manual, instrumental bool) ([][]music.Song, error) {
-	if !instrumental {
-		return nil, errors.New("udio: only instrumental songs are supported")
-	}
-
 	// Check auth
 	if err := c.Auth(ctx); err != nil {
 		return nil, err
@@ -124,6 +121,7 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 					Video:        videoPath,
 					Duration:     float32(clp.Duration),
 					Instrumental: instrumental,
+					Lyrics:       clp.Lyrics,
 				})
 			}
 			lck.Lock()

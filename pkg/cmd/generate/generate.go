@@ -341,6 +341,7 @@ func generate(ctx context.Context, account, provider string, generator music.Gen
 				Title:      g.Title,
 				History:    g.History,
 				Duration:   g.Duration,
+				Lyrics:     g.Lyrics,
 			}); err != nil {
 				return fmt.Errorf("generate: couldn't save generation to database: %w", err)
 			}

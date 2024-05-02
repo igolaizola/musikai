@@ -185,6 +185,7 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 					Duration:     clp.Metadata.Duration,
 					Instrumental: instrumental,
 					History:      string(jsHistory),
+					Lyrics:       clp.Metadata.Prompt,
 				})
 			}
 			lck.Lock()

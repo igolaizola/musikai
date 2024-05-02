@@ -12,6 +12,7 @@ type Song struct {
 	Duration     float32 `json:"duration"`
 	Instrumental bool    `json:"instrumental"`
 	History      string  `json:"history"`
+	Lyrics       string  `json:"lyrics"`
 }
 
 type Generator interface {

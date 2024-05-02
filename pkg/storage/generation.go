@@ -22,6 +22,7 @@ type Generation struct {
 	Image      string `gorm:"not null;default:''"`
 	Title      string `gorm:"not null;default:''"`
 	History    string `gorm:"not null;default:''"`
+	Lyrics     string `gorm:"not null;default:''"`
 
 	Duration float32 `gorm:"not null;default:0"`
 	Tempo    float32 `gorm:"not null;default:0"`
