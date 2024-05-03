@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/igolaizola/musikai/pkg/music"
+	"github.com/igolaizola/musikai/pkg/sound"
 )
 
 const (
@@ -187,7 +188,7 @@ type clip struct {
 	} `json:"replaced_tags"`
 	SongPath    string   `json:"song_path"`
 	Tags        []string `json:"tags"`
-	Duration    float64  `json:"duration"`
+	Duration    float32  `json:"duration"`
 	VideoPath   *string  `json:"video_path"`
 	ErrorDetail *string  `json:"error_detail"`
 	Finished    bool     `json:"finished"`
@@ -202,13 +203,80 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 	var extensions int
 
 	for {
-		// TODO: Choose the best clip
+		// Choose the best clip
+		var best string
+		lookup := map[string]struct {
+			firstSilencePosition time.Duration
+			clip                 *clip
+		}{}
 
-		// Choose random clip
-		rnd := rand.Intn(len(clips))
-		clp = clips[rnd]
+		for _, c := range clips {
+			a, err := sound.NewAnalyzer(c.SongPath)
+			if err != nil {
+				return nil, fmt.Errorf("udio: couldn't create analyzer: %w", err)
+			}
+			silences, err := a.Silences(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("udio: couldn't get silences: %w", err)
+			}
+			var firstSilencePosition, endSilenceDuration time.Duration
+			if len(silences) > 0 {
+				for _, s := range silences {
+					if s.Start.Seconds() > float64(c.Duration*0.70) {
+						firstSilencePosition = s.Start
+						break
+					}
+				}
+				last := silences[len(silences)-1]
+				if last.Final {
+					endSilenceDuration = last.Duration
+				}
+			}
 
-		duration = float32(clp.Duration)
+			// Add to lookup
+			lookup[c.ID] = struct {
+				firstSilencePosition time.Duration
+				clip                 *clip
+			}{
+				firstSilencePosition: firstSilencePosition,
+				clip:                 c,
+			}
+
+			// Check if the clip ends
+			if c.Duration-duration < 20.0 {
+				best = c.ID
+				break
+			}
+			if endSilenceDuration > 0 {
+				best = c.ID
+				break
+			}
+			if a.HasFadeOut() {
+				best = c.ID
+				break
+			}
+		}
+
+		var firstSilence time.Duration
+		if best == "" {
+			// Choose random clip
+			rnd := rand.Intn(len(clips))
+			clp = clips[rnd]
+		} else {
+			clp = lookup[best].clip
+		}
+
+		prevDuration := duration
+		duration = clp.Duration
+
+		var cropSeconds []float64
+		firstSilence = lookup[clp.ID].firstSilencePosition
+		if firstSilence > 0 {
+			cropSeconds = []float64{
+				0.0,
+				firstSilence.Seconds() - 1.0,
+			}
+		}
 
 		// Check if the song is over the min duration
 		if duration > c.maxDuration {
@@ -217,6 +285,11 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 
 		// Check if the song is over the max extensions
 		if extensions >= c.maxExtensions {
+			break
+		}
+
+		// Check if the extensions is less than 20 seconds
+		if extensions > 0 && clp.Duration-prevDuration < 20.0 {
 			break
 		}
 
@@ -239,12 +312,13 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 			Prompt:     clp.Prompt,
 			LyricInput: "",
 			SamplerOptions: samplerOptions{
-				Seed:                    -1,
-				CropStartTime:           cropStartTime,
-				BypassPromptOptimize:    manual,
-				AudioConditioningPath:   clp.SongPath,
-				AudioConditioningSongID: clp.ID,
-				AudioConditioningType:   "continuation",
+				Seed:                         -1,
+				CropStartTime:                cropStartTime,
+				AudioConditioningCropSeconds: cropSeconds,
+				BypassPromptOptimize:         manual,
+				AudioConditioningPath:        clp.SongPath,
+				AudioConditioningSongID:      clp.ID,
+				AudioConditioningType:        "continuation",
 			},
 		}
 		resp, err := c.tryGenerate(ctx, req, 0)
