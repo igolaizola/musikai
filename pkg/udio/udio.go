@@ -276,6 +276,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 				0.0,
 				firstSilence.Seconds() - 1.0,
 			}
+			log.Println("⚠️ udio: cropping", cropSeconds, clp.Title)
 		}
 
 		// Check if the song is over the min duration
@@ -300,6 +301,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 		cropStartTime := 0.0
 		if duration+30.0 > c.minDuration || extensions == c.maxExtensions {
 			cropStartTime = 0.9
+			log.Println("⚠️ udio: setting outro", clp.Title)
 		}
 
 		// Check auth

@@ -339,9 +339,6 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 		reqBody = bytes.NewReader(body)
 	}
 	logBody := string(body)
-	if len(logBody) > 100 {
-		logBody = logBody[:100] + "..."
-	}
 	c.log("udio: do %s %s %s", method, path, logBody)
 
 	// Check if path is absolute
