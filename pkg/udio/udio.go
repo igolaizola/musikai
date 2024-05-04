@@ -305,7 +305,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 
 		// If the duration is over the min duration, set outro settings
 		cropStartTime := 0.0
-		if duration+30.0 > c.minDuration || extensions == c.maxExtensions {
+		if duration+30.0 > c.maxDuration || extensions == c.maxExtensions {
 			cropStartTime = 0.9
 			log.Println("⚠️ udio: setting outro", clp.Title)
 		}

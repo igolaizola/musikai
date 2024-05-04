@@ -100,6 +100,9 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 		if errors.As(err, &netErr) && netErr.Timeout() {
 			continue
 		}
+		if strings.Contains(err.Error(), "connection reset by peer") {
+			continue
+		}
 
 		// Check if we should retry after waiting
 		var retry bool

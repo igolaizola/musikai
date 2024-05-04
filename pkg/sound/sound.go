@@ -308,14 +308,19 @@ func toDecoder(u string) (*mp3.Decoder, string, error) {
 		client := &http.Client{
 			Timeout: 2 * time.Minute,
 		}
-		resp, err := client.Get(u)
-		if err != nil {
+		if err := retry(context.Background(), func() error {
+			resp, err := client.Get(u)
+			if err != nil {
+				return fmt.Errorf("sound: couldn't download song: %w", err)
+			}
+			defer resp.Body.Close()
+			b, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return fmt.Errorf("sound: couldn't read song: %w", err)
+			}
+			return nil
+		}); err != nil {
 			return nil, "", fmt.Errorf("sound: couldn't download song: %w", err)
-		}
-		defer resp.Body.Close()
-		b, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, "", fmt.Errorf("sound: couldn't read song: %w", err)
 		}
 		// Write to temporary file
 		src = filepath.Join(os.TempDir(), filepath.Base(u))
@@ -341,4 +346,19 @@ func toDecoder(u string) (*mp3.Decoder, string, error) {
 		return nil, "", fmt.Errorf("sound: couldn't decode mp3: %w", err)
 	}
 	return decoder, src, nil
+}
+
+func retry(ctx context.Context, fn func() error) error {
+	var err error
+	for i := 0; i < 3; i++ {
+		if err = fn(); err == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("sound: context cancelled: %w", err)
+		case <-time.After(time.Duration(i) * time.Second):
+		}
+	}
+	return fmt.Errorf("sound: couldn't retry: %w", err)
 }
