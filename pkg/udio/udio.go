@@ -203,11 +203,11 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 	var extensions int
 
 	for {
-		// Choose the best clip
-		var best string
+		// Check clip silences
 		lookup := map[string]struct {
 			firstSilencePosition time.Duration
 			clip                 *clip
+			ends                 bool
 		}{}
 
 		for _, c := range clips {
@@ -233,44 +233,50 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 				}
 			}
 
+			// Check if the clip ends
+			var ends bool
+			if c.Duration-duration < 20.0 {
+				ends = true
+			}
+			if endSilenceDuration > 0 {
+				ends = true
+			}
+			if a.HasFadeOut() {
+				ends = true
+			}
+
 			// Add to lookup
 			lookup[c.ID] = struct {
 				firstSilencePosition time.Duration
 				clip                 *clip
+				ends                 bool
 			}{
 				firstSilencePosition: firstSilencePosition,
 				clip:                 c,
-			}
-
-			// Check if the clip ends
-			if c.Duration-duration < 20.0 {
-				best = c.ID
-				break
-			}
-			if endSilenceDuration > 0 {
-				best = c.ID
-				break
-			}
-			if a.HasFadeOut() {
-				best = c.ID
-				break
+				ends:                 ends,
 			}
 		}
 
-		var firstSilence time.Duration
-		if best == "" {
-			// Choose random clip
-			rnd := rand.Intn(len(clips))
-			clp = clips[rnd]
-		} else {
-			clp = lookup[best].clip
+		var okClips []*clip
+		for _, c := range clips {
+			if lookup[c.ID].ends {
+				continue
+			}
+			okClips = append(okClips, c)
 		}
+		if len(okClips) == 0 {
+			okClips = clips
+		}
+
+		// Choose random clip
+		rnd := rand.Intn(len(okClips))
+		clp = okClips[rnd]
 
 		prevDuration := duration
 		duration = clp.Duration
 
 		var cropSeconds []float64
-		firstSilence = lookup[clp.ID].firstSilencePosition
+		firstSilence := lookup[clp.ID].firstSilencePosition
 		if firstSilence > 0 {
 			cropSeconds = []float64{
 				0.0,
