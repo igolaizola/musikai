@@ -24,7 +24,7 @@ const (
 
 type generateRequest struct {
 	Prompt         string         `json:"prompt"`
-	LyricInput     string         `json:"lyricInput"`
+	LyricInput     *string        `json:"lyricInput,omitempty"`
 	SamplerOptions samplerOptions `json:"samplerOptions"`
 	CaptchaToken   string         `json:"captchaToken"`
 }
@@ -50,11 +50,17 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 	if err := c.Auth(ctx); err != nil {
 		return nil, err
 	}
+	var lyrics *string
+	if !instrumental {
+		// TODO: Get lyrics from input
+		s := ""
+		lyrics = &s
+	}
 
 	// Generate first fragments
 	req := &generateRequest{
 		Prompt:     prompt,
-		LyricInput: "",
+		LyricInput: lyrics,
 		SamplerOptions: samplerOptions{
 			Seed:                 -1,
 			BypassPromptOptimize: manual,
@@ -102,7 +108,7 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			clips, err := c.extend(ctx, f, manual)
+			clips, err := c.extend(ctx, f, manual, lyrics)
 			if err != nil {
 				log.Printf("❌ %v\n", err)
 				return
@@ -196,10 +202,10 @@ type clip struct {
 	Disliked    bool     `json:"disliked"`
 }
 
-func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, error) {
+func (c *Client) extend(ctx context.Context, clp *clip, manual bool, lyrics *string) ([]*clip, error) {
 	// Initialize variables
 	clips := []*clip{clp}
-	var duration float32
+	var duration, prevDuration float32
 	var extensions int
 
 	for {
@@ -211,6 +217,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 		}{}
 
 		for _, c := range clips {
+			log.Println("🎵 song duration:", c.Duration)
 			a, err := sound.NewAnalyzer(c.SongPath)
 			if err != nil {
 				return nil, fmt.Errorf("udio: couldn't create analyzer: %w", err)
@@ -235,7 +242,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 
 			// Check if the clip ends
 			var ends bool
-			if c.Duration-duration < 20.0 {
+			if c.Duration-prevDuration < 20.0 {
 				ends = true
 			}
 			if endSilenceDuration > 0 {
@@ -272,18 +279,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 		rnd := rand.Intn(len(okClips))
 		clp = okClips[rnd]
 
-		prevDuration := duration
 		duration = clp.Duration
-
-		var cropSeconds []float64
-		firstSilence := lookup[clp.ID].firstSilencePosition
-		if firstSilence > 0 {
-			cropSeconds = []float64{
-				0.0,
-				firstSilence.Seconds() - 1.0,
-			}
-			log.Println("⚠️ udio: cropping", cropSeconds, clp.Title)
-		}
 
 		// Check if the song is over the min duration
 		if duration > c.maxDuration {
@@ -300,12 +296,24 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 			break
 		}
 
+		prevDuration = duration
+		var cropSeconds []float64
+		firstSilence := lookup[clp.ID].firstSilencePosition
+		if firstSilence > 0 {
+			cropSeconds = []float64{
+				0.0,
+				firstSilence.Seconds() - 1.0,
+			}
+			prevDuration = float32(cropSeconds[1])
+			log.Println("⚠️ udio: cropping", cropSeconds, clp.Title)
+		}
+
 		// Generate next fragment
 		extensions++
 
 		// If the duration is over the min duration, set outro settings
 		cropStartTime := 0.0
-		if duration+30.0 > c.maxDuration || extensions == c.maxExtensions {
+		if prevDuration+30.0 > c.maxDuration || extensions == c.maxExtensions {
 			cropStartTime = 0.9
 			log.Println("⚠️ udio: setting outro", clp.Title)
 		}
@@ -318,7 +326,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool) ([]*clip, e
 		// Generate extension
 		req := &generateRequest{
 			Prompt:     clp.Prompt,
-			LyricInput: "",
+			LyricInput: lyrics,
 			SamplerOptions: samplerOptions{
 				Seed:                         -1,
 				CropStartTime:                cropStartTime,
