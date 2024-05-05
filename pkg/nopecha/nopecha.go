@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -28,6 +29,21 @@ type tokenResponse struct {
 }
 
 func (c *Client) Token(ctx context.Context, typ, siteKey, u string) (string, error) {
+	var t string
+	var err error
+	for i := 0; i < 3; i++ {
+		t, err = c.token(ctx, typ, siteKey, u)
+		var appErr *appError
+		if errors.As(err, &appErr) && appErr.Code == 10 {
+			log.Println("❌ retrying...", err)
+			continue
+		}
+		break
+	}
+	return t, err
+}
+
+func (c *Client) token(ctx context.Context, typ, siteKey, u string) (string, error) {
 	req := &tokenRequest{
 		Key:     c.key,
 		Type:    typ,
@@ -56,15 +72,17 @@ func (c *Client) Token(ctx context.Context, typ, siteKey, u string) (string, err
 		case <-time.After(15 * time.Second):
 		}
 		var resp tokenResponse
-		if _, err := c.do(ctx, "GET", path, nil, &resp); err != nil {
-			return "", fmt.Errorf("nopecha: couldn't get token: %w", err)
-		}
-		if resp.Data != "" {
-			return resp.Data, nil
-		}
-		if resp.Error == 14 {
+		_, err := c.do(ctx, "GET", path, nil, &resp)
+		var appErr *appError
+		switch {
+		case errors.As(err, &appErr) && appErr.Code == 14:
 			continue
+		case err != nil:
+			return "", err
+		case resp.Data != "":
+			return resp.Data, nil
+		default:
+			return "", fmt.Errorf("nopecha: %s (%d)", resp.Message, resp.Error)
 		}
-		return "", fmt.Errorf("nopecha: %s (%d)", resp.Message, resp.Error)
 	}
 }

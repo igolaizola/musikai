@@ -34,6 +34,7 @@ type Client struct {
 	minDuration    float32
 	maxDuration    float32
 	maxExtensions  int
+	intro          bool
 	resolveCaptcha func(context.Context) (string, error)
 	parallel       bool
 }
@@ -163,6 +164,7 @@ func New(cfg *Config) (*Client, error) {
 		maxExtensions:  maxExtensions,
 		resolveCaptcha: resolveCaptcha,
 		parallel:       cfg.Parallel,
+		intro:          true,
 	}, nil
 }
 

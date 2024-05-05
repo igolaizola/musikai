@@ -297,6 +297,9 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool, lyrics *str
 			break
 		}
 
+		// Generate next fragment
+		extensions++
+
 		prevDuration = duration
 		var cropSeconds []float64
 		firstSilence := lookup[clp.ID].firstSilencePosition
@@ -309,14 +312,16 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool, lyrics *str
 			log.Println("⚠️ udio: cropping", cropSeconds, clp.Title)
 		}
 
-		// Generate next fragment
-		extensions++
-
-		// If the duration is over the min duration, set outro settings
 		cropStartTime := 0.0
-		if prevDuration+30.0 > c.maxDuration || extensions == c.maxExtensions {
-			cropStartTime = 0.9
-			log.Println("⚠️ udio: setting outro", clp.Title)
+		conditioning := "continuation"
+		if c.intro && extensions == 1 {
+			conditioning = "precede"
+		} else {
+			// If the duration is over the min duration, set outro settings
+			if prevDuration+30.0 > c.maxDuration || extensions == c.maxExtensions {
+				cropStartTime = 0.9
+				log.Println("⚠️ udio: setting outro", clp.Title)
+			}
 		}
 
 		// Check auth
@@ -335,7 +340,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool, lyrics *str
 				BypassPromptOptimize:         manual,
 				AudioConditioningPath:        clp.SongPath,
 				AudioConditioningSongID:      clp.ID,
-				AudioConditioningType:        "continuation",
+				AudioConditioningType:        conditioning,
 			},
 		}
 		resp, err := c.tryGenerate(ctx, req, 0)

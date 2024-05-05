@@ -149,6 +149,17 @@ func (e errStatusCode) Error() string {
 	return fmt.Sprintf("%d", e)
 }
 
+type appError struct {
+	Message    string `json:"message"`
+	Code       int    `json:"error"`
+	StatusCode int
+}
+
+func (e *appError) Error() string {
+	return fmt.Sprintf("nopecha: app error %d (%d): %s", e.Code, e.StatusCode, e.Message)
+
+}
+
 func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any) ([]byte, error) {
 	var body []byte
 	var reqBody io.Reader
@@ -158,12 +169,12 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 		var err error
 		body, err = json.Marshal(in)
 		if err != nil {
-			return nil, fmt.Errorf("nopecha couldn't marshal request body: %w", err)
+			return nil, fmt.Errorf("nopecha: couldn't marshal request body: %w", err)
 		}
 		reqBody = bytes.NewReader(body)
 	}
 	logBody := string(body)
-	c.log("nopecha do %s %s %s", method, path, logBody)
+	c.log("nopecha: do %s %s %s", method, path, logBody)
 
 	// Check if path is absolute
 	u := fmt.Sprintf("https://api.nopecha.com/%s", path)
@@ -172,7 +183,7 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("nopecha couldn't create request: %w", err)
+		return nil, fmt.Errorf("nopecha: couldn't create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -181,15 +192,20 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("nopecha couldn't %s %s: %w", method, u, err)
+		return nil, fmt.Errorf("nopecha: couldn't %s %s: %w", method, u, err)
 	}
 	defer resp.Body.Close()
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("nopecha couldn't read response body: %w", err)
+		return nil, fmt.Errorf("nopecha: couldn't read response body: %w", err)
 	}
-	c.log("nopecha response %s %s %d %s", method, path, resp.StatusCode, string(respBody))
-	if resp.StatusCode != 409 && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+	c.log("nopecha: response %s %s %d %s", method, path, resp.StatusCode, string(respBody))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var appErr appError
+		if err := json.Unmarshal(respBody, &appErr); err == nil && appErr.Code != 0 {
+			appErr.StatusCode = resp.StatusCode
+			return nil, &appErr
+		}
 		errMessage := string(respBody)
 		if len(errMessage) > 100 {
 			errMessage = errMessage[:100] + "..."
@@ -201,7 +217,7 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 		if err := json.Unmarshal(respBody, out); err != nil {
 			// Write response body to file for debugging.
 			_ = os.WriteFile(fmt.Sprintf("logs/debug_%s.json", time.Now().Format("20060102_150405")), respBody, 0644)
-			return nil, fmt.Errorf("nopecha couldn't unmarshal response body (%T): %w", out, err)
+			return nil, fmt.Errorf("nopecha: couldn't unmarshal response body (%T): %w", out, err)
 		}
 	}
 	return respBody, nil
