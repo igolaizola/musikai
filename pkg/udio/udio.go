@@ -50,9 +50,10 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 	if err := c.Auth(ctx); err != nil {
 		return nil, err
 	}
+
+	// TODO: Get lyrics from input
 	var lyrics *string
-	if !instrumental {
-		// TODO: Get lyrics from input
+	if instrumental {
 		s := ""
 		lyrics = &s
 	}
