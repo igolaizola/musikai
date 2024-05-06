@@ -208,6 +208,7 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool, lyrics *str
 	clips := []*clip{clp}
 	var duration, prevDuration float32
 	var extensions int
+	var over bool
 
 	for {
 		// Check clip silences
@@ -217,8 +218,12 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool, lyrics *str
 			ends                 bool
 		}{}
 
+		// Check if the song is over
+		if over {
+			break
+		}
+
 		for _, c := range clips {
-			log.Println("🎵 song duration:", c.Duration)
 			a, err := sound.NewAnalyzer(c.SongPath)
 			if err != nil {
 				return nil, fmt.Errorf("udio: couldn't create analyzer: %w", err)
@@ -282,18 +287,20 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool, lyrics *str
 
 		duration = clp.Duration
 
+		switch {
 		// Check if the song is over the min duration
-		if duration > c.maxDuration {
-			break
-		}
-
+		case duration > c.maxDuration:
+			over = true
 		// Check if the song is over the max extensions
-		if extensions >= c.maxExtensions {
-			break
+		case extensions >= c.maxExtensions:
+			over = true
+		// Check if the extensions is less than 20 seconds
+		case extensions > 0 && clp.Duration-prevDuration < 20.0:
+			over = true
 		}
 
-		// Check if the extensions is less than 20 seconds
-		if extensions > 0 && clp.Duration-prevDuration < 20.0 {
+		// Check if has ended and we don't want to add an intro
+		if over && !c.intro {
 			break
 		}
 
@@ -309,18 +316,19 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool, lyrics *str
 				firstSilence.Seconds() - 1.0,
 			}
 			prevDuration = float32(cropSeconds[1])
-			log.Println("⚠️ udio: cropping", cropSeconds, clp.Title)
+			log.Println("✂️ udio: cropping", cropSeconds, clp.Title)
 		}
 
 		cropStartTime := 0.0
 		conditioning := "continuation"
-		if c.intro && extensions == 1 {
+		if c.intro && over {
+			log.Println("▶️ udio: setting intro", clp.Title)
 			conditioning = "precede"
 		} else {
 			// If the duration is over the min duration, set outro settings
 			if prevDuration+30.0 > c.maxDuration || extensions == c.maxExtensions {
 				cropStartTime = 0.9
-				log.Println("⚠️ udio: setting outro", clp.Title)
+				log.Println("🔚 udio: setting outro", clp.Title)
 			}
 		}
 
@@ -358,6 +366,9 @@ func (c *Client) extend(ctx context.Context, clp *clip, manual bool, lyrics *str
 			return nil, err
 		}
 		clips = candidates
+		for _, c := range clips {
+			log.Println("🎵 fragment duration:", c.Duration)
+		}
 	}
 
 	// If there are no extensions, return the original clip

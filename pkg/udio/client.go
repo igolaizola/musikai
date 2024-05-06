@@ -52,6 +52,7 @@ type Config struct {
 	CaptchaKey      string
 	CaptchaProvider string
 	CaptchaProxy    string
+	SkipIntro       bool
 }
 
 type cookieStore struct {
@@ -106,6 +107,16 @@ func New(cfg *Config) (*Client, error) {
 	maxExtensions := defaultMaxExtensions
 	if cfg.MaxExtensions > 0 {
 		maxExtensions = cfg.MaxExtensions
+	}
+
+	intro := !cfg.SkipIntro
+	if intro {
+		if maxExtensions <= 1 || minDuration <= 30*time.Second || maxDuration <= 30*time.Second {
+			return nil, fmt.Errorf("udio: intro requires at least 2 extensions and 30 seconds duration")
+		}
+		maxExtensions -= 1
+		maxDuration -= 30 * time.Second
+		minDuration -= 30 * time.Second
 	}
 
 	// Set up captcha resolver
