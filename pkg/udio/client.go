@@ -29,7 +29,6 @@ type Client struct {
 	debug          bool
 	ratelimit      ratelimit.Lock
 	cookieStore    CookieStore
-	key            string
 	expiration     time.Time
 	minDuration    float32
 	maxDuration    float32
@@ -48,7 +47,6 @@ type Config struct {
 	MaxDuration     time.Duration
 	MaxExtensions   int
 	Parallel        bool
-	Key             string
 	CaptchaKey      string
 	CaptchaProvider string
 	CaptchaProxy    string
@@ -169,7 +167,6 @@ func New(cfg *Config) (*Client, error) {
 		ratelimit:      ratelimit.New(wait),
 		debug:          cfg.Debug,
 		cookieStore:    cfg.CookieStore,
-		key:            cfg.Key,
 		minDuration:    float32(minDuration.Seconds()),
 		maxDuration:    float32(maxDuration.Seconds()),
 		maxExtensions:  maxExtensions,
@@ -400,13 +397,16 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 	return respBody, nil
 }
 
+// Public API Key for api.udio.com
+const apiKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mbXB4amVtYWNzaGZjcHpvc2x1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTAzNjAxNTcsImV4cCI6MjAyNTkzNjE1N30.YcGEN_n6AfHlfh4PIe4nTEe_PeC9WFU9A7vda7qMJH0"
+
 func (c *Client) addHeaders(req *http.Request, path string) {
 	switch {
 	case strings.HasPrefix(path, "https://api.udio.com/auth"):
 		req.Header.Set("accept", "*/*")
 		req.Header.Set("accept-language", "es-ES,es;q=0.9,en;q=0.8")
-		req.Header.Set("apikey", c.key)
-		req.Header.Set("authorization", fmt.Sprintf("Bearer %s", c.key))
+		req.Header.Set("apikey", apiKey)
+		req.Header.Set("authorization", fmt.Sprintf("Bearer %s", apiKey))
 		req.Header.Set("content-type", "application/json;charset=UTF-8")
 		req.Header.Set("origin", "https://www.udio.com")
 		req.Header.Set("priority", "u=1, i")

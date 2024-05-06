@@ -57,7 +57,6 @@ type Config struct {
 	CaptchaProvider string
 	CaptchaKey      string
 	CaptchaProxy    string
-	UdioKey         string
 }
 
 type input struct {
@@ -184,7 +183,6 @@ func Run(ctx context.Context, cfg *Config) error {
 			CaptchaKey:      cfg.CaptchaKey,
 			CaptchaProvider: cfg.CaptchaProvider,
 			CaptchaProxy:    capthaProxy,
-			Key:             cfg.UdioKey,
 		})
 		if err != nil {
 			return fmt.Errorf("generate: couldn't create udio generator: %w", err)
