@@ -131,7 +131,6 @@ end-style-append: true # append the value instead of replacing it
 force-end-lyrics: "[end]"
 force-end-style: short, end # leave empty to use copy the song style
 # udio specific parameters
-udio-key: udio-key-for-refresh-token
 captcha-key: captcha-service-key
 captcha-provider: nopecha # nopecha or 2captcha
 captcha-proxy: http://proxy-url # optional
@@ -476,7 +475,14 @@ type: jazz
 
 ### Sync
 
-The `sync` command is used to obtain album UPC codes and song ISCR codes from DistroKid.
+The `sync` command is used to obtain the following data from DistroKid and digital stores:
+ - Album UPC code
+ - Song ISRC codes
+ - Spotify ID
+ - Spotify song features
+ - Apple Music ID
+ - YouTube ID
+
 The album must have been already published to digital stores in order to obtain the codes.
 
 ```bash
@@ -626,6 +632,74 @@ db-conn: see common options
 service: suno
 account: accountname
 value: cookievalue
+```
+
+### Udio
+
+You need to configure a Udio account to generate songs
+
+You need to capture the cookie from Udio website.
+
+1. Go to https://www.udio.com/
+2. Login if you are not already logged in
+3. Open the developer tools (F12)
+4. Go to the "Network" tab
+5. Refresh the page
+6. Click on the first request to `https://www.udio.com/api/users/current`
+7. Go to the "Request Headers"
+8. Copy the "cookie" header
+
+Then you must store the cookie in your database.
+You can use the command `setting` to store the cookie in the settings table.
+Pass the cookie as the value and choose a name for the account.
+
+```bash
+./musikai setting --config cookie.yaml
+```
+
+```yaml	
+# cookie.yaml
+debug: false
+db-type: see common options
+db-conn: see common options
+service: udio
+account: accountname
+value: cookievalue
+```
+
+#### Captcha resolver
+
+Udio needs a captcha resolver to bypass the captcha.
+You can use either https://nopecha.com or https://2captcha.com as the captcha provider.
+Create an account in any of the services and obtain the API key.
+
+```yaml
+# settings to be added to generate.yaml
+captcha-key: captcha-service-key
+captcha-provider: nopecha # nopecha or 2captcha
+```
+
+#### Ngrok tunnel
+
+The captcha provider needs a way to connect to your computer.
+This is because both the requests to udio and requests to the captcha provider must come from the same IP address.
+By default it will use ngrok to expose a local server to the internet.
+
+To install ngrok, go to https://ngrok.com/download and follow the instructions.
+You also need to create an account in ngrok and obtain the authtoken.
+To authenticate with ngrok, go to https://dashboard.ngrok.com/get-started/your-authtoken and copy the token.
+
+```bash
+ngrok authtoken your-authtoken
+```
+
+Alternatively, you can use a proxy to connect to the captcha provider.
+The proxy must be accessible from the internet and must be used in the `proxy` option as well as in the `captcha-proxy` option.
+
+```yaml
+# settings to be added to generate.yaml
+proxy: http://my-proxy.com
+captcha-proxy: http://my-proxy.com
 ```
 
 ### DistroKid
