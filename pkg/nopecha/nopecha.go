@@ -34,7 +34,7 @@ func (c *Client) Token(ctx context.Context, typ, siteKey, u string) (string, err
 	for i := 0; i < 3; i++ {
 		t, err = c.token(ctx, typ, siteKey, u)
 		var appErr *appError
-		if errors.As(err, &appErr) && appErr.Code == 10 {
+		if errors.As(err, &appErr) {
 			log.Println("❌ retrying...", err)
 			continue
 		}
