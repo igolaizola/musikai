@@ -298,7 +298,8 @@ func (c *Browser) Publish(parent context.Context, album *Album, editTracks bool)
 		// Upload song
 		name := filepath.Base(song.File)
 		name = strings.TrimSuffix(name, filepath.Ext(name))
-		if err := upload(ctx, `#trackFileUpload`, song.File, fmt.Sprintf(`div[title="%s"] button.play`, name)); err != nil {
+		waitSel := fmt.Sprintf(`li[data-jam-track-status="uploaderror"] div[title="%s"], li[data-jam-track-status="uploaded"] div[title="%s"]`, name, name)
+		if err := upload(ctx, `#trackFileUpload`, song.File, waitSel); err != nil {
 			return nil, err
 		}
 
@@ -333,6 +334,26 @@ func (c *Browser) Publish(parent context.Context, album *Album, editTracks bool)
 		if songID == "" {
 			return nil, fmt.Errorf("jamendo: couldn't find song id")
 		}
+		// Obtain data-jam-track-status
+		var status string
+		err := chromedp.Run(ctx,
+			chromedp.WaitVisible(`li.track[data-jam-track-id="`+songID+`"]`),
+			// Retrieve the 'data-jam-track-status' attribute from the element
+			chromedp.AttributeValue(`li.track[data-jam-track-id="`+songID+`"]`, "data-jam-track-status", &status, nil),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("jamendo: couldn't get song status: %w", err)
+		}
+		if status == "uploaderror" {
+			log.Println("❌ upload error, deleting and retrying...")
+			// Click on delete
+			if err := click(ctx, fmt.Sprintf(`li[data-jam-track-id="%s"] div.delete`, songID)); err != nil {
+				return nil, err
+			}
+			i--
+			continue
+		}
+
 		log.Println("song id", songID)
 		songIDs[i] = songID
 
