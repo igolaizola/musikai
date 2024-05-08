@@ -110,16 +110,21 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 
 		// Check status code
 		var errStatus errStatusCode
+		var appErr *appError
+		var code int
 		if errors.As(err, &errStatus) {
-			switch int(errStatus) {
-			case http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusTooManyRequests, 520, 500, 400:
-				// Retry on these status codes
-				retry = true
-				wait = true
-				err = nil
-			default:
-				return nil, err
-			}
+			code = int(errStatus)
+		} else if errors.As(err, &appErr) {
+			code = appErr.StatusCode
+		}
+		switch int(code) {
+		case http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusTooManyRequests, 520, 500, 400:
+			// Retry on these status codes
+			retry = true
+			wait = true
+			err = nil
+		default:
+			return nil, err
 		}
 		if !retry {
 			return nil, err
@@ -148,6 +153,12 @@ type errStatusCode int
 func (e errStatusCode) Error() string {
 	return fmt.Sprintf("%d", e)
 }
+
+const (
+	incompleteJobCode  = 14
+	maxRetriesCode     = 9
+	invalidRequestCode = 10
+)
 
 type appError struct {
 	Message    string `json:"message"`
@@ -200,12 +211,12 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 		return nil, fmt.Errorf("nopecha: couldn't read response body: %w", err)
 	}
 	c.log("nopecha: response %s %s %d %s", method, path, resp.StatusCode, string(respBody))
+	var appErr appError
+	if err := json.Unmarshal(respBody, &appErr); err == nil && appErr.Code != 0 {
+		appErr.StatusCode = resp.StatusCode
+		return nil, &appErr
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var appErr appError
-		if err := json.Unmarshal(respBody, &appErr); err == nil && appErr.Code != 0 {
-			appErr.StatusCode = resp.StatusCode
-			return nil, &appErr
-		}
 		errMessage := string(respBody)
 		if len(errMessage) > 100 {
 			errMessage = errMessage[:100] + "..."

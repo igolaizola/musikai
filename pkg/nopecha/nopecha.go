@@ -31,11 +31,23 @@ type tokenResponse struct {
 func (c *Client) Token(ctx context.Context, typ, siteKey, u string) (string, error) {
 	var t string
 	var err error
-	for i := 0; i < 3; i++ {
+	for attempts := 1; attempts <= 3; attempts++ {
 		t, err = c.token(ctx, typ, siteKey, u)
 		var appErr *appError
 		if errors.As(err, &appErr) {
-			log.Println("❌ retrying...", err)
+			log.Println("❌ retrying token...", err)
+			// Wait before retrying
+			/*idx := attempts - 1
+			if idx >= len(backoff) {
+				idx = len(backoff) - 1
+			}
+			waitTime := backoff[idx]
+			t := time.NewTimer(waitTime)
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-t.C:
+			}*/
 			continue
 		}
 		break
@@ -62,7 +74,7 @@ func (c *Client) token(ctx context.Context, typ, siteKey, u string) (string, err
 		return "", err
 	}
 	if resp.Data == "" {
-		return "", errors.New("nopecha didn't return data")
+		return "", errors.New("nopecha: didn't return data")
 	}
 	path := fmt.Sprintf("token?key=%s&id=%s", c.key, resp.Data)
 	for {
@@ -75,14 +87,16 @@ func (c *Client) token(ctx context.Context, typ, siteKey, u string) (string, err
 		_, err := c.do(ctx, "GET", path, nil, &resp)
 		var appErr *appError
 		switch {
-		case errors.As(err, &appErr) && appErr.Code == 14:
-			continue
+		case errors.As(err, &appErr):
+			switch appErr.Code {
+			case incompleteJobCode, maxRetriesCode:
+			default:
+				return "", appErr
+			}
 		case err != nil:
 			return "", err
 		case resp.Data != "":
 			return resp.Data, nil
-		default:
-			return "", fmt.Errorf("nopecha: %s (%d)", resp.Message, resp.Error)
 		}
 	}
 }
