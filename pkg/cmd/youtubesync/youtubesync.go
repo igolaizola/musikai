@@ -158,7 +158,7 @@ func syncChannel(ctx context.Context, c *youtube.Client, store *storage.Store, f
 	}
 	for _, video := range videos {
 		songs, err := store.ListSongs(ctx, 1, 1, "",
-			storage.Where("title = ?", video.Title),
+			storage.Where("songs.title = ?", video.Title),
 			storage.Where("state = ?", storage.Used),
 		)
 		if err != nil {
