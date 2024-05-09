@@ -28,7 +28,6 @@ import (
 	"github.com/igolaizola/musikai/pkg/cmd/title"
 	"github.com/igolaizola/musikai/pkg/cmd/upscale"
 	"github.com/igolaizola/musikai/pkg/cmd/web"
-	"github.com/igolaizola/musikai/pkg/cmd/youtubesync"
 	"github.com/igolaizola/musikai/pkg/imageai"
 	"github.com/peterbourgon/ff/ffyaml"
 	"github.com/peterbourgon/ff/v3"
@@ -66,7 +65,6 @@ func New(version, commit, date string) *ffcli.Command {
 			newDownloadAlbumCommand(),
 			newClassifyCommand(),
 			newDescribeCommand(),
-			newYoutubeSyncCommand(),
 		},
 	}
 }
@@ -755,6 +753,10 @@ func newSyncCommand() *ffcli.Command {
 	fs.StringVar(&cfg.SpotifyID, "spotify-id", "", "spotify client id")
 	fs.StringVar(&cfg.SpotifySecret, "spotify-secret", "", "spotify client secret")
 
+	fs.StringVar(&cfg.Channels, "channels", "", "comma separated list of youtube channels to sync")
+	fs.StringVar(&cfg.From, "from", "", "from date to sync (only for youtube)")
+	fs.StringVar(&cfg.YoutubeKey, "youtube-key", "", "youtube api key")
+
 	return &ffcli.Command{
 		Name:       cmd,
 		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
@@ -767,41 +769,6 @@ func newSyncCommand() *ffcli.Command {
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
 			return sync.Run(ctx, cfg)
-		},
-	}
-}
-
-func newYoutubeSyncCommand() *ffcli.Command {
-	cmd := "youtube-sync"
-	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-	_ = fs.String("config", "", "config file (optional)")
-
-	cfg := &youtubesync.Config{}
-
-	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
-	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
-	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
-	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
-
-	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
-	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
-
-	fs.StringVar(&cfg.Channels, "channels", "", "comma separated list of channels to sync")
-	fs.StringVar(&cfg.From, "from", "", "from date to sync")
-	fs.StringVar(&cfg.Key, "key", "", "youtube api key")
-
-	return &ffcli.Command{
-		Name:       cmd,
-		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
-		Options: []ff.Option{
-			ff.WithConfigFileFlag("config"),
-			ff.WithConfigFileParser(ffyaml.Parser),
-			ff.WithEnvVarPrefix("MUSIKAI"),
-		},
-		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
-		FlagSet:   fs,
-		Exec: func(ctx context.Context, args []string) error {
-			return youtubesync.Run(ctx, cfg)
 		},
 	}
 }

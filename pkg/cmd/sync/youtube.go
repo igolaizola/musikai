@@ -1,4 +1,4 @@
-package youtubesync
+package sync
 
 import (
 	"context"
@@ -13,26 +13,12 @@ import (
 	"github.com/igolaizola/musikai/pkg/youtube"
 )
 
-type Config struct {
-	Debug  bool
-	DBType string
-	DBConn string
-	Proxy  string
-
-	Timeout     time.Duration
-	Concurrency int
-
-	Key      string
-	Channels string
-	From     string
-}
-
-// Run launches the song generation process.
-func Run(ctx context.Context, cfg *Config) error {
+// RunYoutube syncs songs data from youtube.
+func RunYoutube(ctx context.Context, cfg *Config) error {
 	var iteration int
-	log.Println("youtubesync: process started")
+	log.Println("sync-youtube: process started")
 	defer func() {
-		log.Printf("youtubesync: process ended (%d)\n", iteration)
+		log.Printf("sync-youtube: process ended (%d)\n", iteration)
 	}()
 
 	debug := func(format string, args ...interface{}) {
@@ -48,28 +34,39 @@ func Run(ctx context.Context, cfg *Config) error {
 		var err error
 		from, err = time.Parse("2006-01-02", cfg.From)
 		if err != nil {
-			return fmt.Errorf("youtubesync: couldn't parse from date: %w", err)
+			return fmt.Errorf("sync-youtube: couldn't parse from date: %w", err)
 		}
 	}
 
 	store, err := storage.New(cfg.DBType, cfg.DBConn, cfg.Debug)
 	if err != nil {
-		return fmt.Errorf("youtubesync: couldn't create orm store: %w", err)
+		return fmt.Errorf("sync-youtube: couldn't create orm store: %w", err)
 	}
 	if err := store.Start(ctx); err != nil {
-		return fmt.Errorf("youtubesync: couldn't start orm store: %w", err)
+		return fmt.Errorf("sync-youtube: couldn't start orm store: %w", err)
+	}
+
+	// Check if there are songs with missing youtube ID
+	songs, err := store.ListSongs(ctx, 1, 1, "",
+		storage.Where("youtube_id = ?", ""),
+		storage.Where("state = ?", storage.Used))
+	if err != nil {
+		return fmt.Errorf("sync-youtube: couldn't list songs: %w", err)
+	}
+	if len(songs) == 0 {
+		return errors.New("sync-youtube: no songs with missing youtube id")
 	}
 
 	// Create youtube client
-	client, err := youtube.New(ctx, cfg.Key, cfg.Debug)
+	client, err := youtube.New(ctx, cfg.YoutubeKey, cfg.Debug)
 	if err != nil {
-		return fmt.Errorf("youtubesync: couldn't create youtube client: %w", err)
+		return fmt.Errorf("sync-youtube: couldn't create youtube client: %w", err)
 	}
 
 	// Get channels
 	channels := strings.Split(cfg.Channels, ",")
 	if len(channels) == 0 {
-		return errors.New("youtubesync: no channels to process")
+		return errors.New("sync-youtube: no channels to process")
 	}
 	for i := 0; i < len(channels); i++ {
 		channels[i] = strings.TrimSpace(channels[i])
@@ -79,7 +76,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	start := time.Now()
 	defer func() {
 		total := time.Since(start)
-		log.Printf("youtubesync: total time %s, average time %s\n", total, total/time.Duration(iteration))
+		log.Printf("sync-youtube: total time %s, average time %s\n", total, total/time.Duration(iteration))
 	}()
 
 	nErr := 0
@@ -107,7 +104,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("youtubesync: %w", ctx.Err())
+			return fmt.Errorf("sync-youtube: %w", ctx.Err())
 		case <-ticker.C:
 			return nil
 		case err := <-errC:
@@ -119,18 +116,18 @@ func Run(ctx context.Context, cfg *Config) error {
 
 			// Check exit conditions
 			if nErr > 10 {
-				return fmt.Errorf("youtubesync: too many consecutive errors: %w", err)
+				return fmt.Errorf("sync-youtube: too many consecutive errors: %w", err)
 			}
 
 			iteration++
 			if time.Since(last) > 60*time.Minute {
 				last = time.Now()
-				log.Printf("youtubesync: iteration %d\n", iteration)
+				log.Printf("sync-youtube: iteration %d\n", iteration)
 			}
 
 			// Get next channel
 			if len(channels) == 0 {
-				return errors.New("download: no more channels to process")
+				return errors.New("sync-youtube: no more channels to process")
 			}
 			channel := channels[0]
 			channels = channels[1:]
@@ -139,12 +136,12 @@ func Run(ctx context.Context, cfg *Config) error {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				debug("youtubesync: start %s", channel)
+				debug("sync-youtube: start %s", channel)
 				err := syncChannel(ctx, client, store, from, channel)
 				if err != nil {
 					log.Println(err)
 				}
-				debug("youtubesync: end %s", channel)
+				debug("sync-youtube: end %s", channel)
 				errC <- err
 			}()
 		}
@@ -154,7 +151,7 @@ func Run(ctx context.Context, cfg *Config) error {
 func syncChannel(ctx context.Context, c *youtube.Client, store *storage.Store, from time.Time, channel string) error {
 	videos, err := c.GetVideos(ctx, channel, from)
 	if err != nil {
-		return fmt.Errorf("youtubesync: couldn't get videos: %w", err)
+		return fmt.Errorf("sync-youtube: couldn't get videos: %w", err)
 	}
 	for _, video := range videos {
 		songs, err := store.ListSongs(ctx, 1, 1, "",
@@ -162,22 +159,22 @@ func syncChannel(ctx context.Context, c *youtube.Client, store *storage.Store, f
 			storage.Where("state = ?", storage.Used),
 		)
 		if err != nil {
-			return fmt.Errorf("youtubesync: couldn't list songs: %w", err)
+			return fmt.Errorf("sync-youtube: couldn't list songs: %w", err)
 		}
 		if len(songs) == 0 {
-			log.Printf("youtubesync: song not found %q\n", video.Title)
+			log.Printf("sync-youtube: song not found %q\n", video.Title)
 			continue
 		}
 		song := songs[0]
 		if song.YoutubeID != "" {
 			if song.YoutubeID != video.ID {
-				log.Printf("youtubesync: song %q has different youtube id %q != %q\n", song.Title, song.YoutubeID, video.ID)
+				log.Printf("sync-youtube: song %q has different youtube id %q != %q\n", song.Title, song.YoutubeID, video.ID)
 			}
 			continue
 		}
 		song.YoutubeID = video.ID
 		if err := store.SetSong(ctx, song); err != nil {
-			return fmt.Errorf("youtubesync: couldn't update song: %w", err)
+			return fmt.Errorf("sync-youtube: couldn't update song: %w", err)
 		}
 	}
 	return nil
