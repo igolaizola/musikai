@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	twocaptcha "github.com/2captcha/2captcha-go"
 	"github.com/igolaizola/musikai/pkg/nopecha"
 	"github.com/igolaizola/musikai/pkg/ratelimit"
 	"github.com/igolaizola/musikai/pkg/session"
+	"github.com/igolaizola/musikai/pkg/twocaptcha"
 )
 
 const (

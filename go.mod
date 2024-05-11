@@ -3,7 +3,6 @@ module github.com/igolaizola/musikai
 go 1.22
 
 require (
-	github.com/2captcha/2captcha-go v1.1.4
 	github.com/Danny-Dasilva/fhttp v0.0.0-20220524230104-f801520157d6
 	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/aws/aws-sdk-go-v2 v1.25.2
