@@ -254,7 +254,7 @@ func publish(ctx context.Context, b *jamendo.Browser, c *jamendo.Client, store *
 	// Create jamendo album data
 	jmAlbum := &jamendo.Album{
 		Artist:      album.Artist,
-		Title:       album.FullTitle(),
+		Title:       strings.ReplaceAll(album.FullTitle(), "&", "and"),
 		Cover:       cover,
 		Description: description,
 		ReleaseDate: album.PublishedAt,

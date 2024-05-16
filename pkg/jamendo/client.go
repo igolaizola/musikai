@@ -139,8 +139,8 @@ func (c *Client) log(format string, args ...interface{}) {
 
 var backoff = []time.Duration{
 	30 * time.Second,
-	1 * time.Minute,
 	2 * time.Minute,
+	5 * time.Minute,
 }
 
 func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]byte, error) {
@@ -175,7 +175,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 		var errStatus errStatusCode
 		if errors.As(err, &errStatus) {
 			switch int(errStatus) {
-			case http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusTooManyRequests, http.StatusInternalServerError, 520:
+			case http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusTooManyRequests, http.StatusInternalServerError, 520, 522:
 				// Retry on these status codes
 				retry = true
 				wait = true
@@ -200,7 +200,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 				idx = len(backoff) - 1
 			}
 			waitTime := backoff[idx]
-			c.log("server seems to be down, waiting %s before retrying\n", wait)
+			c.log("server seems to be down, waiting %s before retrying\n", waitTime)
 			t := time.NewTimer(waitTime)
 			select {
 			case <-ctx.Done():
