@@ -95,7 +95,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	cookieStore := store.NewCookieStore("jamendo", cfg.Account)
 
 	client := jamendo.New(&jamendo.Config{
-		Wait:        3 * time.Second,
+		Wait:        5 * time.Second,
 		Debug:       cfg.Debug,
 		Client:      httpClient,
 		CookieStore: cookieStore,
