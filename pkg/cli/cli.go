@@ -203,6 +203,7 @@ func newGenerateCommand() *ffcli.Command {
 	fs.StringVar(&cfg.Prompt, "prompt", "", "prompt to use")
 	fs.BoolVar(&cfg.Manual, "manual", false, "send prompt on manual mode")
 	fs.BoolVar(&cfg.Instrumental, "instrumental", true, "instrumental song")
+	fs.StringVar(&cfg.Lyrics, "lyrics", "", "lyrics text file to use")
 	fs.StringVar(&cfg.Type, "type", "", "type to use")
 	fs.DurationVar(&cfg.MinDuration, "min-duration", 0, "minimum duration for the song")
 	fs.DurationVar(&cfg.MaxDuration, "max-duration", 0, "maximum duration for the song")

@@ -11,6 +11,7 @@ type template struct {
 	Prompt       string `json:"prompt,omitempty"`
 	Manual       bool   `json:"manual,omitempty"`
 	Instrumental bool   `json:"instrumental,omitempty"`
+	Lyrics       string `json:"lyrics,omitempty"`
 }
 
 func newPrompt(typ, prompt string, manual, instr bool) template {
@@ -23,8 +24,8 @@ func newPrompt(typ, prompt string, manual, instr bool) template {
 }
 
 func (t template) String() string {
-	return fmt.Sprintf("{%s, p: %s, m: %v, i: %v}",
-		t.Type, t.Prompt, t.Manual, t.Instrumental)
+	return fmt.Sprintf("{%s, p: %s, m: %v, i: %v, l: %s}",
+		t.Type, t.Prompt, t.Manual, t.Instrumental, t.Lyrics)
 }
 
 func nextTemplate() template {

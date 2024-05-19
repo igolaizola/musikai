@@ -45,23 +45,23 @@ type generateResponse struct {
 	TrackIDs     []string `json:"track_ids"`
 }
 
-func (c *Client) Generate(ctx context.Context, prompt string, manual, instrumental bool) ([][]music.Song, error) {
+func (c *Client) Generate(ctx context.Context, prompt string, manual, instrumental bool, lyrics []string) ([][]music.Song, error) {
 	// Check auth
 	if err := c.Auth(ctx); err != nil {
 		return nil, err
 	}
 
 	// TODO: Get lyrics from input
-	var lyrics *string
+	var lyricsInput *string
 	if instrumental {
 		s := ""
-		lyrics = &s
+		lyricsInput = &s
 	}
 
 	// Generate first fragments
 	req := &generateRequest{
 		Prompt:     prompt,
-		LyricInput: lyrics,
+		LyricInput: lyricsInput,
 		SamplerOptions: samplerOptions{
 			Seed:                 -1,
 			BypassPromptOptimize: manual,
@@ -109,7 +109,7 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			clips, err := c.extend(ctx, f, manual, lyrics)
+			clips, err := c.extend(ctx, f, manual, lyricsInput)
 			if err != nil {
 				log.Printf("❌ %v\n", err)
 				return

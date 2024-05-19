@@ -20,6 +20,7 @@ const (
 	defaultMinDuration   = 2*time.Minute + 5*time.Second
 	defaultMaxDuration   = 3*time.Minute + 55*time.Second
 	defaultMaxExtensions = 2
+	defaultModel         = "chirp-v3"
 )
 
 type generateRequest struct {
@@ -93,13 +94,28 @@ type concatRequest struct {
 	ClipID string `json:"clip_id"`
 }
 
-func (c *Client) Generate(ctx context.Context, prompt string, manual, instrumental bool) ([][]music.Song, error) {
+func (c *Client) Generate(ctx context.Context, prompt string, manual, instrumental bool, lyrics []string) ([][]music.Song, error) {
 	if err := c.Auth(ctx); err != nil {
 		return nil, err
 	}
 
-	var style string
-	if manual {
+	if instrumental && len(lyrics) > 0 {
+		return nil, errors.New("suno: can't generate instrumental songs with lyrics")
+	}
+	if !manual && len(lyrics) > 0 {
+		return nil, errors.New("suno: can't generate songs with lyrics without manual prompt")
+	}
+
+	var style, currLyrics string
+	var nextLyrics *[]string
+	switch {
+	case len(lyrics) > 0:
+		style = prompt
+		prompt = ""
+		currLyrics = lyrics[0]
+		next := lyrics[1:]
+		nextLyrics = &next
+	case manual:
 		style = prompt
 		prompt = ""
 	}
@@ -107,9 +123,10 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 	// Generate first fragments
 	req := &generateRequest{
 		GPTDescriptionPrompt: prompt,
-		MV:                   "chirp-v3-alpha",
+		MV:                   defaultModel,
 		Tags:                 style,
 		MakeInstrumental:     instrumental,
+		Prompt:               currLyrics,
 	}
 	var resp generateResponse
 	if _, err := c.do(ctx, "POST", "generate/v2/", req, &resp); err != nil {
@@ -157,7 +174,7 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			clips, err := c.extend(ctx, f)
+			clips, err := c.extend(ctx, f, nextLyrics)
 			if err != nil {
 				log.Printf("❌ %v\n", err)
 				return
@@ -202,7 +219,7 @@ func (c *Client) Generate(ctx context.Context, prompt string, manual, instrument
 	return songs, nil
 }
 
-func (c *Client) extend(ctx context.Context, clp *clip) ([]*clip, error) {
+func (c *Client) extend(ctx context.Context, clp *clip, lyrics *[]string) ([]*clip, error) {
 	// Initialize variables
 	clips := []clip{*clp}
 	originalStyle := clp.Metadata.Tags
@@ -282,42 +299,55 @@ func (c *Client) extend(ctx context.Context, clp *clip) ([]*clip, error) {
 			continueAt = float32(firstSilence.Seconds() - 1.0)
 		}
 
-		// Check if the song is over the min duration
-		if duration > c.maxDuration {
-			break
-		}
-
-		// Check if the song is over the max extensions
-		if extensions >= c.maxExtensions {
-			break
-		}
-
-		// Check if the extensions is less than 30 seconds
-		if extensions > 0 && clp.Metadata.Duration < 30.0 {
-			break
-		}
-
 		// If we are extending the song, recalculate duration
+		originalDuration := duration
 		duration = prevDuration + continueAt
 
-		// If the duration is over the max duration, add prompt to make it end
-		var lyrics string
+		var currLyrics string
 		style := originalStyle
-		if duration+30.0 > c.minDuration {
-			switch extensions {
-			case 0:
-				lyrics = c.endLyrics
-				if c.endStyle != "" {
-					if c.endStyleAppend {
-						style += c.endStyle
-					} else {
-						style = c.endStyle
-					}
-				}
-			default:
-				lyrics = c.forceEndLyrics
-				style = c.forceEndStyle
+
+		if lyrics == nil {
+			// Check if the song is over the max duration
+			if originalDuration > c.maxDuration {
+				break
 			}
+
+			// Check if the song is over the max extensions
+			if extensions >= c.maxExtensions {
+				break
+			}
+
+			// Check if the extensions is less than 30 seconds
+			if extensions > 0 && clp.Metadata.Duration < 30.0 {
+				break
+			}
+
+			// If the duration is over the max duration, add prompt to make it end
+			if duration+30.0 > c.minDuration {
+				switch extensions {
+				case 0:
+					currLyrics = c.endLyrics
+					if c.endStyle != "" {
+						if c.endStyleAppend {
+							style += c.endStyle
+						} else {
+							style = c.endStyle
+						}
+					}
+				default:
+					currLyrics = c.forceEndLyrics
+					style = c.forceEndStyle
+				}
+			}
+		} else {
+			// Check if there are no more lyrics
+			if len(*lyrics) == 0 {
+				break
+			}
+			l := *lyrics
+			currLyrics = l[0]
+			next := l[1:]
+			lyrics = &next
 		}
 
 		// Generate next fragment
@@ -329,9 +359,9 @@ func (c *Client) extend(ctx context.Context, clp *clip) ([]*clip, error) {
 		}
 
 		req := &generateRequest{
-			Prompt:         lyrics,
+			Prompt:         currLyrics,
 			Tags:           style,
-			MV:             "chirp-v3-alpha",
+			MV:             defaultModel,
 			Title:          clp.Title,
 			ContinueClipID: &clp.ID,
 			ContinueAt:     &continueAt,

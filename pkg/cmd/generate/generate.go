@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -43,6 +44,7 @@ type Config struct {
 	Prompt       string
 	Manual       bool
 	Instrumental bool
+	Lyrics       string
 	Notes        string
 
 	EndLyrics      string
@@ -65,6 +67,7 @@ type input struct {
 	Prompt       string `json:"prompt" csv:"prompt"`
 	Manual       bool   `json:"manual" csv:"manual"`
 	Instrumental bool   `json:"instrumental" csv:"instrumental"`
+	Lyrics       string `json:"lyrics" csv:"lyrics"`
 }
 
 // Run launches the song generation process.
@@ -87,21 +90,35 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("generate: couldn't get aubio version: %w", err)
 	}
 
+	if cfg.Type == "" {
+		return fmt.Errorf("generate: missing type")
+	}
+
+	// Get the template function
+	var fn func() template
+	if cfg.Input != "" {
+		var err error
+		fn, err = toTemplateFunc(cfg.Input)
+		if err != nil {
+			return err
+		}
+	} else {
+		if cfg.Lyrics != "" {
+			if _, err := os.Stat(cfg.Lyrics); err != nil {
+				return fmt.Errorf("generate: couldn't find lyrics file (%s): %w", cfg.Lyrics, err)
+			}
+		}
+		if cfg.Prompt == "" {
+			return fmt.Errorf("generate: missing prompt")
+		}
+	}
+
 	store, err := storage.New(cfg.DBType, cfg.DBConn, cfg.Debug)
 	if err != nil {
 		return fmt.Errorf("generate: couldn't create orm store: %w", err)
 	}
 	if err := store.Start(ctx); err != nil {
 		return fmt.Errorf("generate: couldn't start orm store: %w", err)
-	}
-
-	// Get the template function
-	var fn func() template
-	if cfg.Input != "" {
-		fn, err = toTemplateFunc(cfg.Input)
-		if err != nil {
-			return err
-		}
 	}
 
 	httpClient := &http.Client{
@@ -276,6 +293,7 @@ func Run(ctx context.Context, cfg *Config) error {
 					Prompt:       cfg.Prompt,
 					Manual:       cfg.Manual,
 					Instrumental: cfg.Instrumental,
+					Lyrics:       cfg.Lyrics,
 				}
 				if tmpl.Prompt == "" {
 					tmpl = nextTemplate()
@@ -299,8 +317,28 @@ func Run(ctx context.Context, cfg *Config) error {
 }
 
 func generate(ctx context.Context, account, provider string, generator music.Generator, store *storage.Store, t template, notes string) error {
+	// Load lyrics if specified.
+	var lyrics []string
+	if t.Lyrics != "" {
+		b, err := os.ReadFile(t.Lyrics)
+		if err != nil {
+			return fmt.Errorf("generate: couldn't read lyrics file: %w", err)
+		}
+		parts := strings.Split(string(b), "---")
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			lyrics = append(lyrics, p)
+		}
+		if len(lyrics) == 0 {
+			return fmt.Errorf("generate: no lyrics found in file %s", t.Lyrics)
+		}
+	}
+
 	// Generate the songs.
-	songs, err := generator.Generate(ctx, t.Prompt, t.Manual, t.Instrumental)
+	songs, err := generator.Generate(ctx, t.Prompt, t.Manual, t.Instrumental, lyrics)
 	if err != nil {
 		return fmt.Errorf("generate: couldn't generate song %s: %w", t, err)
 	}
@@ -397,11 +435,18 @@ func toTemplateFunc(file string) (func() template, error) {
 			log.Println("generate: skipping empty input")
 			continue
 		}
+		if i.Lyrics != "" {
+			if _, err := os.Stat(i.Lyrics); err != nil {
+				log.Println("generate: skipping missing lyrics file", i.Lyrics)
+				continue
+			}
+		}
 		opts = append(opts, options(w, template{
 			Type:         i.Type,
 			Prompt:       i.Prompt,
 			Manual:       i.Manual,
 			Instrumental: i.Instrumental,
+			Lyrics:       i.Lyrics,
 		})...)
 	}
 	return func() template {

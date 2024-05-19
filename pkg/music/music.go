@@ -16,7 +16,7 @@ type Song struct {
 }
 
 type Generator interface {
-	Generate(ctx context.Context, prompt string, manual, instrumental bool) ([][]Song, error)
+	Generate(ctx context.Context, prompt string, manual, instrumental bool, lyrics []string) ([][]Song, error)
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
 }
