@@ -91,10 +91,6 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("generate: couldn't get aubio version: %w", err)
 	}
 
-	if cfg.Type == "" {
-		return fmt.Errorf("generate: missing type")
-	}
-
 	// Get the template function
 	var fn func() (template, error)
 	if cfg.Input != "" {
@@ -111,6 +107,9 @@ func Run(ctx context.Context, cfg *Config) error {
 		}
 		if cfg.Prompt == "" {
 			return fmt.Errorf("generate: missing prompt")
+		}
+		if cfg.Type == "" {
+			return fmt.Errorf("generate: missing type")
 		}
 	}
 
