@@ -200,6 +200,7 @@ func newGenerateCommand() *ffcli.Command {
 	fs.StringVar(&cfg.Provider, "provider", "", "provider to use (suno, udio)")
 
 	fs.StringVar(&cfg.Input, "input", "", "csv or json with prompts or styles (fields: weight,type,prompt,style,instrumental)")
+	fs.BoolVar(&cfg.Random, "random", false, "randomly select a prompt from the input file using weights")
 	fs.StringVar(&cfg.Prompt, "prompt", "", "prompt to use")
 	fs.BoolVar(&cfg.Manual, "manual", false, "send prompt on manual mode")
 	fs.BoolVar(&cfg.Instrumental, "instrumental", true, "instrumental song")
@@ -261,6 +262,7 @@ func newProcessCommand() *ffcli.Command {
 	fs.DurationVar(&cfg.ShortFadeOut, "short-fadeout", 0, "short fade out duration")
 	fs.DurationVar(&cfg.LongFadeOut, "long-fadeout", 0, "long fade out duration")
 	fs.BoolVar(&cfg.SkipMaster, "skip-master", false, "skip the master process")
+	fs.BoolVar(&cfg.Docker, "docker", false, "use docker to master the song")
 
 	return &ffcli.Command{
 		Name:       cmd,

@@ -20,7 +20,7 @@ const (
 	defaultMinDuration   = 2*time.Minute + 5*time.Second
 	defaultMaxDuration   = 3*time.Minute + 55*time.Second
 	defaultMaxExtensions = 2
-	defaultModel         = "chirp-v3"
+	defaultModel         = "chirp-v3-0"
 )
 
 type generateRequest struct {

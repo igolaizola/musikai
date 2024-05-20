@@ -228,7 +228,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 			if s.Prompt != "" {
 				p += " | " + s.Prompt
 			}
-			if s.Style != "" {
+			if s.Style != "" && s.Style != s.Prompt {
 				p += " | " + s.Style
 			}
 			if g.Flags != "" {

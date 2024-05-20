@@ -39,6 +39,7 @@ type Config struct {
 
 	Account      string
 	Provider     string
+	Random       bool
 	Input        string
 	Type         string
 	Prompt       string
@@ -95,10 +96,10 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 
 	// Get the template function
-	var fn func() template
+	var fn func() (template, error)
 	if cfg.Input != "" {
 		var err error
-		fn, err = toTemplateFunc(cfg.Input)
+		fn, err = toTemplateFunc(cfg.Input, cfg.Random)
 		if err != nil {
 			return err
 		}
@@ -286,7 +287,10 @@ func Run(ctx context.Context, cfg *Config) error {
 			// Get a template
 			var tmpl template
 			if fn != nil {
-				tmpl = fn()
+				tmpl, err = fn()
+				if err != nil {
+					return err
+				}
 			} else {
 				tmpl = template{
 					Type:         cfg.Type,
@@ -390,7 +394,7 @@ func generate(ctx context.Context, account, provider string, generator music.Gen
 	return nil
 }
 
-func toTemplateFunc(file string) (func() template, error) {
+func toTemplateFunc(file string, random bool) (func() (template, error), error) {
 	b, err := os.ReadFile(file)
 	if err != nil {
 		return nil, fmt.Errorf("generate: couldn't read input file: %w", err)
@@ -426,6 +430,7 @@ func toTemplateFunc(file string) (func() template, error) {
 		return nil, fmt.Errorf("generate: no inputs found in file")
 	}
 	var opts []template
+	var weights []int
 	for _, i := range inputs {
 		w := i.Weight
 		if w <= 0 {
@@ -441,6 +446,7 @@ func toTemplateFunc(file string) (func() template, error) {
 				continue
 			}
 		}
+		weights = append(weights, w)
 		opts = append(opts, options(w, template{
 			Type:         i.Type,
 			Prompt:       i.Prompt,
@@ -449,9 +455,30 @@ func toTemplateFunc(file string) (func() template, error) {
 			Lyrics:       i.Lyrics,
 		})...)
 	}
-	return func() template {
-		return opts[rand.Intn(len(opts))]
-	}, nil
+	fn := func() (template, error) {
+		return opts[rand.Intn(len(opts))], nil
+	}
+	if !random {
+		i := 0
+		n := 0
+		fn = func() (template, error) {
+			for {
+				if i >= len(opts) {
+					return template{}, fmt.Errorf("generate: no more prompts to process")
+				}
+				t := opts[i]
+				w := weights[i]
+				if n >= w {
+					i++
+					n = 0
+					continue
+				}
+				n++
+				return t, nil
+			}
+		}
+	}
+	return fn, nil
 }
 
 type logger struct{}

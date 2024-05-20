@@ -36,6 +36,7 @@ type Config struct {
 	Type         string
 	Reprocess    bool
 	SkipMaster   bool
+	Docker       bool
 	ShortFadeOut time.Duration
 	LongFadeOut  time.Duration
 }
@@ -77,9 +78,13 @@ func Run(ctx context.Context, cfg *Config) error {
 	var ph *phaselimiter.PhaseLimiter
 	master := !cfg.SkipMaster
 	if master {
-		ph = phaselimiter.New(&phaselimiter.Config{})
-		if _, err := ph.Version(ctx); err != nil {
-			return fmt.Errorf("process: couldn't get phaselimiter version: %w", err)
+		ph = phaselimiter.New(&phaselimiter.Config{
+			Docker: cfg.Docker,
+		})
+		if !cfg.Docker {
+			if _, err := ph.Version(ctx); err != nil {
+				return fmt.Errorf("process: couldn't get phaselimiter version: %w", err)
+			}
 		}
 	}
 
@@ -291,6 +296,7 @@ func process(ctx context.Context, gen *storage.Generation, debug func(string, ..
 
 	fadeOut := longFadeOut
 	var ends bool
+	duration := analyzer.Duration()
 
 	// Remove last silence
 	if len(silences) > 0 {
@@ -300,14 +306,19 @@ func process(ctx context.Context, gen *storage.Generation, debug func(string, ..
 			if err := ffmpeg.Cut(ctx, processed, processed, last.Start); err != nil {
 				return fmt.Errorf("process: couldn't cut last silence: %w", err)
 			}
+			duration = last.Start
 		}
 		fadeOut = shortFadeOut
 		ends = true
 	}
 
 	// Apply fade out
-	if err := ffmpeg.FadeOut(ctx, processed, processed, analyzer.Duration(), fadeOut); err != nil {
-		return fmt.Errorf("process: couldn't fade out gen: %w", err)
+	if fadeOut < duration {
+		if err := ffmpeg.FadeOut(ctx, processed, processed, duration, fadeOut); err != nil {
+			return fmt.Errorf("process: couldn't fade out gen: %w", err)
+		}
+	} else {
+		debug("process: too short to fade out %s", gen.ID)
 	}
 	debug("process: end cut and fade out %s", gen.ID)
 

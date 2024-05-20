@@ -17,6 +17,7 @@ type Config struct {
 	Loudness             *float64
 	Level                *float64
 	SkipBassPreservation bool
+	Docker               bool
 }
 
 type PhaseLimiter struct {
@@ -24,6 +25,7 @@ type PhaseLimiter struct {
 	loudness           float64
 	level              float64
 	bassPreservation   bool
+	docker             bool
 }
 
 // BinPath is the path to the phaselimiter binary
@@ -53,6 +55,7 @@ func New(cfg *Config) *PhaseLimiter {
 		loudness:           loudness,
 		level:              level,
 		bassPreservation:   bassPreservation,
+		docker:             cfg.Docker,
 	}
 }
 
@@ -73,20 +76,36 @@ func (p *PhaseLimiter) Version(ctx context.Context) (string, error) {
 
 func (p *PhaseLimiter) Master(ctx context.Context, input string, output string) error {
 	wav := fmt.Sprintf("%s.wav", output)
-	args := []string{
-		"--input", input,
-		"--output", wav,
-		"--ffmpeg", ffmpeg.BinPath,
-		"--mastering", "true",
-		"--mastering_mode", "mastering5",
-		"--sound_quality2_cache", p.soundQuality2Cache,
-		"--mastering_matching_level", formatFloat(p.level),
-		"--mastering_ms_matching_level", formatFloat(p.level),
-		"--mastering5_mastering_level", formatFloat(p.level),
-		"--erb_eval_func_weighting", formatBool(p.bassPreservation),
-		"--reference", formatFloat(p.loudness),
+	var bin string
+	var args []string
+	if p.docker {
+		bin = "docker"
+		args = []string{
+			"run",
+			"--rm",
+			"-v", fmt.Sprintf("%s:/out", filepath.Dir(output)),
+			"-v", fmt.Sprintf("%s:/in", filepath.Dir(input)),
+			"igolaizola/phaselimiter:v1.0.0",
+			filepath.Join("/in", filepath.Base(input)),
+			filepath.Join("/out", filepath.Base(wav)),
+		}
+	} else {
+		bin = BinPath
+		args = []string{
+			"--input", input,
+			"--output", wav,
+			"--ffmpeg", ffmpeg.BinPath,
+			"--mastering", "true",
+			"--mastering_mode", "mastering5",
+			"--sound_quality2_cache", p.soundQuality2Cache,
+			"--mastering_matching_level", formatFloat(p.level),
+			"--mastering_ms_matching_level", formatFloat(p.level),
+			"--mastering5_mastering_level", formatFloat(p.level),
+			"--erb_eval_func_weighting", formatBool(p.bassPreservation),
+			"--reference", formatFloat(p.loudness),
+		}
 	}
-	cmd := exec.CommandContext(ctx, BinPath, args...)
+	cmd := exec.CommandContext(ctx, bin, args...)
 	data, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := string(data)
