@@ -41,7 +41,7 @@ func Run(ctx context.Context, cfg *Config) error {
 	}
 
 	switch cfg.Service {
-	case "distrokid", "suno":
+	case "distrokid", "suno", "discord", "udio", "jamendo":
 	default:
 		return fmt.Errorf("setting: unknown service: %s", cfg.Service)
 	}
