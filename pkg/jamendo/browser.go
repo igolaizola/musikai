@@ -30,6 +30,7 @@ type Browser struct {
 	proxy            string
 	profile          bool
 	cookieStore      CookieStore
+	binPath          string
 
 	userID     int
 	artistID   int
@@ -42,6 +43,7 @@ type BrowserConfig struct {
 	Proxy       string
 	Profile     bool
 	CookieStore CookieStore
+	BinPath     string
 }
 
 func NewBrowser(cfg *BrowserConfig) *Browser {
@@ -55,6 +57,7 @@ func NewBrowser(cfg *BrowserConfig) *Browser {
 		profile:     cfg.Profile,
 		cookieStore: cfg.CookieStore,
 		rateLimit:   ratelimit.New(wait),
+		binPath:     cfg.BinPath,
 	}
 }
 
@@ -87,6 +90,12 @@ func (b *Browser) Start(parent context.Context) error {
 			chromedp.NoDefaultBrowserCheck,
 			chromedp.Flag("headless", false),
 		)
+
+		if b.binPath != "" {
+			opts = append(opts,
+				chromedp.ExecPath(b.binPath),
+			)
+		}
 
 		if b.proxy != "" {
 			opts = append(opts,

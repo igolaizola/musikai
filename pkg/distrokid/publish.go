@@ -142,18 +142,15 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 	if err != nil {
 		return "", fmt.Errorf("distrokid: couldn't get html from doc: %w", err)
 	}
-	userID, err := getUserID(html)
-	if err != nil {
+	if _, err := getUserID(html); err != nil {
 		return "", fmt.Errorf("distrokid: couldn't get user ID: %w", err)
 	}
-	log.Println("user id:", userID)
 
 	// Get album UUID
 	albumUUID, err := getAlbumUUID(doc)
 	if err != nil {
 		return "", fmt.Errorf("distrokid: couldn't get albumuuid: %w", err)
 	}
-	log.Println("album uuid:", albumUUID)
 
 	// Obtain genre options
 	genres := map[string]string{}

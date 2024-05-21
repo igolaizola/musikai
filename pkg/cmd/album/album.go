@@ -327,7 +327,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		}
 
 		js, _ := json.MarshalIndent(album, "", "  ")
-		fmt.Println(string(js))
+		debug(string(js))
 
 		// Assign album id and order (title has already been assigned)
 		for i, song := range songs {

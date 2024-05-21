@@ -30,6 +30,7 @@ type Config struct {
 	FSType string
 	FSConn string
 	Proxy  string
+	Chrome string
 
 	Timeout     time.Duration
 	Concurrency int
@@ -110,6 +111,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		Wait:        1 * time.Second,
 		Proxy:       cfg.Proxy,
 		CookieStore: cookieStore,
+		BinPath:     cfg.Chrome,
 	})
 	if err := browser.Start(ctx); err != nil {
 		return fmt.Errorf("publish: couldn't start jamendo browser: %w", err)

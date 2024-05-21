@@ -35,6 +35,13 @@ func New(upscalerType, bin string) (*Upscaler, error) {
 			upscaler.cmd = func(ctx context.Context, file, outDir string) *exec.Cmd {
 				return exec.CommandContext(ctx, bin, file, "--output", outDir, "--format", upscaler.outputExtension, "--quality", "100")
 			}
+		case "linux":
+			if bin == "" {
+				bin = "/mnt/c/Program Files/Topaz Labs LLC/Topaz Photo AI/tpai.exe"
+			}
+			upscaler.cmd = func(ctx context.Context, file, outDir string) *exec.Cmd {
+				return exec.CommandContext(ctx, bin, file, "--output", outDir, "--format", upscaler.outputExtension, "--quality", "100")
+			}
 		case "darwin":
 			if bin == "" {
 				bin = "/Applications/Topaz Photo AI.app/Contents/MacOS/Topaz Photo AI"

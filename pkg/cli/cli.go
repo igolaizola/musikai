@@ -663,6 +663,7 @@ func newPublishCommand() *ffcli.Command {
 	fs.StringVar(&cfg.FSType, "fs-type", "", "fs type (local, s3, telegram)")
 	fs.StringVar(&cfg.FSConn, "fs-conn", "", "path for local, key:secret@bucker.region for s3, token@chat for telegram")
 	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+	fs.StringVar(&cfg.Chrome, "chrome", "", "chrome binary path (optional)")
 
 	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
 	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
@@ -706,6 +707,7 @@ func newJamendoCommand() *ffcli.Command {
 	fs.StringVar(&cfg.FSType, "fs-type", "", "fs type (local, s3, telegram)")
 	fs.StringVar(&cfg.FSConn, "fs-conn", "", "path for local, key:secret@bucker.region for s3, token@chat for telegram")
 	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+	fs.StringVar(&cfg.Chrome, "chrome", "", "chrome binary path (optional)")
 
 	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
 	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")

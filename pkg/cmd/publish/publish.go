@@ -38,6 +38,7 @@ type Config struct {
 	FirstName   string
 	LastName    string
 	RecordLabel string
+	Chrome      string
 }
 
 // Run launches the song generation process.
@@ -85,6 +86,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		Wait:        4 * time.Second,
 		Proxy:       cfg.Proxy,
 		CookieStore: store.NewCookieStore("distrokid", cfg.Account),
+		BinPath:     cfg.Chrome,
 	})
 	if err := browser.Start(ctx); err != nil {
 		return fmt.Errorf("publish: couldn't start distrokid browser: %w", err)

@@ -29,6 +29,7 @@ type Browser struct {
 	proxy            string
 	profile          bool
 	cookieStore      CookieStore
+	binPath          string
 }
 
 type BrowserConfig struct {
@@ -37,6 +38,7 @@ type BrowserConfig struct {
 	Proxy       string
 	Profile     bool
 	CookieStore CookieStore
+	BinPath     string
 }
 
 func NewBrowser(cfg *BrowserConfig) *Browser {
@@ -50,6 +52,7 @@ func NewBrowser(cfg *BrowserConfig) *Browser {
 		profile:     cfg.Profile,
 		cookieStore: cfg.CookieStore,
 		rateLimit:   ratelimit.New(wait),
+		binPath:     cfg.BinPath,
 	}
 }
 
@@ -82,6 +85,12 @@ func (b *Browser) Start(parent context.Context) error {
 			chromedp.NoDefaultBrowserCheck,
 			chromedp.Flag("headless", false),
 		)
+
+		if b.binPath != "" {
+			opts = append(opts,
+				chromedp.ExecPath(b.binPath),
+			)
+		}
 
 		if b.proxy != "" {
 			opts = append(opts,
@@ -148,10 +157,10 @@ func (b *Browser) Start(parent context.Context) error {
 		// Load google first to have a sane referer
 		chromedp.Navigate("https://www.google.com/"),
 		chromedp.WaitReady("body", chromedp.ByQuery),
-		chromedp.Navigate("https://distrokid.com/profile/"),
+		chromedp.Navigate("https://distrokid.com/new/"),
 		chromedp.WaitReady("body", chromedp.ByQuery),
 	); err != nil {
-		return fmt.Errorf("distrokid: couldn't navigate to profile: %w", err)
+		return fmt.Errorf("distrokid: couldn't navigate to new: %w", err)
 	}
 
 	// Obtain the document
@@ -163,11 +172,10 @@ func (b *Browser) Start(parent context.Context) error {
 	}
 
 	// Get user ID
-	userID, err := getUserID(html)
+	_, err = getUserID(html)
 	if err != nil {
 		return fmt.Errorf("distrokid: couldn't get user ID: %w", err)
 	}
-	fmt.Println("user id:", userID)
 
 	b.browserContext = browserContext
 	b.browserCancel = browserCancel
