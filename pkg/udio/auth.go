@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/igolaizola/musikai/pkg/session"
 )
 
 type apiUsageResponse struct {
@@ -81,7 +79,7 @@ func (c *Client) refresh(ctx context.Context) error {
 		return fmt.Errorf("udio: couldn't parse url: %w", err)
 	}
 	var authToken string
-	for _, cookie := range c.client.Jar.Cookies(u) {
+	for _, cookie := range c.client.GetCookieJar().Cookies(u) {
 		if !strings.HasPrefix(cookie.Name, "sb-ssr-production-auth-token.") {
 			continue
 		}
@@ -131,7 +129,7 @@ func (c *Client) refresh(ctx context.Context) error {
 	}
 
 	cookie := strings.Join(cookies, "; ")
-	if err := session.SetCookies(c.client, "https://www.udio.com", cookie, nil); err != nil {
+	if err := c.client.SetRawCookies("https://www.udio.com", cookie, nil); err != nil {
 		return fmt.Errorf("udio: couldn't set cookie: %w", err)
 	}
 	if err := c.cookieStore.SetCookie(ctx, cookie); err != nil {

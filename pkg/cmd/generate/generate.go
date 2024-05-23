@@ -121,25 +121,13 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("generate: couldn't start orm store: %w", err)
 	}
 
-	httpClient := &http.Client{
-		Timeout: 2 * time.Minute,
-	}
-	if cfg.Proxy != "" {
-		u, err := url.Parse(cfg.Proxy)
-		if err != nil {
-			return fmt.Errorf("invalid proxy URL: %w", err)
-		}
-		httpClient.Transport = &http.Transport{
-			Proxy: http.ProxyURL(u),
-		}
-	}
 	var generator music.Generator
 	switch cfg.Provider {
 	case "suno":
 		generator = suno.New(&suno.Config{
 			Wait:           4 * time.Second,
 			Debug:          cfg.Debug,
-			Client:         httpClient,
+			Proxy:          cfg.Proxy,
 			CookieStore:    store.NewCookieStore("suno", cfg.Account),
 			Parallel:       cfg.Limit == 1,
 			EndLyrics:      cfg.EndLyrics,
@@ -191,7 +179,7 @@ func Run(ctx context.Context, cfg *Config) error {
 		generator, err = udio.New(&udio.Config{
 			Wait:            4 * time.Second,
 			Debug:           cfg.Debug,
-			Client:          httpClient,
+			Proxy:           cfg.Proxy,
 			CookieStore:     store.NewCookieStore("udio", cfg.Account),
 			Parallel:        cfg.Limit == 1,
 			MinDuration:     cfg.MinDuration,

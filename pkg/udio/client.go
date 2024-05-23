@@ -9,14 +9,14 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	http "github.com/bogdanfinn/fhttp"
+	"github.com/igolaizola/musikai/pkg/fhttp"
 	"github.com/igolaizola/musikai/pkg/nopecha"
 	"github.com/igolaizola/musikai/pkg/ratelimit"
-	"github.com/igolaizola/musikai/pkg/session"
 	"github.com/igolaizola/musikai/pkg/twocaptcha"
 )
 
@@ -25,7 +25,7 @@ const (
 )
 
 type Client struct {
-	client         *http.Client
+	client         fhttp.Client
 	debug          bool
 	ratelimit      ratelimit.Lock
 	cookieStore    CookieStore
@@ -41,7 +41,7 @@ type Client struct {
 type Config struct {
 	Wait            time.Duration
 	Debug           bool
-	Client          *http.Client
+	Proxy           string
 	CookieStore     CookieStore
 	MinDuration     time.Duration
 	MaxDuration     time.Duration
@@ -88,12 +88,7 @@ func New(cfg *Config) (*Client, error) {
 	if wait == 0 {
 		wait = 1 * time.Second
 	}
-	client := cfg.Client
-	if client == nil {
-		client = &http.Client{
-			Timeout: 2 * time.Minute,
-		}
-	}
+	client := fhttp.NewClient(2*time.Minute, true, cfg.Proxy)
 	minDuration := defaultMinDuration
 	if cfg.MinDuration > 0 {
 		minDuration = cfg.MinDuration
@@ -142,11 +137,10 @@ func New(cfg *Config) (*Client, error) {
 		}
 	case "nopecha":
 		cli, err := nopecha.New(&nopecha.Config{
-			Wait:   1 * time.Second,
-			Key:    cfg.CaptchaKey,
-			Client: client,
-			Debug:  false,
-			Proxy:  cfg.CaptchaProxy,
+			Wait:  1 * time.Second,
+			Key:   cfg.CaptchaKey,
+			Debug: false,
+			Proxy: cfg.CaptchaProxy,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("udio: couldn't create nopecha client: %w", err)
@@ -192,7 +186,7 @@ func (c *Client) Start(ctx context.Context) error {
 	if cookie == "" {
 		return fmt.Errorf("udio: cookie is empty")
 	}
-	if err := session.SetCookies(c.client, "https://www.udio.com", cookie, nil); err != nil {
+	if err := c.client.SetRawCookies("https://www.udio.com", cookie, nil); err != nil {
 		return fmt.Errorf("udio: couldn't set cookie: %w", err)
 	}
 
@@ -205,7 +199,7 @@ func (c *Client) Start(ctx context.Context) error {
 }
 
 func (c *Client) Stop(ctx context.Context) error {
-	cookie, err := session.GetCookies(c.client, "https://www.udio.com")
+	cookie, err := c.client.GetRawCookies("https://www.udio.com")
 	if err != nil {
 		return fmt.Errorf("udio: couldn't get cookie: %w", err)
 	}

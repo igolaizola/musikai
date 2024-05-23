@@ -27,11 +27,10 @@ type Client struct {
 }
 
 type Config struct {
-	Wait   time.Duration
-	Debug  bool
-	Client *http.Client
-	Key    string
-	Proxy  string
+	Wait  time.Duration
+	Debug bool
+	Key   string
+	Proxy string
 }
 
 func New(cfg *Config) (*Client, error) {
@@ -39,11 +38,8 @@ func New(cfg *Config) (*Client, error) {
 	if wait == 0 {
 		wait = 1 * time.Second
 	}
-	client := cfg.Client
-	if client == nil {
-		client = &http.Client{
-			Timeout: 2 * time.Minute,
-		}
+	client := &http.Client{
+		Timeout: 2 * time.Minute,
 	}
 
 	var proxy *url.URL

@@ -89,7 +89,7 @@ type clientSession struct {
 }
 
 // TODO: obtain this version from redirect response of https://clerk.suno.ai/npm/@clerk/clerk-js@4/dist/clerk.browser.js
-const clerkVersion = "4.72.0-snapshot.vc141245"
+const clerkVersion = "4.73.0"
 
 func (c *Client) sessionID(ctx context.Context) (string, error) {
 	var resp clerkClientResponse
