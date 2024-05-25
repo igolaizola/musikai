@@ -29,6 +29,7 @@ import (
 	"github.com/igolaizola/musikai/pkg/cmd/upscale"
 	"github.com/igolaizola/musikai/pkg/cmd/web"
 	"github.com/igolaizola/musikai/pkg/imageai"
+	"github.com/igolaizola/musikai/pkg/webcli"
 	"github.com/peterbourgon/ff/ffyaml"
 	"github.com/peterbourgon/ff/v3"
 	"github.com/peterbourgon/ff/v3/ffcli"
@@ -37,35 +38,44 @@ import (
 func New(version, commit, date string) *ffcli.Command {
 	fs := flag.NewFlagSet("musikai", flag.ExitOnError)
 
+	cmds := []*ffcli.Command{
+		newVersionCommand(version, commit, date),
+		newMigrateCommand(),
+		newSettingCommand(),
+		newWebCommand(),
+
+		newGenerateCommand(),
+		newProcessCommand(),
+		newTitleCommand(),
+		newDraftCommand(),
+		newCoverCommand(),
+		newUpscaleCommand(),
+
+		newAlbumCommand(),
+		newDeleteAlbumCommand(),
+		newCoverAlbumCommand(),
+
+		newPublishCommand(),
+		newSyncCommand(),
+		newJamendoCommand(),
+		newClassifyCommand(),
+		newDescribeCommand(),
+
+		newDownloadCommand(),
+		newDownloadAlbumCommand(),
+		newAnalyzeCommand(),
+	}
+	port := fs.Int("port", 0, "port number")
 	return &ffcli.Command{
 		ShortUsage: "musikai [flags] <subcommand>",
 		FlagSet:    fs,
-		Exec: func(context.Context, []string) error {
+		Exec: func(ctx context.Context, args []string) error {
+			if len(args) == 0 {
+				return webcli.Serve(ctx, fs.Name(), cmds, *port)
+			}
 			return flag.ErrHelp
 		},
-		Subcommands: []*ffcli.Command{
-			newVersionCommand(version, commit, date),
-			newMigrateCommand(),
-			newSettingCommand(),
-			newAnalyzeCommand(),
-			newGenerateCommand(),
-			newProcessCommand(),
-			newTitleCommand(),
-			newDraftCommand(),
-			newCoverCommand(),
-			newUpscaleCommand(),
-			newWebCommand(),
-			newAlbumCommand(),
-			newDeleteAlbumCommand(),
-			newCoverAlbumCommand(),
-			newPublishCommand(),
-			newSyncCommand(),
-			newJamendoCommand(),
-			newDownloadCommand(),
-			newDownloadAlbumCommand(),
-			newClassifyCommand(),
-			newDescribeCommand(),
-		},
+		Subcommands: cmds,
 	}
 }
 

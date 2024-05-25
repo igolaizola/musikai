@@ -1,0 +1,95 @@
+package view
+
+import (
+	"fmt"
+	"time"
+)
+
+templ log(id, logs string) {
+	<div id="sse" hx-ext="sse" sse-connect={ "/events/" + id } hx-swap="outerHTML">
+		<div sse-swap="log" hx-swap="beforeend" hx-target="#log"></div>
+		<div sse-swap="close" hx-target="#sse"></div>
+	</div>
+	<code class="block whitespace-pre">
+		<div id="log">
+			@templ.Raw(logs)
+		</div>
+	</code>
+}
+
+templ Log(app string, id, logs string) {
+	@page(app, fmt.Sprintf("Process %s", id)) {
+		@log(id, logs)
+	}
+}
+
+type LogEntry struct {
+	ID       string
+	Command  string
+	Start    time.Time
+	End      time.Time
+	Error    bool
+	Canceled bool
+}
+
+templ listLog(logs []LogEntry) {
+	<div hx-get="/logs" hx-trigger="every 5s" hx-target="#content" hx-select="#content" hx-swap="outerHTML"></div>
+	<ul role="list" class="divide-y divide-gray-100">
+		for _, log := range logs {
+			<li class="flex items-center justify-between gap-x-6 py-5">
+				<div class="min-w-0">
+					<div class="flex items-start gap-x-3">
+						<p class="text-sm font-semibold leading-6 text-gray-900">{ log.Command }</p>
+						switch  {
+							case log.Canceled:
+								<p class="rounded-md whitespace-nowrap mt-0.5 px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset text-yellow-700 bg-yellow-50 ring-yellow-600/20">Canceled</p>
+								/*case log.Error:
+								<p class="rounded-md whitespace-nowrap mt-0.5 px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset text-red-700 bg-red-50 ring-red-600/20">Error</p>*/
+							case log.End.IsZero():
+								<p class="rounded-md whitespace-nowrap mt-0.5 px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset text-gray-600 bg-gray-50 ring-gray-500/10">In progress</p>
+							default:
+								<p class="rounded-md whitespace-nowrap mt-0.5 px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset text-green-700 bg-green-50 ring-green-600/20">Complete</p>
+						}
+					</div>
+					<div class="mt-1 flex items-center gap-x-2 text-xs leading-5 text-gray-500">
+						<p class="whitespace-nowrap">Launched at <time datetime={ log.Start.Format("2006-01-02T15:04:05Z") }>{ log.Start.Format("02 Jan 06 15:04 MST") }</time></p>
+						<svg viewBox="0 0 2 2" class="h-0.5 w-0.5 fill-current">
+							<circle cx="1" cy="1" r="1"></circle>
+						</svg>
+						if log.End.IsZero() {
+							<p class="truncate"><time>{ time.Since(log.Start).Round(time.Second).String() } elapsed</time></p>
+						} else {
+							<p class="truncate"><time>{ log.End.Sub(log.Start).Round(time.Second).String() } elapsed</time></p>
+						}
+					</div>
+				</div>
+				<div class="flex flex-none items-center gap-x-4">
+					if log.End.IsZero() {
+						<a
+							href={ templ.SafeURL("/cancel/" + log.ID) }
+							hx-get={ "/cancel/" + log.ID }
+							hx-target="#content"
+							hx-select="#content"
+							hx-swap="outerHTML"
+							class="rounded-md bg-red-600 px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-500"
+						>Cancel</a>
+					}
+					<a
+						href={ templ.SafeURL("/logs/" + log.ID) }
+						hx-get={ "/logs/" + log.ID }
+						hx-target="#content"
+						hx-select="#content"
+						hx-swap="outerHTML"
+						class="rounded-md bg-white px-2.5 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+					>View logs</a>
+				</div>
+			</li>
+		}
+	</ul>
+}
+
+templ ListLog(app string, logs []LogEntry) {
+	@page(app, "Launched processes") {
+		@listLog(logs)
+	}
+}
