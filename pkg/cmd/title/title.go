@@ -62,17 +62,6 @@ func Run(ctx context.Context, cfg *Config) error {
 			return is, nil
 		}
 	case ".csv":
-		// Check for inconsistent number of fields in csv
-		lines := strings.Split(string(b), "\n")
-		commas := strings.Count(lines[0], ",")
-		for i, l := range lines {
-			if l == "" {
-				continue
-			}
-			if commas != strings.Count(l, ",") {
-				return fmt.Errorf("title: inconsistent number of fields in csv %d (%s)", i, l)
-			}
-		}
 		unmarshal = func(b []byte) ([]*title, error) {
 			var is []*title
 			if err := gocsv.UnmarshalBytes(b, &is); err != nil {
