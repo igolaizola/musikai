@@ -369,18 +369,13 @@ func (c *Browser) Publish(parent context.Context, album *Album, auto bool) (stri
 
 	// Wait for the final page with the preview link
 	if err := chromedp.Run(ctx,
-		chromedp.WaitVisible("#pre-save-page", chromedp.ByQuery),
+		chromedp.WaitVisible("#pre-save-page,.share-hf-link", chromedp.ByQuery),
 	); err != nil {
 		return "", fmt.Errorf("distrokid: couldn't wait for preview link: %w", err)
 	}
 
-	// Obtain the preview link from the href attribute
-	var previewLink string
-	if err := chromedp.Run(ctx,
-		chromedp.AttributeValue("#pre-save-page", "href", &previewLink, nil),
-	); err != nil {
-		return "", fmt.Errorf("distrokid: couldn't get preview link: %w", err)
-	}
+	// Wait a bit more before closing
+	time.Sleep(1 * time.Second)
 	return albumUUID, nil
 }
 

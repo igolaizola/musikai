@@ -189,7 +189,7 @@ func Run(ctx context.Context, cfg *Config) error {
 				if err != nil {
 					log.Println(err)
 				}
-				debug("publish: end %s%s", album.ID, album.FullTitle())
+				debug("publish: end %s %s", album.ID, album.FullTitle())
 				errC <- err
 			}()
 		}
