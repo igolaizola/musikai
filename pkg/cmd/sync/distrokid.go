@@ -129,7 +129,8 @@ func RunDistrokid(ctx context.Context, cfg *Config) error {
 			filters := []storage.Filter{
 				storage.Where("id > ?", currID),
 				storage.Where("state = ?", storage.Used),
-				storage.Where("spotify_id = ''"),
+				storage.Where("distrokid_id != ''"),
+				storage.Where("albums.upc = '' OR albums.spotify_id = '' OR albums.apple_id = '' OR EXISTS (SELECT 1 FROM songs WHERE album_id = albums.id AND isrc = '')"),
 			}
 
 			// Get next image
