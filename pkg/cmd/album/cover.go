@@ -63,15 +63,17 @@ func RunCover(ctx context.Context, cfg *CoverConfig) error {
 		return fmt.Errorf("album: couldn't get album: %w", err)
 	}
 
-	coverMatches, err := store.ListAlbums(ctx, 1, 1000, "", storage.Where("cover_id = ?", album.CoverID))
-	if err != nil {
-		return fmt.Errorf("album: couldn't list covers: %w", err)
-	}
 	var cover *storage.Cover
-	if len(coverMatches) == 1 {
-		cover, err = store.GetCover(ctx, album.CoverID)
+	if album.CoverID != "" {
+		coverMatches, err := store.ListAlbums(ctx, 1, 1000, "", storage.Where("cover_id = ?", album.CoverID))
 		if err != nil {
-			return fmt.Errorf("album: couldn't get cover: %w", err)
+			return fmt.Errorf("album: couldn't list covers: %w", err)
+		}
+		if len(coverMatches) == 1 {
+			cover, err = store.GetCover(ctx, album.CoverID)
+			if err != nil {
+				return fmt.Errorf("album: couldn't get cover: %w", err)
+			}
 		}
 	}
 
