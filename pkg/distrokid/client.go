@@ -9,18 +9,18 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	http "github.com/bogdanfinn/fhttp"
+	"github.com/igolaizola/musikai/pkg/fhttp"
 	"github.com/igolaizola/musikai/pkg/ratelimit"
-	"github.com/igolaizola/musikai/pkg/session"
 )
 
 type Client struct {
-	client      *http.Client
+	client      fhttp.Client
 	debug       bool
 	ratelimit   ratelimit.Lock
 	cookieStore CookieStore
@@ -29,7 +29,7 @@ type Client struct {
 type Config struct {
 	Wait        time.Duration
 	Debug       bool
-	Client      *http.Client
+	Proxy       string
 	CookieStore CookieStore
 }
 
@@ -68,12 +68,7 @@ func New(cfg *Config) *Client {
 	if wait == 0 {
 		wait = 1 * time.Second
 	}
-	client := cfg.Client
-	if client == nil {
-		client = &http.Client{
-			Timeout: 2 * time.Minute,
-		}
-	}
+	client := fhttp.NewClient(2*time.Minute, true, cfg.Proxy)
 
 	return &Client{
 		client:      client,
@@ -99,7 +94,7 @@ func (c *Client) Start(ctx context.Context) error {
 	if cookie == "" {
 		return fmt.Errorf("distrokid: cookie is empty")
 	}
-	if err := session.SetCookies(c.client, "https://distrokid.com", cookie, nil); err != nil {
+	if err := c.client.SetRawCookies("https://distrokid.com", cookie, nil); err != nil {
 		return fmt.Errorf("distrokid: couldn't set cookie: %w", err)
 	}
 
@@ -112,7 +107,7 @@ func (c *Client) Start(ctx context.Context) error {
 }
 
 func (c *Client) Stop(ctx context.Context) error {
-	cookie, err := session.GetCookies(c.client, "https://distrokid.com")
+	cookie, err := c.client.GetRawCookies("https://distrokid.com")
 	if err != nil {
 		return fmt.Errorf("distrokid: couldn't get cookie: %w", err)
 	}

@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
-	"net/url"
 	"sort"
 	"sync"
 	"time"
@@ -39,23 +37,10 @@ func RunDistrokid(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("sync-distrokid: couldn't start orm store: %w", err)
 	}
 
-	httpClient := &http.Client{
-		Timeout: 2 * time.Minute,
-	}
-	if cfg.Proxy != "" {
-		u, err := url.Parse(cfg.Proxy)
-		if err != nil {
-			return fmt.Errorf("invalid proxy URL: %w", err)
-		}
-		httpClient.Transport = &http.Transport{
-			Proxy: http.ProxyURL(u),
-		}
-	}
-
 	dkClient := distrokid.New(&distrokid.Config{
 		Wait:        4 * time.Second,
 		Debug:       cfg.Debug,
-		Client:      httpClient,
+		Proxy:       cfg.Proxy,
 		CookieStore: store.NewCookieStore("distrokid", cfg.Account),
 	})
 	if err := dkClient.Start(ctx); err != nil {

@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -80,25 +78,12 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("download: couldn't create file storage: %w", err)
 	}
 
-	httpClient := &http.Client{
-		Timeout: 2 * time.Minute,
-	}
-	if cfg.Proxy != "" {
-		u, err := url.Parse(cfg.Proxy)
-		if err != nil {
-			return fmt.Errorf("invalid proxy URL: %w", err)
-		}
-		httpClient.Transport = &http.Transport{
-			Proxy: http.ProxyURL(u),
-		}
-	}
-
 	cookieStore := store.NewCookieStore("jamendo", cfg.Account)
 
 	client := jamendo.New(&jamendo.Config{
 		Wait:        5 * time.Second,
 		Debug:       cfg.Debug,
-		Client:      httpClient,
+		Proxy:       cfg.Proxy,
 		CookieStore: cookieStore,
 		Name:        cfg.ArtistName,
 		ID:          cfg.ArtistID,
