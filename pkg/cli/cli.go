@@ -13,6 +13,7 @@ import (
 
 	"github.com/igolaizola/musikai/pkg/cmd/album"
 	"github.com/igolaizola/musikai/pkg/cmd/analyze"
+	"github.com/igolaizola/musikai/pkg/cmd/background"
 	"github.com/igolaizola/musikai/pkg/cmd/classify"
 	"github.com/igolaizola/musikai/pkg/cmd/cover"
 	"github.com/igolaizola/musikai/pkg/cmd/describe"
@@ -54,6 +55,7 @@ func New(version, commit, date string) *ffcli.Command {
 		newAlbumCommand(),
 		newDeleteAlbumCommand(),
 		newCoverAlbumCommand(),
+		newBackgroundCommand(),
 
 		newPublishCommand(),
 		newSyncCommand(),
@@ -513,6 +515,66 @@ func newCoverCommand() *ffcli.Command {
 			}
 			cfg.Discord.Debug = cfg.Debug
 			return cover.Run(ctx, cfg)
+		},
+	}
+}
+
+func newBackgroundCommand() *ffcli.Command {
+	cmd := "background"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &background.Config{}
+
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.Type, "type", "", "type to use")
+	fs.StringVar(&cfg.Template, "template", "", "default template to use when there isn't a match on the input file")
+	fs.StringVar(&cfg.Input, "input", "", "input templates in csv or json format (fields: type,template)")
+	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
+	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
+	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number of images to process (0 means no limit)")
+	fs.DurationVar(&cfg.WaitMin, "wait-min", 3*time.Second, "minimum wait time between images")
+	fs.DurationVar(&cfg.WaitMax, "wait-max", 1*time.Minute, "maximum wait time between images")
+
+	// Discord parameters
+	cfg.Discord = &imageai.Config{}
+	fs.StringVar(&cfg.Discord.Bot, "bot", "midjourney", "discord bot")
+	fs.StringVar(&cfg.Discord.Proxy, "proxy", "", "discord proxy")
+	fs.StringVar(&cfg.Discord.Channel, "channel", "", "discord channel id")
+	fs.StringVar(&cfg.Discord.ReplicateToken, "replicate-token", "", "replicate token")
+
+	// Session
+	fs.StringVar(&cfg.Discord.SessionFile, "session", "session.yaml", "session config file (optional)")
+
+	fsSession := flag.NewFlagSet("", flag.ExitOnError)
+	for _, fs := range []*flag.FlagSet{fs, fsSession} {
+		fs.StringVar(&cfg.Discord.Session.UserAgent, "user-agent", "", "user agent")
+		fs.StringVar(&cfg.Discord.Session.JA3, "ja3", "", "ja3 fingerprint")
+		fs.StringVar(&cfg.Discord.Session.Language, "language", "", "language")
+		fs.StringVar(&cfg.Discord.Session.Token, "token", "", "authentication token")
+		fs.StringVar(&cfg.Discord.Session.SuperProperties, "super-properties", "", "super properties")
+		fs.StringVar(&cfg.Discord.Session.Locale, "locale", "", "locale")
+		fs.StringVar(&cfg.Discord.Session.Cookie, "cookie", "", "cookie")
+	}
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			if err := loadSession(fsSession, cfg.Discord.SessionFile); err != nil {
+				return fmt.Errorf("couldn't load session: %w", err)
+			}
+			cfg.Discord.Debug = cfg.Debug
+			return background.Run(ctx, cfg)
 		},
 	}
 }
