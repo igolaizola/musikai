@@ -1,360 +1,228 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="robots" content="noindex" />
-    <title>Filter</title>
-    <script defer src="cover.js"></script>
-    <script defer src="alpinejs-3.x.x.min.js"></script>
-    <script defer src="bootstrap.bundle-5.0.min.js"></script>
-    <link href="bootstrap-5.0.min.css" rel="stylesheet" />
-    <style>
-      div.gallery {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        grid-gap: 10px;
-      }
 
-      div.gallery img:hover {
-        /* transform: scale(1.05);*/
-        height: 300px;
-        width: 300px;
-        z-index: 1000;
-        /* Increase the size when the mouse hovers over the image */
-        box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
-        /* Increase the shadow when the mouse hovers over the image */
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>Filter</title>
+  <script defer src="cover.js"></script>
+  <script defer src="alpinejs-3.x.x.min.js"></script>
+  <script defer src="bootstrap.bundle-5.0.min.js"></script>
+  <link href="bootstrap-5.0.min.css" rel="stylesheet" />
+  <style>
+    div.gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      grid-gap: 10px;
+    }
 
-      div.gallery img {
-        width: 100%;
-        height: auto;
-        z-index: 1;
-        position: relative;
-      }
+    div.gallery img:hover {
+      /* transform: scale(1.05);*/
+      height: 300px;
+      width: 300px;
+      z-index: 1000;
+      /* Increase the size when the mouse hovers over the image */
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+      /* Increase the shadow when the mouse hovers over the image */
+    }
 
-      div.gallery input {
-        margin-top: 5px;
-        width: 100%;
-      }
+    div.gallery img {
+      width: 100%;
+      height: auto;
+      z-index: 1;
+      position: relative;
+    }
 
-      .btn-group {
-        position: absolute;
-        top: 5px;
-        right: 5px;
-      }
-      audio:hover {
-        width: 300px !important;
-        /*margin-left: -100px !important;*/
-        z-index: 1000;
-      }
-      audio::-webkit-media-controls-play-button:hover,
-      audio::-webkit-media-controls-panel:hover {
-        background-color: #43b9d9;
-        color: #43b9d9;
-      }
-    </style>
-  </head>
+    div.gallery input {
+      margin-top: 5px;
+      width: 100%;
+    }
 
-  <body x-data="app();">
-    <header>
-      <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-          <a class="navbar-brand" href="#">Filter Covers</a>
-          <button
-            class="navbar-toggler"
-            type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#navbarNav"
-            aria-controls="navbarNav"
-            aria-expanded="false"
-            aria-label="Toggle navigation"
-          >
-            <span class="navbar-toggler-icon"></span>
-          </button>
-          <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav" role="tablist">
-              <li class="nav-item" role="presentation">
-                <a id="home-tab" class="nav-link active" href="/index.html"
-                  >Songs</a
-                >
-              </li>
-              <li class="nav-item" role="presentation">
-                <a id="home-tab" class="nav-link active" href="cover.html"
-                  >Covers</a
-                >
-              </li>
-              <li class="nav-item" role="presentation">
-                <a id="home-tab" class="nav-link active" href="album.html"
-                  >Albums</a
-                >
-              </li>
-            </ul>
-          </div>
-        </div>
-      </nav>
-    </header>
+    .btn-group {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+    }
 
-    <main class="container mt-4">
-      <div class="tab-content">
-        <div
-          id="home"
-          class="tab-pane fade show active"
-          role="tabpanel"
-          aria-labelledby="home-tab"
-        >
-          <!--h1 class="mb-4">Gallery</!--h1-->
-          <form @submit.prevent="search(1)" class="row mb-4">
-            <div class="col-md-3">
-              <input
-                x-model="type"
-                type="text"
-                class="form-control mb-3"
-                placeholder="Type"
-              />
-            </div>
-            <div class="col-md-3">
-              <input
-                x-model="style"
-                type="text"
-                class="form-control mb-3"
-                placeholder="Style"
-              />
-            </div>
-            <div class="col-md-2">
-              <input
-                x-model="size"
-                type="number"
-                class="form-control mb-3"
-                placeholder="Size"
-              />
-            </div>
-            <div class="col-md-1">
-              <button type="submit" class="btn btn-primary w-100">👁️</button>
-            </div>
-            <div class="col-md-1">
-              <button
-                @click="changeSpeed()"
-                type="button"
-                class="btn btn-secondary w-100"
-              >
-                <span x-text="speed"></span>x
-              </button>
-            </div>
+    audio:hover {
+      width: 300px !important;
+      /*margin-left: -100px !important;*/
+      z-index: 1000;
+    }
 
-            <div class="input-group">
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="pending"
-                  x-model="pending"
-                />
-                <label class="form-check-label" for="pending">Pending</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="approved"
-                  x-model="approved"
-                />
-                <label class="form-check-label" for="approved">Approved</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="rejected"
-                  x-model="rejected"
-                />
-                <label class="form-check-label" for="rejected">Rejected</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="flagged"
-                  x-model="flagged"
-                />
-                <label class="form-check-label" for="flagged">Flagged</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="noflagged"
-                  x-model="noflagged"
-                />
-                <label class="form-check-label" for="noflagged">!Flagged</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="ends"
-                  x-model="ends"
-                />
-                <label class="form-check-label" for="ends">Ends</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="noends"
-                  x-model="noends"
-                />
-                <label class="form-check-label" for="noends">!Ends</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="liked"
-                  x-model="liked"
-                />
-                <label class="form-check-label" for="liked">Liked</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="noliked"
-                  x-model="noliked"
-                />
-                <label class="form-check-label" for="noliked">!Liked</label>
-              </div>
-            </div>
-          </form>
-          <div
-            class="alert alert-danger"
-            role="alert"
-            style="display: none"
-            x-show="error"
-          >
-            <span x-text="error"></span>
-          </div>
+    audio::-webkit-media-controls-play-button:hover,
+    audio::-webkit-media-controls-panel:hover {
+      background-color: #43b9d9;
+      color: #43b9d9;
+    }
+  </style>
+</head>
 
-          <div
-            class="d-flex justify-content-center"
-            style="display: none"
-            x-show="loading"
-          >
-            <div
-              class="spinner-border"
-              role="status"
-              style="display: none"
-              x-show="loading"
-            ></div>
-          </div>
-
-          <!-- Gallery -->
-          <div class="gallery mb-4">
-            <template x-for="(img, index) in images">
-              <div class="gallery-item card">
-                <div class="no-btn-group m-1" role="group">
-                  <template x-if="!img.liked || img.liked === false">
-                    <button
-                      @click="likeImage(index)"
-                      type="button"
-                      class="btn btn-secondary btn-sm"
-                    >
-                      🤍
-                    </button>
-                  </template>
-
-                  <template x-if="img.liked === true">
-                    <button
-                      @click="dislikeImage(index)"
-                      type="button"
-                      class="btn btn-secondary btn-sm"
-                    >
-                      ❤️
-                    </button>
-                  </template>
-
-                  <template x-if="img.state !== 2">
-                    <button
-                      @click="approveImage(index)"
-                      type="button"
-                      class="btn btn-success btn-sm"
-                    >
-                      👍
-                    </button>
-                  </template>
-
-                  <template x-if="img.state !== 1">
-                    <button
-                      @click="rejectImage(index)"
-                      type="button"
-                      class="btn btn-danger btn-sm"
-                    >
-                      🗑️
-                    </button>
-                  </template>
-                </div>
-
-                <a target="_blank" x-bind:href="img.url">
-                  <img width="224" height="224" x-bind:src="img.thumbnail_url" />
-                </a>
-
-                <span class="small" x-text="img.prompt"></span>
-              </div>
-            </template>
-          </div>
-
-          <!-- Pagination -->
-          <template x-if="images.length > 0 || page > 1">
-            <nav aria-label="Page navigation example">
-              <ul class="pagination justify-content-center">
-                <template x-if="page > 1">
-                  <li @click="search(page-1)" class="page-item">
-                    <a class="page-link" href="#">Previous</a>
-                  </li>
-                </template>
-                <template x-if="page == 1">
-                  <li class="page-item disabled">
-                    <a
-                      class="page-link"
-                      href="#"
-                      tabindex="-1"
-                      aria-disabled="true"
-                      >Previous</a
-                    >
-                  </li>
-                </template>
-                <li class="page-item active">
-                  <a class="page-link" href="#" x-text="page"></a>
-                </li>
-                <template x-if="images.length == 0">
-                  <li class="page-item disabled">
-                    <a
-                      class="page-link"
-                      href="#"
-                      tabindex="-1"
-                      aria-disabled="true"
-                      >Next</a
-                    >
-                  </li>
-                </template>
-                <template x-if="images.length > 0">
-                  <li class="page-item">
-                    <a @click="search(page+1)" class="page-link" href="#"
-                      >Next</a
-                    >
-                  </li>
-                </template>
-              </ul>
-            </nav>
-          </template>
+<body x-data="app();">
+  <header>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+      <div class="container">
+        <a class="navbar-brand" href="#">Filter Covers</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+          aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav" role="tablist">
+            <li class="nav-item" role="presentation">
+              <a id="home-tab" class="nav-link active" href="/index.html">Songs</a>
+            </li>
+            <li class="nav-item" role="presentation">
+              <a id="home-tab" class="nav-link active" href="cover.html">Covers</a>
+            </li>
+            <li class="nav-item" role="presentation">
+              <a id="home-tab" class="nav-link active" href="album.html">Albums</a>
+            </li>
+          </ul>
         </div>
       </div>
-    </main>
+    </nav>
+  </header>
 
-    <script
-      src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"
-      integrity="sha384-OERcA2EqjJCMA+/3y+gxIOqMEjwtxJY7qPCqsdltbNJuaOe923+mo//f6V8Qbsw3"
-      crossorigin="anonymous"
-    ></script>
-  </body>
+  <main class="container mt-4">
+    <div class="tab-content">
+      <div id="home" class="tab-pane fade show active" role="tabpanel" aria-labelledby="home-tab">
+        <!--h1 class="mb-4">Gallery</!--h1-->
+        <form @submit.prevent="search(1)" class="row mb-4">
+          <div class="col-md-3">
+            <input x-model="type" type="text" class="form-control mb-3" placeholder="Type" />
+          </div>
+          <div class="col-md-3">
+            <input x-model="style" type="text" class="form-control mb-3" placeholder="Style" />
+          </div>
+          <div class="col-md-2">
+            <input x-model="size" type="number" class="form-control mb-3" placeholder="Size" />
+          </div>
+          <div class="col-md-1">
+            <button type="submit" class="btn btn-primary w-100">👁️</button>
+          </div>
+          <div class="col-md-1">
+            <button @click="changeSpeed()" type="button" class="btn btn-secondary w-100">
+              <span x-text="speed"></span>x
+            </button>
+          </div>
+
+          <div class="input-group">
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="pending" x-model="pending" />
+              <label class="form-check-label" for="pending">Pending</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="approved" x-model="approved" />
+              <label class="form-check-label" for="approved">Approved</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="rejected" x-model="rejected" />
+              <label class="form-check-label" for="rejected">Rejected</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="background" x-model="background" />
+              <label class="form-check-label" for="background">Background</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="nobackground" x-model="nobackground" />
+              <label class="form-check-label" for="nobackground">!Background</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="liked" x-model="liked" />
+              <label class="form-check-label" for="liked">Liked</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="noliked" x-model="noliked" />
+              <label class="form-check-label" for="noliked">!Liked</label>
+            </div>
+          </div>
+        </form>
+        <div class="alert alert-danger" role="alert" style="display: none" x-show="error">
+          <span x-text="error"></span>
+        </div>
+
+        <div class="d-flex justify-content-center" style="display: none" x-show="loading">
+          <div class="spinner-border" role="status" style="display: none" x-show="loading"></div>
+        </div>
+
+        <!-- Gallery -->
+        <div class="gallery mb-4">
+          <template x-for="(img, index) in images">
+            <div class="gallery-item card">
+              <div class="no-btn-group m-1" role="group">
+                <template x-if="!img.liked || img.liked === false">
+                  <button @click="likeImage(index)" type="button" class="btn btn-secondary btn-sm">
+                    🤍
+                  </button>
+                </template>
+
+                <template x-if="img.liked === true">
+                  <button @click="dislikeImage(index)" type="button" class="btn btn-secondary btn-sm">
+                    ❤️
+                  </button>
+                </template>
+
+                <template x-if="img.state !== 2">
+                  <button @click="approveImage(index)" type="button" class="btn btn-success btn-sm">
+                    👍
+                  </button>
+                </template>
+
+                <template x-if="img.state !== 1">
+                  <button @click="rejectImage(index)" type="button" class="btn btn-danger btn-sm">
+                    🗑️
+                  </button>
+                </template>
+              </div>
+
+              <a target="_blank" x-bind:href="img.url">
+                <img width="224" height="224" x-bind:src="img.thumbnail_url" />
+              </a>
+
+              <span class="small" x-text="img.prompt"></span>
+            </div>
+          </template>
+        </div>
+
+        <!-- Pagination -->
+        <template x-if="images.length > 0 || page > 1">
+          <nav aria-label="Page navigation example">
+            <ul class="pagination justify-content-center">
+              <template x-if="page > 1">
+                <li @click="search(page-1)" class="page-item">
+                  <a class="page-link" href="#">Previous</a>
+                </li>
+              </template>
+              <template x-if="page == 1">
+                <li class="page-item disabled">
+                  <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Previous</a>
+                </li>
+              </template>
+              <li class="page-item active">
+                <a class="page-link" href="#" x-text="page"></a>
+              </li>
+              <template x-if="images.length == 0">
+                <li class="page-item disabled">
+                  <a class="page-link" href="#" tabindex="-1" aria-disabled="true">Next</a>
+                </li>
+              </template>
+              <template x-if="images.length > 0">
+                <li class="page-item">
+                  <a @click="search(page+1)" class="page-link" href="#">Next</a>
+                </li>
+              </template>
+            </ul>
+          </nav>
+        </template>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-OERcA2EqjJCMA+/3y+gxIOqMEjwtxJY7qPCqsdltbNJuaOe923+mo//f6V8Qbsw3"
+    crossorigin="anonymous"></script>
+</body>
+
 </html>

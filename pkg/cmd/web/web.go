@@ -307,7 +307,8 @@ func Serve(ctx context.Context, cfg *Config) error {
 		}
 		filters := []storage.Filter{}
 		draftFilters := []storage.Filter{}
-		if typ := r.URL.Query().Get("type"); typ != "" {
+		typ := r.URL.Query().Get("type")
+		if typ != "" {
 			draftFilters = append(draftFilters, storage.Where(fmt.Sprintf("type LIKE '%s'", typ)))
 		}
 
@@ -318,6 +319,11 @@ func Serve(ctx context.Context, cfg *Config) error {
 				c = ">"
 			}
 			filters = append(filters, storage.Where(fmt.Sprintf("likes %s 0", c)))
+		}
+
+		var background bool
+		if v := r.URL.Query().Get("background"); v != "" {
+			background = v == "true"
 		}
 
 		var values []int
@@ -333,23 +339,37 @@ func Serve(ctx context.Context, cfg *Config) error {
 			filters = append(filters, storage.Where("state IN (?)", values))
 		}
 
-		// Paginate by drafts
-		draftFilters = append(draftFilters, storage.Where("state = ?", storage.Approved))
-		drafts, err := store.ListDrafts(ctx, page, 1, "", draftFilters...)
-		if err != nil {
-			log.Println("couldn't list drafts:", err)
-			http.Error(w, fmt.Sprintf("couldn't list drafts: %v", err), http.StatusInternalServerError)
-			return
+		var coverPage int
+		coverLimit := 1000
+		var draftTitle string
+		if !background {
+			// Paginate by drafts
+			draftFilters = append(draftFilters, storage.Where("state = ?", storage.Approved))
+			drafts, err := store.ListDrafts(ctx, page, 1, "", draftFilters...)
+			if err != nil {
+				log.Println("couldn't list drafts:", err)
+				http.Error(w, fmt.Sprintf("couldn't list drafts: %v", err), http.StatusInternalServerError)
+				return
+			}
+			if len(drafts) == 0 {
+				log.Println("no drafts found")
+				http.Error(w, "Not drafts found", http.StatusNotFound)
+				return
+			}
+			draft := drafts[0]
+			draftTitle = draft.Title
+			filters = append(filters, storage.Where("draft_id = ?", draft.ID))
+		} else {
+			// Paginate by covers
+			coverPage = page
+			coverLimit = 50
+			if typ != "" {
+				filters = append(filters, storage.Where(fmt.Sprintf("type LIKE '%s'", typ)))
+			}
+			filters = append(filters, storage.Where("draft_id = ?", ""))
 		}
-		if len(drafts) == 0 {
-			log.Println("no drafts found")
-			http.Error(w, "Not drafts found", http.StatusNotFound)
-			return
-		}
-		draft := drafts[0]
-		filters = append(filters, storage.Where("draft_id = ?", draft.ID))
 
-		covers, err := store.ListAllCovers(ctx, 1, 1000, "", filters...)
+		covers, err := store.ListAllCovers(ctx, coverPage, coverLimit, "", filters...)
 		if err != nil {
 			log.Println("couldn't list covers:", err)
 			http.Error(w, fmt.Sprintf("couldn't list covers: %v", err), http.StatusInternalServerError)
@@ -370,7 +390,7 @@ func Serve(ctx context.Context, cfg *Config) error {
 		}
 		if len(assets) == 0 {
 			assets = append(assets, &Asset{
-				Prompt: fmt.Sprintf("%s - No covers found", draft.Title),
+				Prompt: fmt.Sprintf("%s - No covers found", draftTitle),
 			})
 		}
 		if err := json.NewEncoder(w).Encode(assets); err != nil {

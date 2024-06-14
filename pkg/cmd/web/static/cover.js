@@ -13,10 +13,8 @@ window.app = function () {
     pending: true,
     approved: false,
     rejected: false,
-    flagged: false,
-    noflagged: false,
-    ends: false,
-    noends: false,
+    background: false,
+    nobackground: false,
     liked: false,
     noliked: false,
     nav_home: function () {
@@ -47,7 +45,7 @@ window.app = function () {
           }
         })
         .then((data) => {
-          console.log("launch callback")
+          console.log("launch callback");
           callback(index);
         })
         .catch((error) => {
@@ -55,18 +53,18 @@ window.app = function () {
         });
     },
     likeImage: function (index) {
-      this.action("like", index,  () => {
+      this.action("like", index, () => {
         this.images[index].liked = true;
         this.images[index].state = 2;
       });
     },
     dislikeImage: function (index) {
-      this.action("dislike", index,  () => {
+      this.action("dislike", index, () => {
         this.images[index].liked = false;
       });
     },
     approveImage: function (index) {
-      this.action("approve", index,  () => {
+      this.action("approve", index, () => {
         this.images[index].state = 2;
       });
     },
@@ -107,18 +105,11 @@ window.app = function () {
       if (this.rejected === true) {
         apiURL += "&rejected=true";
       }
-      if (this.flagged !== this.noflagged) {
-        if (this.flagged) {
-          apiURL += "&flagged=true";
+      if (this.background !== this.nobackground) {
+        if (this.background) {
+          apiURL += "&background=true";
         } else {
-          apiURL += "&flagged=false";
-        }
-      }
-      if (this.ends !== this.noends) {
-        if (this.ends) {
-          apiURL += "&ends=true";
-        } else {
-          apiURL += "&ends=false";
+          apiURL += "&background=false";
         }
       }
       if (this.liked !== this.noliked) {
