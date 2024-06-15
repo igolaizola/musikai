@@ -81,6 +81,17 @@ func Convert(ctx context.Context, input, output string) error {
 	return nil
 }
 
+func StaticVideo(ctx context.Context, image, music, output string) error {
+	// See https://superuser.com/questions/1041816/combine-one-image-one-audio-file-to-make-one-video-using-ffmpeg/1041820#1041820
+	cmd := exec.CommandContext(ctx, BinPath, "-y", "-r", "1", "-loop", "1", "-i", image, "-i", music, "-acodec", "copy", "-r", "1", "-shortest", "-vf", "scale=1080:1080", output)
+	data, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := string(data)
+		return fmt.Errorf("ffmpeg: couldn't create static video: %w: %s", err, msg)
+	}
+	return nil
+}
+
 func toText(d time.Duration) string {
 	h := int(d.Hours())
 	m := int(d.Minutes()) % 60
