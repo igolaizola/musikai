@@ -206,7 +206,7 @@ func generate(ctx context.Context, generator *imageai.Generator, store *storage.
 			Template: template,
 			DsURL:    u[0],
 			MjURL:    u[1],
-			State:    storage.Pending,
+			State:    storage.Approved,
 		}); err != nil {
 			return fmt.Errorf("background: couldn't save image to database: %w", err)
 		}
