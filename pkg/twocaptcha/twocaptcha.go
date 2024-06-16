@@ -253,7 +253,7 @@ func (c *Client) res(req Request) (*string, error) {
 	}
 	uri.RawQuery = values.Encode()
 
-	var err error = nil
+	var err error
 	resp, err = http.Get(uri.String())
 	if err != nil {
 		return nil, ErrNetwork
@@ -312,7 +312,7 @@ func (c *Client) Send(req Request) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			_, err = io.Copy(part, file)
+			_, _ = io.Copy(part, file)
 		}
 
 		for key, val := range req.Params {
@@ -341,7 +341,7 @@ func (c *Client) Send(req Request) (string, error) {
 			values.Add(key, val)
 		}
 
-		var err error = nil
+		var err error
 		resp, err = http.PostForm(uri.String(), values)
 		if err != nil {
 			return "", ErrNetwork
