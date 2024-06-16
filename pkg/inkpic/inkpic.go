@@ -134,7 +134,7 @@ type coverData struct {
 	Shadow   template.CSS
 }
 
-type client struct {
+type Client struct {
 	browserContext   context.Context
 	allocatorContext context.Context
 	browserCancel    context.CancelFunc
@@ -142,7 +142,7 @@ type client struct {
 	serverURL        string
 }
 
-func New(parent context.Context) (*client, error) {
+func New(parent context.Context) (*Client, error) {
 	opts := append(
 		chromedp.DefaultExecAllocatorOptions[3:],
 		chromedp.NoFirstRun,
@@ -184,6 +184,10 @@ func New(parent context.Context) (*client, error) {
 			http.Error(w, "missing font query parameter", http.StatusBadRequest)
 			return
 		}
+		size := r.URL.Query().Get("size")
+		if size == "" {
+			size = FontSize
+		}
 		image := r.URL.Query().Get("image")
 		if image == "" {
 			http.Error(w, "missing image query parameter", http.StatusBadRequest)
@@ -210,7 +214,7 @@ func New(parent context.Context) (*client, error) {
 			Color1:   gradient[0],
 			Color2:   gradient[1],
 			Width:    Width,
-			FontSize: FontSize,
+			FontSize: size,
 			Shadow:   template.CSS(Shadow),
 		}
 		w.Header().Set("Content-Type", "text/html")
@@ -248,7 +252,7 @@ func New(parent context.Context) (*client, error) {
 		}()
 	}()
 
-	return &client{
+	return &Client{
 		browserContext:   browserContext,
 		browserCancel:    browserCancel,
 		allocatorContext: allocatorContext,
@@ -257,7 +261,7 @@ func New(parent context.Context) (*client, error) {
 	}, nil
 }
 
-func (c *client) AddText(parent context.Context, imagePath, fontPath, text, outputImagePath string) error {
+func (c *Client) AddText(parent context.Context, imagePath, text, fontPath, fontSize string, outputImagePath string) error {
 	// Get the image dimensions
 	file, err := os.Open(imagePath)
 	if err != nil {
@@ -286,8 +290,9 @@ func (c *client) AddText(parent context.Context, imagePath, fontPath, text, outp
 	}()
 
 	// Add query parameters to the server URL
-	u := fmt.Sprintf("%s/?font=%s&image=%s&text=%s", c.serverURL,
+	u := fmt.Sprintf("%s/?font=%s&size=%s&image=%s&text=%s", c.serverURL,
 		base64.RawURLEncoding.EncodeToString([]byte(fontPath)),
+		fontSize,
 		base64.RawURLEncoding.EncodeToString([]byte(imagePath)),
 		base64.RawURLEncoding.EncodeToString([]byte(text)))
 
@@ -330,10 +335,10 @@ func screenshot(urlstr string, width, height int, res *[]byte) chromedp.Tasks {
 }
 
 var gradients [][2]string = [][2]string{
-	{"cf8bf3", "fdb99b"}, // Purple to Peach
+	//{"cf8bf3", "fdb99b"}, // Purple to Peach
 	{"87ceeb", "00bfff"}, // Sky Blue to Deep Sky Blue
 	{"ff69b4", "ffb6c1"}, // Hot Pink to Light Pink
-	{"228b22", "90ee90"}, // Forest Green to Light Green
+	//{"228b22", "90ee90"}, // Forest Green to Light Green
 	{"ff8c00", "ffd700"}, // Dark Orange to Gold
 	{"ff6347", "ffa07a"}, // Tomato to Light Salmon
 	{"4b0082", "8a2be2"}, // Indigo to Blue Violet

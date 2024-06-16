@@ -25,6 +25,7 @@ import (
 	"github.com/igolaizola/musikai/pkg/cmd/process"
 	"github.com/igolaizola/musikai/pkg/cmd/publish"
 	"github.com/igolaizola/musikai/pkg/cmd/setting"
+	"github.com/igolaizola/musikai/pkg/cmd/single"
 	"github.com/igolaizola/musikai/pkg/cmd/sync"
 	"github.com/igolaizola/musikai/pkg/cmd/title"
 	"github.com/igolaizola/musikai/pkg/cmd/upscale"
@@ -53,6 +54,7 @@ func New(version, commit, date string) *ffcli.Command {
 		newUpscaleCommand(),
 
 		newAlbumCommand(),
+		newSingleCommand(),
 		newDeleteAlbumCommand(),
 		newCoverAlbumCommand(),
 		newBackgroundCommand(),
@@ -657,6 +659,51 @@ func newAlbumCommand() *ffcli.Command {
 		FlagSet:   fs,
 		Exec: func(ctx context.Context, args []string) error {
 			return album.Run(ctx, cfg)
+		},
+	}
+}
+
+func newSingleCommand() *ffcli.Command {
+	cmd := "single"
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	_ = fs.String("config", "", "config file (optional)")
+
+	cfg := &single.Config{}
+
+	fs.BoolVar(&cfg.Debug, "debug", false, "debug mode")
+	fs.StringVar(&cfg.DBType, "db-type", "", "db type (local, sqlite, mysql, postgres)")
+	fs.StringVar(&cfg.DBConn, "db-conn", "", "path for sqlite, dsn for mysql or postgres")
+	fs.StringVar(&cfg.FSType, "fs-type", "", "fs type (local, s3, telegram)")
+	fs.StringVar(&cfg.FSConn, "fs-conn", "", "path for local, key:secret@bucker.region for s3, token@chat for telegram")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "proxy to use")
+	fs.StringVar(&cfg.Chrome, "chrome", "", "chrome binary path (optional)")
+
+	fs.DurationVar(&cfg.Timeout, "timeout", 0, "timeout for the process (0 means no timeout)")
+	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "number of concurrent processes")
+	fs.IntVar(&cfg.Limit, "limit", 0, "limit the number iterations (0 means no limit)")
+
+	fs.BoolVar(&cfg.Auto, "auto", false, "auto publish (if disabled, the user will need to click the publish button)")
+	fs.StringVar(&cfg.Account, "account", "", "account to use")
+	fs.StringVar(&cfg.ChannelName, "channel-name", "", "youtube channel name")
+	fs.StringVar(&cfg.ChannelID, "channel-id", "", "youtube channel id")
+	fs.StringVar(&cfg.Type, "type", "", "type to use")
+
+	fs.StringVar(&cfg.Overlay, "overlay", "", "overlay file to use")
+	fs.StringVar(&cfg.Font, "font", "", "font file to use")
+	fs.StringVar(&cfg.FontSize, "font-size", "9vw", "font size to use")
+
+	return &ffcli.Command{
+		Name:       cmd,
+		ShortUsage: fmt.Sprintf("musikai %s [flags] <key> <value data...>", cmd),
+		Options: []ff.Option{
+			ff.WithConfigFileFlag("config"),
+			ff.WithConfigFileParser(ffyaml.Parser),
+			ff.WithEnvVarPrefix("MUSIKAI"),
+		},
+		ShortHelp: fmt.Sprintf("musikai %s action", cmd),
+		FlagSet:   fs,
+		Exec: func(ctx context.Context, args []string) error {
+			return single.Run(ctx, cfg)
 		},
 	}
 }
