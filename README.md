@@ -4,6 +4,10 @@
 
 > 📢 Join my Telegram group for support and collaboration: [t.me/igohub](https://t.me/igohub)
 
+> [!WARNING]  
+> This project hasn't been updated in a while, some integrations like Udio and Suno may not work anymore.
+> Feel free to contribute to the project to keep it up to date.
+
 ## 🎬 Demo
 
 [![Musikai Demo](https://img.youtube.com/vi/4Gs5VpMGAzk/maxresdefault.jpg)](https://www.youtube.com/watch?v=4Gs5VpMGAzk)
