@@ -55,6 +55,9 @@ func Run(ctx context.Context, cfg *Config) error {
 		Debug: cfg.Debug,
 		Proxy: cfg.Proxy,
 	})
+	if err != nil {
+		return fmt.Errorf("classify: couldn't create sonoteller client: %w", err)
+	}
 
 	// Print time stats
 	start := time.Now()
