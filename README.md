@@ -2,6 +2,12 @@
 
 **musikai** is a tool to automatically generate and publish music using AI.
 
+> 📢 Join my Telegram group for support and collaboration: [t.me/igohub](https://t.me/igohub)
+
+## 🎬 Demo
+
+[![Musikai Demo](https://img.youtube.com/vi/4Gs5VpMGAzk/maxresdefault.jpg)](https://www.youtube.com/watch?v=4Gs5VpMGAzk)
+
 ## 🔍 Overview
 
 Musikai allows users to go from zero to publishing an album in digital music stores.
@@ -86,13 +92,15 @@ Suno generates first a fragment of around 2 minutes.
 Udio generates first a fragment of around 30 seconds.
 Then you can extend this fragments multiple times.
 There are some parameters to control how this extensions are done:
- - Duration of the song: `min-duration` and `max-duration` is used to continue extending or stop extending depending on the current total duration.
- - Number of extensions: `max-extensions` forces to end the generation once the maximum number of extensions is reached.
+
+- Duration of the song: `min-duration` and `max-duration` is used to continue extending or stop extending depending on the current total duration.
+- Number of extensions: `max-extensions` forces to end the generation once the maximum number of extensions is reached.
 
 Suno has a specific parameter to control the end of the song:
- - Final style and lyrics: In order to tell suno that you want to end the song you have to explicitly indicate it in the lyrics and/or style section.
-   - Parameters `end-style`, `end-style-append` and `end-lyrics` are applied when minimum duration is reached and it is the first extension.
-   - Parameters `force-end-style` and `force-end-lyrics` are applied when minimum duration is reached and it isn't the first extension.
+
+- Final style and lyrics: In order to tell suno that you want to end the song you have to explicitly indicate it in the lyrics and/or style section.
+  - Parameters `end-style`, `end-style-append` and `end-lyrics` are applied when minimum duration is reached and it is the first extension.
+  - Parameters `force-end-style` and `force-end-lyrics` are applied when minimum duration is reached and it isn't the first extension.
 
 Udio needs a captcha resolver to bypass the captcha.
 You can use `nopecha` to solve the captcha manually or `2captcha` to use a service to solve the captcha.
@@ -105,7 +113,7 @@ You can avoid this by using the same proxy both in `proxy` and `captcha-proxy`.
 ./musikai generate --config generate.yaml
 ```
 
-```yaml	
+```yaml
 # generate.yaml
 debug: false
 db-type: sqlite
@@ -158,12 +166,13 @@ weight,type,style,prompt,instrumental
 
 The `process` command is used to post-process the songs.
 These are the steps that are performed:
- - Detect if the song ends abruptly and apply a fade-out.
- - Detect if the song has long silences and flag it.
- - Detect if the song has unexpected BPM changes and flag it.
- - Mastering of the song.
- - Generate wave images.
- - Upload the processed songs and images to the file storage.
+
+- Detect if the song ends abruptly and apply a fade-out.
+- Detect if the song has long silences and flag it.
+- Detect if the song has unexpected BPM changes and flag it.
+- Mastering of the song.
+- Generate wave images.
+- Upload the processed songs and images to the file storage.
 
 ```bash
 ./musikai process --config process.yaml
@@ -241,9 +250,9 @@ input: /path/to/file.csv
 
 The file must have the following fields:
 
- - Type is the classification of the songs.
- - Style is the style of the song (optional).
- - Title is the name of the song.
+- Type is the classification of the songs.
+- Style is the style of the song (optional).
+- Title is the name of the song.
 
 ```csv
 type,style,title
@@ -269,10 +278,10 @@ input: /path/to/file.csv
 
 The file must have the following fields:
 
- - Type is the classification of the songs.
- - Title is the main name of the album.
- - Subtitle is an additional text that is added in the cover of the album using font text.
- - Volumes is the maximum number of volumes that can be released with the same title and subtitle. The volume number is also added in the cover of the album using font text.
+- Type is the classification of the songs.
+- Title is the main name of the album.
+- Subtitle is an additional text that is added in the cover of the album using font text.
+- Volumes is the maximum number of volumes that can be released with the same title and subtitle. The volume number is also added in the cover of the album using font text.
 
 ```csv
 type,title,subtitle,volumes
@@ -465,7 +474,7 @@ db-type: sqlite
 db-conn: musikai.db
 fs-type: local
 fs-conn: /path/to/directory
-auto: true 
+auto: true
 account: distrokid-account
 first-name: John
 last-name: Doe
@@ -476,12 +485,13 @@ type: jazz
 ### Sync
 
 The `sync` command is used to obtain the following data from DistroKid and digital stores:
- - Album UPC code
- - Song ISRC codes
- - Spotify ID
- - Spotify song features
- - Apple Music ID
- - YouTube ID
+
+- Album UPC code
+- Song ISRC codes
+- Spotify ID
+- Spotify song features
+- Apple Music ID
+- YouTube ID
 
 The album must have been already published to digital stores in order to obtain the codes.
 
@@ -592,7 +602,6 @@ scoop install aubio
 
 [github.com/ai-mastering/phaselimiter](https://github.com/ai-mastering/phaselimiter)
 
-
 To install phaselimiter on linux you can use this installation script: https://github.com/igolaizola/phaselimiter/blob/master/script/full-install-linux.sh
 
 To install phaselimiter on mac you can use this installation script:
@@ -624,7 +633,7 @@ Pass the cookie as the value and choose a name for the account.
 ./musikai setting --config cookie.yaml
 ```
 
-```yaml	
+```yaml
 # cookie.yaml
 debug: false
 db-type: see common options
@@ -657,7 +666,7 @@ Pass the cookie as the value and choose a name for the account.
 ./musikai setting --config cookie.yaml
 ```
 
-```yaml	
+```yaml
 # cookie.yaml
 debug: false
 db-type: see common options
@@ -710,12 +719,12 @@ You need to capture the cookie from DistroKid website.
 
 1. Go to https://distrokid.com/profile
 2. Login if you are not already logged in
-2. Open the developer tools (F12)
-3. Go to the "Network" tab
-4. Refresh the page
-5. Click on the request to `https://distrokid.com/profile/`
-6. Go to the "Request Headers"
-7. Copy the "cookie" header
+3. Open the developer tools (F12)
+4. Go to the "Network" tab
+5. Refresh the page
+6. Click on the request to `https://distrokid.com/profile/`
+7. Go to the "Request Headers"
+8. Copy the "cookie" header
 
 Then you must store the cookie in your database.
 You can use the command `setting` to store the cookie in the settings table.
@@ -773,7 +782,6 @@ postgresql://musikai:P@ssw0rd!@my-postgres-server.com:26257/musikai?sslmode=veri
 ```
 
 Once you have created your database, you can use the `migrate` command to create the tables.
-
 
 ```bash
 ./musikai migrate --db-type {postgres,mysql,sqlite} --db-conn {connection-string,sqlite-file}
@@ -840,8 +848,8 @@ Here is a guide to create a bucket on AWS and obtain credentials.
 
 The automation of User Discord accounts also known as self-bots is a violation of Discord Terms of Service & Community guidelines and will result in your account(s) being terminated.
 
-The automation of Midjourney and Suno accounts is also a violation of their Terms of Service and will result in your account(s) being terminated.
+The automation of Midjourney, Suno and Udio accounts is also a violation of their Terms of Service and will result in your account(s) being terminated.
 
-Read about Discord, Midjourney and Suno Terms of Service and Community Guidelines
+Read about Discord, Midjourney, Suno and Udio Terms of Service and Community Guidelines
 
 The authors are released of any liabilities which your usage may entail.
