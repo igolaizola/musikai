@@ -857,3 +857,27 @@ The automation of Midjourney, Suno and Udio accounts is also a violation of thei
 Read about Discord, Midjourney, Suno and Udio Terms of Service and Community Guidelines
 
 The authors are released of any liabilities which your usage may entail.
+
+## 💖 Support
+
+If you have found my code helpful, please give the repository a star ⭐
+
+Additionally, if you would like to support my late-night coding efforts and the coffee that keeps me going, I would greatly appreciate a donation.
+
+You can invite me for a coffee at ko-fi (0% fees):
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/igolaizola)
+
+Or at buymeacoffee:
+
+[![buymeacoffee](https://user-images.githubusercontent.com/11333576/223217083-123c2c53-6ab8-4ea8-a2c8-c6cb5d08e8d2.png)](https://buymeacoffee.com/igolaizola)
+
+Donate to my PayPal:
+
+[paypal.me/igolaizola](https://www.paypal.me/igolaizola)
+
+Sponsor me on GitHub:
+
+[github.com/sponsors/igolaizola](https://github.com/sponsors/igolaizola)
+
+Thanks for your support!
