@@ -9,48 +9,49 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	http "github.com/bogdanfinn/fhttp"
+	"github.com/igolaizola/musikai/pkg/fhttp"
 	"github.com/igolaizola/musikai/pkg/ratelimit"
-	torttp "github.com/igolaizola/musikai/pkg/tor/http"
 )
 
 var token = "i95evCQoyT8gmwTmXHRewXB7cwXH2X69"
 
 type Client struct {
-	client    *http.Client
+	getClient func() fhttp.Client
+	client    fhttp.Client
 	debug     bool
 	ratelimit ratelimit.Lock
-	newIP     func()
 }
 
 type Config struct {
 	Wait  time.Duration
+	Proxy string
 	Debug bool
 }
 
-func New(cfg *Config) *Client {
+func New(cfg *Config) (*Client, error) {
 	wait := cfg.Wait
 	if wait == 0 {
 		wait = 1 * time.Second
 	}
 
-	// Configure a tor client
-	// You need to have tor running on your machine on port 9050
-	tor := torttp.Tor{
-		MaxTimeout: 5 * time.Minute,
+	if _, err := url.Parse(cfg.Proxy); err != nil {
+		return nil, fmt.Errorf("sonoteller: couldn't parse proxy URL %q: %w", cfg.Proxy, err)
 	}
-	client := tor.New()
-
+	getClient := func() fhttp.Client {
+		return fhttp.NewClient(2*time.Minute, true, cfg.Proxy)
+	}
 	return &Client{
-		client:    client,
+		client:    getClient(),
+		getClient: getClient,
 		ratelimit: ratelimit.New(wait),
 		debug:     cfg.Debug,
-		newIP:     tor.NewIP,
-	}
+	}, nil
 }
 
 func (c *Client) Start(ctx context.Context) error {
@@ -115,7 +116,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 				wait = true
 			case http.StatusForbidden, http.StatusTooManyRequests:
 				maxAttempts = 1000
-				c.newIP()
+				c.client = c.getClient()
 				err = nil
 				retry = true
 			default:
@@ -124,7 +125,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) ([]by
 		} else if errors.As(err, &appErr) {
 			msg := strings.ToLower(appErr.Message)
 			if strings.Contains(msg, "quota") {
-				c.newIP()
+				c.client = c.getClient()
 				err = nil
 				retry = true
 			} else {
@@ -185,7 +186,7 @@ func (c *Client) doAttempt(ctx context.Context, method, path string, in, out any
 	c.log("sonoteller: do %s %s %s", method, path, logBody)
 
 	// Check if path is absolute
-	u := fmt.Sprintf("https://us-central1-mlabs-374511.cloudfunctions.net/%s", path)
+	u := fmt.Sprintf("https://us-central1-sonochordal-415613.cloudfunctions.net/%s", path)
 	if strings.HasPrefix(path, "http") {
 		u = path
 	}

@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
-	"net/url"
 	"sync"
 	"time"
 
@@ -51,23 +49,11 @@ func Run(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("classify: couldn't start orm store: %w", err)
 	}
 
-	httpClient := &http.Client{
-		Timeout: 2 * time.Minute,
-	}
-	if cfg.Proxy != "" {
-		u, err := url.Parse(cfg.Proxy)
-		if err != nil {
-			return fmt.Errorf("invalid proxy URL: %w", err)
-		}
-		httpClient.Transport = &http.Transport{
-			Proxy: http.ProxyURL(u),
-		}
-	}
-
 	// Create a sonoteller client
-	sonoClient := sonoteller.New(&sonoteller.Config{
+	sonoClient, err := sonoteller.New(&sonoteller.Config{
 		Wait:  1 * time.Second,
 		Debug: cfg.Debug,
+		Proxy: cfg.Proxy,
 	})
 
 	// Print time stats

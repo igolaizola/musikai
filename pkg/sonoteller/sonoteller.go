@@ -56,7 +56,7 @@ type LyricsAnalysis struct {
 }
 
 func (c *Client) Analyze(ctx context.Context, id string) (*Analysis, error) {
-	c.newIP()
+	c.client = c.getClient()
 	req := &analyzeRequest{
 		URL:         fmt.Sprintf("https://www.youtube.com/watch?v=%s", id),
 		User:        "web",
